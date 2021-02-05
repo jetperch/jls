@@ -102,15 +102,15 @@ for rapid access.
 ```
 sof
 header
-SOURCE_DEF(0)       // internal, for global annotations
+SOURCE_DEF(0)       // internal, reserved for global annotations
+TS_DEF(0)           // internal, reserved for global annotations
 SOURCE_DEF(1)       // input device 1
-SIGNAL_DEF(0, 0)    // internal, for global annotations
 SIGNAL_DEF(1, 1)    // our signal, like "current"
 UTC_DEF(0)          // local computer UTC time
 USER_DATA           // just because
-BLOCK_INDEX(0)  
+BLOCK_INDEX(0)
 BLOCK_INDEX(1)
-UTC_INDX(0)
+UTC_INDEX(1)
 BLOCK_DATA(1)
 BLOCK_DATA(1)
 BLOCK_DATA(1)
