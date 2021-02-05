@@ -99,6 +99,7 @@ for rapid access.
 
 ## Example file structure
 
+```
 sof
 header
 SOURCE_DEF(0)       // internal, for global annotations
@@ -133,3 +134,13 @@ SUMMARY(1, lvl=1)
 SUMMARY(1, lvl=2)
 USER_DATA           // just because
 eof
+```
+
+Note that BLOCK_INDEX(1) points to the first BLOCK_DATA, 
+the first SUMMARY(1, lvl=1), and the SUMMARY(1, lvl=2). 
+Each BLOCK_DATA is in a doubly-linked list with its next and previous
+neighbors.  Each SUMMARY(1, lvl=1) is likewise in a separate doubly-linked
+list, and the payload of each SUMMARY point to the summarized BLOCK_DATA
+instances.  SUMMARY(1, lvl=2) points to each SUMMARY(1, lvl=1) instance.
+As more data is added, the SUMMARY(1, lvl=2) will also get added to
+the SUMMARY chunks at the same level.
