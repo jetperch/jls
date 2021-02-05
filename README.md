@@ -95,3 +95,41 @@ waveform quickly upon open.  Waiting to scan through a 1 TB file is not a
 valid option.  The reader opens the file and scans the signal for the highest 
 summary of summaries.  Each summary also contains indices back into the details
 for rapid access.  
+
+
+## Example file structure
+
+sof
+header
+SOURCE_DEF(0)       // internal, for global annotations
+SOURCE_DEF(1)       // input device 1
+SIGNAL_DEF(0, 0)    // internal, for global annotations
+SIGNAL_DEF(1, 1)    // our signal, like "current"
+UTC_DEF(0)          // local computer UTC time
+USER_DATA           // just because
+BLOCK_INDEX(0)  
+BLOCK_INDEX(1)
+UTC_INDX(0)
+BLOCK_DATA(1)
+BLOCK_DATA(1)
+BLOCK_DATA(1)
+BLOCK_DATA(1)
+SUMMARY(1, lvl=1)
+BLOCK_DATA(1)
+BLOCK_DATA(1)
+BLOCK_DATA(1)
+BLOCK_DATA(1)
+SUMMARY(1, lvl=1)
+BLOCK_DATA(1)
+BLOCK_DATA(1)
+BLOCK_DATA(1)
+BLOCK_DATA(1)
+SUMMARY(1, lvl=1)
+BLOCK_DATA(1)
+BLOCK_DATA(1)
+BLOCK_DATA(1)
+BLOCK_DATA(1)
+SUMMARY(1, lvl=1)
+SUMMARY(1, lvl=2)
+USER_DATA           // just because
+eof

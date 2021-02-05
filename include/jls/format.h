@@ -89,15 +89,22 @@ enum jls_tag_e {
     JLS_TAG_UTC_DEF             = 0x02, // utc_id, name
     JLS_TAG_USER_DATA           = 0x03,
     
-    JLS_TAG_BLOCK_INDEX         = 0x04, // 64-bit sample_id, data
+    JLS_TAG_BLOCK_INDEX         = 0x04, // array of indices to each level
     JLS_TAG_BLOCK_DATA          = 0x05, // 64-bit sample_id, data
-    JLS_TAG_BLOCK_SUMMARY       = 0x06, // 64-bit sample_id, data
+    JLS_TAG_BLOCK_SUMMARY       = 0x06, // array of indices, reduction mean, min, max, std
+    
     JLS_TAG_ANNOTATION_INDEX    = 0x08,
     JLS_TAG_ANNOTATION_DATA     = 0x09,
     JLS_TAG_ANNOTATION_SUMMARY  = 0x0A,
-    JLS_TAG_UTC_INDEX           = 0x0C, // map sample_id to a timestamp for a utc_id.
+    
+    JLS_TAG_UTC_INDEX           = 0x0C,
     JLS_TAG_UTC_DATA            = 0x0D, // map sample_id to a timestamp for a utc_id.
     JLS_TAG_UTC_SUMMARY         = 0x0E,
+    
+    JLS_TAG_TS_DEF              = 0x13
+    JLS_TAG_TS_INDEX            = 0x10, // map sample_id to a timestamp for a utc_id.
+    JLS_TAG_TS_DATA             = 0x11, // utc, binary
+    JLS_TAG_TS_SUMMARY          = 0x12, // array of utc, index
 };
 
 
