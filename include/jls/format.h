@@ -101,16 +101,14 @@ enum jls_tag_e {
     JLS_TAG_UTC_DATA            = 0x0D, // map sample_id to a timestamp for a utc_id.
     JLS_TAG_UTC_SUMMARY         = 0x0E,
     
-    JLS_TAG_TS_DEF              = 0x13
+    JLS_TAG_TS_DEF              = 0x13,
     JLS_TAG_TS_INDEX            = 0x10, // map sample_id to a timestamp for a utc_id.
     JLS_TAG_TS_DATA             = 0x11, // utc, binary
     JLS_TAG_TS_SUMMARY          = 0x12, // array of utc, index
 };
 
-
-
-
 struct jls_source_def_s {
+    uint8_t source_id;
     const char * name;
     const char * vendor;
     const char * model;
@@ -118,8 +116,9 @@ struct jls_source_def_s {
     const char * serial_number;
 };
 
-
 struct jls_signal_def_s {
+    uint16_t signal_id;
+    uint8_t source_id;
     const char * name;
     const char * si_units;
     uint8_t data_type;
@@ -129,6 +128,23 @@ struct jls_signal_def_s {
     uint32_t samples_per_summary;
 };
 
+struct jls_utc_s {
+    uint8_t utc_id;
+    const char * name;
+};
+
+struct jls_ts_s {
+    uint16_t ts_id;
+    const char * name;
+    const char * si_units;
+    uint8_t utc_id;
+};
+
+struct jls_user_data_s {
+    uint16_t chuck_meta;
+    uint32_t size;
+    const uint8_t * data;
+};
 
 /**
  * @brief The JLS file header structure.
@@ -208,7 +224,7 @@ struct jls_chunk_header_s {
     uint8_t rsv0_u8;
 
     /**
-     * @brief The tag info associated with this chunk.
+     * @brief The metadata associated with this chunk.
      *
      *
      * Each tag is free to define the purpose of this field.
@@ -220,7 +236,7 @@ struct jls_chunk_header_s {
      *   - 1 = First-level summary of block
      *   - 2 = summary of first-level summaries.
      */
-    uint16_t tag_id;
+    uint16_t chuck_meta;
     
     /**
      * @brief The length of the payload in bytes.  Can be 0.
