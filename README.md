@@ -111,6 +111,7 @@ TS_DEF(0)           // internal, reserved for global annotations
 SOURCE_DEF(1)       // input device 1
 SIGNAL_DEF(1, 1)    // our signal, like "current"
 UTC_DEF(0)          // local computer UTC time
+END_DEF
 USER_DATA           // just because
 BLOCK_INDEX(0)
 BLOCK_INDEX(1)

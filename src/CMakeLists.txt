@@ -20,6 +20,7 @@ set(SOURCES
         crc32.c
         ec.c
         log.c
+        raw.c
         reader.c
         writer.c
 )

@@ -67,8 +67,8 @@
     X(CLOSED,                   "The requested resource is currently closed.") \
     X(SEQUENCE,                 "The requested operation was out of sequence.") \
     X(ABORTED,                  "The requested operation was previously aborted.") \
-    X(SYNCHRONIZATION,          "The target is not synchronized with the originator.") \
-
+    X(SYNCHRONIZATION,          "The target is not synchronized with the originator.")\
+    X(UNSUPPORTED_FILE,         "The target file is not supported.")
 
 /// The macro used to define the error code enum.
 #define JLS_ERROR_ENUM(NAME, TEXT) JLS_ERROR_ ## NAME,

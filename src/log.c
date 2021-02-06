@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "log.h"
+#include "jls/log.h"
 #include <stdio.h>
 #include <stdarg.h>
 

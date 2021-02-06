@@ -79,32 +79,36 @@ extern "C" {
     {0x6a, 0x6c, 0x73, 0x66, 0x6d, 0x74, 0x0d, 0x0a, \
      0x20, 0x0a, 0x20, 0x1a, 0x20, 0x20, 0xb2, 0x1c}
 
+/**
+ * @brief The maximum signal_id value.
+ */
+#define JLS_SIGNAL_ID_MAX  (2047)
+
 
 /**
  * @brief The tag definitions.
  */
 enum jls_tag_e {
-    JLS_TAG_SOURCE_DEF          = 0x00, // source_id, jls_source_def_s
-    JLS_TAG_SIGNAL_DEF          = 0x01, // signal_id, source_id, jls_signal_def_s
-    JLS_TAG_UTC_DEF             = 0x02, // utc_id, name
-    JLS_TAG_USER_DATA           = 0x03,
-    
-    JLS_TAG_BLOCK_INDEX         = 0x04, // array of indices to each level
-    JLS_TAG_BLOCK_DATA          = 0x05, // 64-bit sample_id, data
-    JLS_TAG_BLOCK_SUMMARY       = 0x06, // array of indices, reduction mean, min, max, std
-    
-    JLS_TAG_ANNOTATION_INDEX    = 0x08,
-    JLS_TAG_ANNOTATION_DATA     = 0x09,
-    JLS_TAG_ANNOTATION_SUMMARY  = 0x0A,
-    
-    JLS_TAG_UTC_INDEX           = 0x0C,
-    JLS_TAG_UTC_DATA            = 0x0D, // map sample_id to a timestamp for a utc_id.
-    JLS_TAG_UTC_SUMMARY         = 0x0E,
-    
-    JLS_TAG_TS_DEF              = 0x13,
-    JLS_TAG_TS_INDEX            = 0x10, // map sample_id to a timestamp for a utc_id.
-    JLS_TAG_TS_DATA             = 0x11, // utc, binary
-    JLS_TAG_TS_SUMMARY          = 0x12, // array of utc, index
+    // definition tags
+    JLS_TAG_INVALID             = 0x00,
+    JLS_TAG_SOURCE_DEF          = 0x01,
+    JLS_TAG_SIGNAL_DEF          = 0x02,
+    JLS_TAG_UTC_DEF             = 0x03,
+    JLS_TAG_TS_DEF              = 0x04,
+    JLS_TAG_INDEX               = 0x05, // index for summary levels
+
+    // data tags
+    JLS_TAG_BLOCK_DATA          = 0x08, // 64-bit sample_id, data
+    JLS_TAG_BLOCK_SUMMARY       = 0x09, // array of indices, reduction mean, min, max, std
+    JLS_TAG_ANNOTATION_DATA     = 0x0A,
+    JLS_TAG_ANNOTATION_SUMMARY  = 0x0B,
+    JLS_TAG_UTC_DATA            = 0x0C, // map sample_id to a timestamp for a utc_id.
+    JLS_TAG_UTC_SUMMARY         = 0x0D,
+    JLS_TAG_TS_DATA             = 0x0E, // utc, binary
+    JLS_TAG_TS_SUMMARY          = 0x0F, // array of utc, index
+
+    // other tags
+    JLS_TAG_USER_DATA           = 0x10,
 };
 
 #define JLS_DATATYPE_BASETYPE_INT        (0x01)
@@ -176,6 +180,15 @@ struct jls_user_data_s {
     const uint8_t * data;
 };
 
+union jls_version_u {
+    uint32_t u32;
+    struct {
+        uint16_t patch;
+        uint8_t minor;
+        uint8_t major;
+    } s;
+};
+
 /**
  * @brief The JLS file header structure.
  */
@@ -198,15 +211,21 @@ struct jls_file_header_s {
     /**
      * @brief The JLS file format version number.
      *
-     * The format is major8.minor8.patch.
      * @see JLS_FORMAT_VERSION_U32
      */
-    uint32_t version;  // major8.minor8.patch16
+    union jls_version_u version;
     
     /**
      * @brief The CRC32 from the start of the file through version.
      */
     uint32_t crc32;
+};
+
+enum jls_index_type_e {
+    JLS_INDEX_BLOCK,
+    JLS_INDEX_ANNOTATION,
+    JLS_INDEX_UTC,
+    JLS_INDEX_TS,
 };
 
 /**
@@ -257,15 +276,18 @@ struct jls_chunk_header_s {
     /**
      * @brief The metadata associated with this chunk.
      *
-     *
      * Each tag is free to define the purpose of this field.
      * 
-     * All chunks associated with a signal define this as follows:
-     * - tag_id[11:0] is the actual signal identifier from 0 to 4095.
+     * However, all data tags use this definition:
+     * - tag_id[10:0] is the signal/time series identifier from 0 to 2047.
+     * - tag_id[11] 0 for signal, 1 for time series.
      * - tag_id[15:12] contains the depth for this chunk from 0 to 15.
      *   - 0 = block (sample level)
      *   - 1 = First-level summary of block samples
      *   - 2 = Second-level summary of first-level summaries.
+     *
+     * JLS_TAG_INDEX is the same, expect tag_id[15:12] stores the
+     * jls_index_type_e.
      */
     uint16_t chuck_meta;
     
@@ -288,6 +310,9 @@ struct jls_chunk_header_s {
     uint32_t crc32;
 };
 
+struct jls_index_s {
+    uint64_t offset[16];  // 0 = data, 1 = first summary, ...
+};
 
 
 /** @} */
