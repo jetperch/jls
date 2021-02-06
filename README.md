@@ -31,8 +31,12 @@ signals. This repository contains:
 * Support for multiple, simultaneous signal waveforms
   * Fixed sampling period
   * Handles missing samples gracefully (interpolate)
-  * Multiple data types including float32, float64, integers in nibble (4 bit)
-    increments with optional fixed point. 
+  * Multiple data types including:
+    - Floating point: f32, f64
+    - Unsigned integers in nibble (4 bit) increments. 
+    - Signed integers in nibble (4 bit) increments.
+    - Fixed-point, signed integers in nibble (4 bit) increments.
+    - Boolean (digital) 1-bit signals.
 * Support for timestamped time series data
   * Additional support for binary and text, such as for UTF-8 UART data.
 * Fast read performance.

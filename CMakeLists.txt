@@ -45,8 +45,6 @@ if (JLS_TOPLEVEL AND CMAKE_COMPILER_IS_GNUCC)
 endif()
 remove_definitions(-D__cplusplus)
 
-#add_subdirectory(third-party)
-
 set(JLS_SOURCE_PATH ${CMAKE_CURRENT_SOURCE_DIR}
     CACHE INTERNAL "JLS source path" FORCE
 )
@@ -59,8 +57,9 @@ include_directories(${JLS_INCLUDE})
 add_subdirectory(src)
 
 if(JLS_UNIT_TEST AND JLS_TOPLEVEL AND NOT CMAKE_CROSSCOMPILING)
-    # enable_testing()
-    # add_subdirectory(test)
+    add_subdirectory(third-party)
+    enable_testing()
+    add_subdirectory(test)
 endif()
 
 if(JLS_DOCS AND JLS_TOPLEVEL)

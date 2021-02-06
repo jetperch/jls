@@ -73,7 +73,7 @@ extern "C" {
  * | 1A                | Substitute character (stops listing under Windows). |
  * | 20 20             | ASCII spaces.                                       |
  * | B2                | Ensure that system supports 8-bit data              |
- * | 1C                | File separater.                                     |
+ * | 1C                | File separator.                                     |
  */
 #define JLS_HEADER_IDENTIFICATION \
     {0x6a, 0x6c, 0x73, 0x66, 0x6d, 0x74, 0x0d, 0x0a, \
@@ -107,8 +107,38 @@ enum jls_tag_e {
     JLS_TAG_TS_SUMMARY          = 0x12, // array of utc, index
 };
 
+#define JLS_DATATYPE_BASETYPE_INT        (0x01)
+#define JLS_DATATYPE_BASETYPE_UNSIGNED   (0x02)
+#define JLS_DATATYPE_BASETYPE_UINT       (JLS_DATATYPE_INT | JLS_DATATYPE_UNSIGNED)
+#define JLS_DATATYPE_BASETYPE_FLOAT      (0x04)
+
+/**
+ * @brief Construct a JLS datatype.
+ *
+ * @param basetype The datatype base type, one of [INT, UINT, FLOAT, BOOL]
+ * @param size The size in bits.  Only the following options are supported:
+ *      - INT: 4 * N where N is between 1 and 16, inclusive.
+ *      - UINT: 1 (bool) or 4 * N where N is between 1 and 16, inclusive.
+ *      - FLOAT: 32, 64
+ * @param q The fixed-point location, only valid for INT and UINT.
+ *      Set to 0 for normal, whole numbers.
+ *      Set to 0 for FLOAT and BOOL.
+ */
+#define JLS_DATATYPE_DEF(basetype, size, q)     \
+    ((JLS_DATATYPE_BASETYPE_##basetype) & 0x0f) |        \
+    (((uint32_t) ((size) & 0xff) << 8) |   \
+    (((uint32_t) (q) & 0xff) << 16)
+
+#define JLS_DATATYPE_I32 JLS_DATATYPE_DEF(INT, 32, 0)
+#define JLS_DATATYPE_I64 JLS_DATATYPE_DEF(INT, 64, 0)
+#define JLS_DATATYPE_U32 JLS_DATATYPE_DEF(UINT, 32, 0)
+#define JLS_DATATYPE_U64 JLS_DATATYPE_DEF(UINT, 64, 0)
+#define JLS_DATATYPE_F32 JLS_DATATYPE_DEF(FLOAT, 32, 0)
+#define JLS_DATATYPE_F64 JLS_DATATYPE_DEF(FLOAT, 64, 0)
+#define JLS_DATATYPE_BOOL JLS_DATATYPE_DEF(UINT, 1, 0)
+
 struct jls_source_def_s {
-    uint8_t source_id;
+    uint8_t source_id;          // 0 reserved for global annotations
     const char * name;
     const char * vendor;
     const char * model;
@@ -116,32 +146,32 @@ struct jls_source_def_s {
     const char * serial_number;
 };
 
-struct jls_signal_def_s {
+struct jls_signal_def_s {       // 0 reserved
     uint16_t signal_id;
     uint8_t source_id;
     const char * name;
     const char * si_units;
-    uint8_t data_type;
-    uint8_t fixed_point_q;
+    uint32_t data_type;
     uint32_t sample_rate;
     uint32_t samples_per_block;
-    uint32_t samples_per_summary;
+    uint32_t summary_downsample;
 };
 
 struct jls_utc_s {
-    uint8_t utc_id;
+    uint8_t utc_id;         // 0 reserved for local computer time
     const char * name;
 };
 
 struct jls_ts_s {
-    uint16_t ts_id;
+    uint16_t ts_id;         // 0 reserved for global annotations
     const char * name;
     const char * si_units;
+    uint32_t data_type;
     uint8_t utc_id;
 };
 
 struct jls_user_data_s {
-    uint16_t chuck_meta;
+    uint16_t chuck_meta;    // user-defined, for chunk header field
     uint32_t size;
     const uint8_t * data;
 };
@@ -164,7 +194,6 @@ struct jls_file_header_s {
      * closed gracefully, the value will be 0.
      */
     uint64_t length;
-    
     
     /**
      * @brief The JLS file format version number.
@@ -199,8 +228,9 @@ struct jls_chunk_header_s {
      * @brief The next item.
      *
      * Many tags, such as CHUNK, are connected as a doubly-linked list.
-     * This field is the offset in bytes of the next item in the list
+     * This field indicates the location for the next item in the list.
      * The value is relative to start of the file.
+     * 0 indicates end of list.
      */
     uint64_t item_next;
 
@@ -208,8 +238,9 @@ struct jls_chunk_header_s {
      * @brief The previous item.
      *
      * Many tags, such as CHUNK, are connected as a doubly-linked list.
-     * This field is the offset in bytes of the previous item in the list
+     * This field indicates the location for the previous item in the list.
      * The value is relative to start of the file.
+     * 0 indicates start of list.
      */
     uint64_t item_prev;
 
@@ -229,22 +260,27 @@ struct jls_chunk_header_s {
      *
      * Each tag is free to define the purpose of this field.
      * 
-     * BLOCK, BLOCK_SUMMARY, and ANNOTATION define this as follows:
+     * All chunks associated with a signal define this as follows:
      * - tag_id[11:0] is the actual signal identifier from 0 to 4095.
      * - tag_id[15:12] contains the depth for this chunk from 0 to 15.
-     *   - 0 = block
-     *   - 1 = First-level summary of block
-     *   - 2 = summary of first-level summaries.
+     *   - 0 = block (sample level)
+     *   - 1 = First-level summary of block samples
+     *   - 2 = Second-level summary of first-level summaries.
      */
     uint16_t chuck_meta;
     
     /**
      * @brief The length of the payload in bytes.  Can be 0.
+     *
+     * In addition to defining the payload size, this value is
+     * also used for forward chunk traversal.
      */
     uint32_t payload_length;
     
     /**
      * @brief The length of the previous payload in bytes.
+     *
+     * Used for reverse chunk traversal.
      */
     uint32_t payload_prev_length;
     

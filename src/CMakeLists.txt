@@ -17,6 +17,9 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/version.h.in
         ${PROJECT_SOURCE_DIR}/include/jls/version.h)
 
 set(SOURCES
+        crc32.c
+        ec.c
+        log.c
         reader.c
         writer.c
 )
