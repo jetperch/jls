@@ -43,8 +43,9 @@ extern "C" {
 
 struct jls_raw_s {
     struct jls_chunk_header_s hdr;  // the header for the current chunk
-    uint64_t offset;                // the offset for the current chunk
-    uint64_t fpos;                  // the current file position (minimize fseek)
+    int64_t offset;                 // the offset for the current chunk
+    int64_t fpos;                   // the current file position (minimize fseek)
+    uint32_t payload_length_prev;
     FILE * f;
     uint8_t write_en;
 };
@@ -56,15 +57,16 @@ int32_t jls_raw_wr(struct jls_raw_s * self, uint8_t tag, uint16_t chuck_meta, ui
 int32_t jls_raw_wr_header(struct jls_raw_s * self, uint8_t tag, uint16_t chuck_meta, uint32_t payload_length);
 int32_t jls_raw_wr_payload(struct jls_raw_s * self, uint32_t payload_length, const uint8_t * payload);
 
-int32_t jls_raw_rd(struct jls_raw_s * self, uint32_t payload_length_max, uint8_t * payload);
-int32_t jls_raw_rd_header(struct jls_raw_s * self);
+int32_t jls_raw_rd(struct jls_raw_s * self, struct jls_chunk_header_s * hdr, uint32_t payload_length_max, uint8_t * payload);
+int32_t jls_raw_rd_header(struct jls_raw_s * self, struct jls_chunk_header_s * hdr);
 int32_t jls_raw_rd_payload(struct jls_raw_s * self, uint32_t payload_length_max, uint8_t * payload);
 
-int32_t jls_raw_chunk_seek(struct jls_raw_s * self, uint64_t offset);
-int32_t jls_raw_chunk_next(struct jls_raw_s * self);
-int32_t jls_raw_chunk_prev(struct jls_raw_s * self);
-int32_t jls_raw_item_next(struct jls_raw_s * self);
-int32_t jls_raw_item_prev(struct jls_raw_s * self);
+int32_t jls_raw_chunk_seek(struct jls_raw_s * self, int64_t offset, struct jls_chunk_header_s * hdr);
+int64_t jls_raw_chunk_tell(struct jls_raw_s * self);
+int32_t jls_raw_chunk_next(struct jls_raw_s * self, struct jls_chunk_header_s * hdr);
+int32_t jls_raw_chunk_prev(struct jls_raw_s * self, struct jls_chunk_header_s * hdr);
+int32_t jls_raw_item_next(struct jls_raw_s * self, struct jls_chunk_header_s * hdr);
+int32_t jls_raw_item_prev(struct jls_raw_s * self, struct jls_chunk_header_s * hdr);
 
 
 /** @} */
