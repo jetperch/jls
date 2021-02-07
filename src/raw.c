@@ -38,6 +38,15 @@ static const uint8_t FILE_HDR[] = JLS_HEADER_IDENTIFICATION;
     }                                       \
 } while (0)
 
+struct jls_raw_s {
+    struct jls_chunk_header_s hdr;  // the header for the current chunk
+    int64_t offset;                 // the offset for the current chunk
+    int64_t fpos;                   // the current file position (minimize fseek)
+    uint32_t payload_length_prev;
+    FILE * f;
+    uint8_t write_en;
+};
+
 static inline uint32_t payload_size_on_disk(uint32_t payload_size) {
     uint8_t pad = (uint8_t) ((payload_size + 4) & 7);
     if (pad != 0) {

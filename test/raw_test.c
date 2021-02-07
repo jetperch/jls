@@ -66,15 +66,11 @@ static void test_one_chunk(void **state) {
     struct jls_chunk_header_s hdr;
     uint8_t data[sizeof(PAYLOAD1) + 16];
     assert_int_equal(0, jls_raw_open(&j, filename, "w"));
-    assert_int_equal(32, ftell(j->f));
     assert_int_equal(0, jls_raw_wr(j, JLS_TAG_USER_DATA, 0, sizeof(PAYLOAD1), PAYLOAD1));
-    assert_int_equal(0x58, ftell(j->f));
     assert_int_equal(0, jls_raw_close(j));
 
     assert_int_equal(0, jls_raw_open(&j, filename, "r"));
-    assert_int_equal(64, ftell(j->f));
     assert_int_equal(0, jls_raw_rd(j, &hdr, sizeof(data), data));
-    assert_int_equal(0x58, ftell(j->f));
     assert_memory_equal(PAYLOAD1, data, sizeof(PAYLOAD1));
     assert_int_equal(0, jls_raw_close(j));
     remove(filename);
@@ -84,7 +80,6 @@ static void construct_n_chunks() {
     struct jls_raw_s * j = NULL;
     assert_int_equal(0, jls_raw_open(&j, filename, "w"));
     for (int i = 0; i < sizeof(PAYLOAD1); ++i) {
-        printf("construct chuck %d: %d\n", i, (int) ftell(j->f));
         assert_int_equal(0, jls_raw_wr(j, JLS_TAG_USER_DATA, 0, sizeof(PAYLOAD1) - i, PAYLOAD1 + i));
     }
     assert_int_equal(0, jls_raw_close(j));
@@ -124,7 +119,6 @@ static void test_chunks_nav(void **state) {
     assert_int_equal(JLS_ERROR_EMPTY, jls_raw_chunk_next(j, NULL));
 
     for (int i = 0; i < sizeof(PAYLOAD1); ++i) {
-        printf("prev chuck %d: %d\n", i, (int) ftell(j->f));
         assert_int_equal(0, jls_raw_chunk_prev(j, NULL));
     }
     assert_int_equal(0, jls_raw_rd(j, &hdr, sizeof(data), data));
@@ -135,7 +129,6 @@ static void test_chunks_nav(void **state) {
     assert_int_equal(0, jls_raw_close(j));
     remove(filename);
 }
-
 
 int main(void) {
     const struct CMUnitTest tests[] = {
