@@ -130,6 +130,62 @@ static void test_chunks_nav(void **state) {
     remove(filename);
 }
 
+static void test_seek(void **state) {
+    (void) state;
+
+    struct jls_raw_s * j = NULL;
+    struct jls_chunk_header_s hdr;
+    uint8_t data[sizeof(PAYLOAD1) + 16];
+    construct_n_chunks();
+
+    assert_int_equal(0, jls_raw_open(&j, filename, "r"));
+    int64_t pos1 = jls_raw_chunk_tell(j);
+    assert_int_equal(sizeof(struct jls_file_header_s), pos1);
+
+    assert_int_equal(0, jls_raw_chunk_next(j, NULL));
+    int64_t pos2 = jls_raw_chunk_tell(j);
+    assert_int_not_equal(pos1, pos2);
+
+    assert_int_equal(0, jls_raw_chunk_seek(j, pos1, &hdr));
+    assert_int_equal(0, jls_raw_rd(j, &hdr, sizeof(data), data));
+    assert_memory_equal(PAYLOAD1, data, sizeof(PAYLOAD1));
+
+    assert_int_equal(0, jls_raw_close(j));
+    remove(filename);
+}
+
+static void test_items_nav(void **state) {
+    // next steps:
+    // remove header write intelligence for payload_length_prev
+    // Force full header write, no "smart write".
+    // Add item offset navigation support.
+
+    (void) state;
+    uint8_t data[sizeof(PAYLOAD1) + 16];
+
+    struct jls_raw_s * j = NULL;
+    struct jls_chunk_header_s hdr;
+    assert_int_equal(0, jls_raw_open(&j, filename, "w"));
+    int64_t pos1 = jls_raw_chunk_tell(j);
+
+    assert_int_equal(0, jls_raw_wr(j, JLS_TAG_SOURCE_DEF, 0, sizeof(PAYLOAD1), PAYLOAD1));
+    assert_int_equal(0, jls_raw_wr(j, JLS_TAG_UTC_DEF, 0, sizeof(PAYLOAD1), PAYLOAD1));
+    assert_int_equal(0, jls_raw_wr(j, JLS_TAG_TS_DEF, 0, sizeof(PAYLOAD1), PAYLOAD1));
+    assert_int_equal(0, jls_raw_wr(j, JLS_TAG_SOURCE_DEF, 1, sizeof(PAYLOAD1), PAYLOAD1));
+
+    assert_int_equal(0, jls_raw_chunk_seek(j, pos1, &hdr));
+    assert_int_equal(0, jls_raw_item_next(j, &hdr));
+    assert_int_equal(JLS_TAG_SOURCE_DEF, hdr.tag);
+    assert_int_equal(1, hdr.chuck_meta);
+
+    assert_int_equal(0, jls_raw_item_prev(j, &hdr));
+    assert_int_equal(JLS_TAG_SOURCE_DEF, hdr.tag);
+    assert_int_equal(0, hdr.chuck_meta);
+
+    assert_int_equal(0, jls_raw_close(j));
+    remove(filename);
+}
+
 int main(void) {
     const struct CMUnitTest tests[] = {
             cmocka_unit_test(test_invalid_open),
@@ -137,6 +193,8 @@ int main(void) {
             cmocka_unit_test(test_one_chunk),
             cmocka_unit_test(test_n_chunks),
             cmocka_unit_test(test_chunks_nav),
+            cmocka_unit_test(test_seek),
+            cmocka_unit_test(test_items_nav),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);

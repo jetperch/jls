@@ -29,7 +29,6 @@ static const uint8_t FILE_HDR[] = JLS_HEADER_IDENTIFICATION;
 #define FSEEK64 _fseeki64
 #define FTELL64 _ftelli64
 
-
 #define RLE(x)  do {                        \
     int32_t rc__ = (x);                     \
     if (rc__) {                             \
@@ -208,13 +207,17 @@ int32_t jls_raw_wr(struct jls_raw_s * self, uint8_t tag, uint16_t chuck_meta, ui
 int32_t jls_raw_wr_header(struct jls_raw_s * self, uint8_t tag, uint16_t chuck_meta, uint32_t payload_length) {
     struct jls_chunk_header_s * hdr = &self->hdr;
     self->payload_length_prev = self->hdr.payload_length;
-    hdr->item_next = 0;
-    hdr->item_prev = 0;
+    hdr->item_next = 0;  // todo
+    hdr->item_prev = 0;  // todo
     hdr->tag = tag;
     hdr->rsv0_u8 = 0;
     hdr->chuck_meta = chuck_meta;
     hdr->payload_length = payload_length;
     hdr->payload_prev_length = self->payload_length_prev;
+    return jls_raw_wr_header_struct(self, hdr);
+}
+
+int32_t jls_raw_wr_header_struct(struct jls_raw_s * self, struct jls_chunk_header_s * hdr) {
     hdr->crc32 = jls_crc32(0, (uint8_t *) hdr, sizeof(*hdr) - 4);
     size_t sz = fwrite(hdr, 1, sizeof(*hdr), self->f);
     self->fpos += sz;
@@ -252,6 +255,7 @@ int32_t jls_raw_wr_payload(struct jls_raw_s * self, uint32_t payload_length, con
     if (sz != pad + 4) {
         return JLS_ERROR_IO;
     }
+    self->offset = self->fpos;
     return 0;
 }
 
@@ -324,6 +328,20 @@ int32_t jls_raw_rd_payload(struct jls_raw_s * self, uint32_t payload_length_max,
     return 0;
 }
 
+int32_t jls_raw_chunk_seek(struct jls_raw_s * self, int64_t offset, struct jls_chunk_header_s * hdr) {
+    if (FSEEK64(self->f, offset, SEEK_SET)) {
+        return JLS_ERROR_IO;
+    }
+    self->offset = offset;
+    self->fpos = offset;
+    jls_raw_rd_header(self, hdr);
+    return 0;
+}
+
+int64_t jls_raw_chunk_tell(struct jls_raw_s * self) {
+    return self->offset;
+}
+
 int32_t jls_raw_chunk_next(struct jls_raw_s * self, struct jls_chunk_header_s * hdr) {
     if (hdr) {
         hdr->tag = JLS_TAG_INVALID;
@@ -370,4 +388,12 @@ int32_t jls_raw_chunk_prev(struct jls_raw_s * self, struct jls_chunk_header_s * 
         self->payload_length_prev = self->hdr.payload_length;
     }
     return rc;
+}
+
+int32_t jls_raw_item_next(struct jls_raw_s * self, struct jls_chunk_header_s * hdr) {
+
+}
+
+int32_t jls_raw_item_prev(struct jls_raw_s * self, struct jls_chunk_header_s * hdr) {
+
 }

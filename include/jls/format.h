@@ -97,6 +97,9 @@ enum jls_tag_e {
     JLS_TAG_TS_DEF              = 0x04,
     JLS_TAG_INDEX               = 0x05, // index for summary levels
 
+    // other tags
+    JLS_TAG_USER_DATA           = 0x07,
+
     // data tags
     JLS_TAG_BLOCK_DATA          = 0x08, // 64-bit sample_id, data
     JLS_TAG_BLOCK_SUMMARY       = 0x09, // array of indices, reduction mean, min, max, std
@@ -106,9 +109,6 @@ enum jls_tag_e {
     JLS_TAG_UTC_SUMMARY         = 0x0D,
     JLS_TAG_TS_DATA             = 0x0E, // utc, binary
     JLS_TAG_TS_SUMMARY          = 0x0F, // array of utc, index
-
-    // other tags
-    JLS_TAG_USER_DATA           = 0x10,
 };
 
 #define JLS_DATATYPE_BASETYPE_INT        (0x01)
@@ -222,10 +222,10 @@ struct jls_file_header_s {
 };
 
 enum jls_index_type_e {
-    JLS_INDEX_BLOCK,
-    JLS_INDEX_ANNOTATION,
-    JLS_INDEX_UTC,
-    JLS_INDEX_TS,
+    JLS_INDEX_BLOCK = 0,
+    JLS_INDEX_ANNOTATION = 1,
+    JLS_INDEX_UTC = 2,
+    JLS_INDEX_TS = 3,
 };
 
 /**
