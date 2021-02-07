@@ -60,13 +60,24 @@ static void test_open_write(void **state) {
     remove(filename);
 }
 
+static struct jls_chunk_header_s * hdr_set(struct jls_chunk_header_s * hdr, enum jls_tag_e tag, uint16_t chunk_meta, uint32_t payload_length) {
+    hdr->tag = tag;
+    hdr->chuck_meta = chunk_meta;
+    hdr->payload_length = payload_length;
+    hdr->payload_prev_length = 0;
+    hdr->item_next = 0;
+    hdr->item_prev = 0;
+    hdr->rsv0_u8 = 0;
+    return hdr;
+}
+
 static void test_one_chunk(void **state) {
     (void) state;
     struct jls_raw_s * j = NULL;
     struct jls_chunk_header_s hdr;
     uint8_t data[sizeof(PAYLOAD1) + 16];
     assert_int_equal(0, jls_raw_open(&j, filename, "w"));
-    assert_int_equal(0, jls_raw_wr(j, JLS_TAG_USER_DATA, 0, sizeof(PAYLOAD1), PAYLOAD1));
+    assert_int_equal(0, jls_raw_wr(j, hdr_set(&hdr, JLS_TAG_USER_DATA, 0, sizeof(PAYLOAD1)), PAYLOAD1));
     assert_int_equal(0, jls_raw_close(j));
 
     assert_int_equal(0, jls_raw_open(&j, filename, "r"));
@@ -78,9 +89,17 @@ static void test_one_chunk(void **state) {
 
 static void construct_n_chunks() {
     struct jls_raw_s * j = NULL;
+    struct jls_chunk_header_s hdr;
+    uint32_t payload_prev_length = 0;
+    uint32_t payload_length = 0;
     assert_int_equal(0, jls_raw_open(&j, filename, "w"));
     for (int i = 0; i < sizeof(PAYLOAD1); ++i) {
-        assert_int_equal(0, jls_raw_wr(j, JLS_TAG_USER_DATA, 0, sizeof(PAYLOAD1) - i, PAYLOAD1 + i));
+        printf("chunk %d: %d\n", i, (int32_t) jls_raw_chunk_tell(j));
+        payload_length = sizeof(PAYLOAD1) - i;
+        hdr_set(&hdr, JLS_TAG_USER_DATA, 0, payload_length);
+        hdr.payload_prev_length = payload_prev_length;
+        assert_int_equal(0, jls_raw_wr(j, &hdr, PAYLOAD1 + i));
+        payload_prev_length = payload_length;
     }
     assert_int_equal(0, jls_raw_close(j));
 }
@@ -110,21 +129,27 @@ static void test_chunks_nav(void **state) {
     construct_n_chunks();
 
     assert_int_equal(0, jls_raw_open(&j, filename, "r"));
+    assert_int_equal(0, jls_raw_chunk_next(j, NULL));
+    assert_int_equal(0, jls_raw_rd(j, &hdr, sizeof(data), data));
+    assert_memory_equal(PAYLOAD1 + 1, data, sizeof(PAYLOAD1) - 1);
+
+    assert_int_equal(0, jls_raw_chunk_prev(j, NULL));
+    assert_int_equal(0, jls_raw_chunk_prev(j, NULL));
+    assert_int_equal(0, jls_raw_rd(j, &hdr, sizeof(data), data));
+    assert_memory_equal(PAYLOAD1, data, sizeof(PAYLOAD1));
+    assert_int_equal(0, jls_raw_chunk_prev(j, NULL));
+    assert_int_equal(JLS_ERROR_EMPTY, jls_raw_chunk_prev(j, NULL));
+
+    assert_int_equal(0, jls_raw_open(&j, filename, "r"));
     for (int i = 0; i < sizeof(PAYLOAD1) - 1; ++i) {
         assert_int_equal(0, jls_raw_chunk_next(j, NULL));
     }
+    int64_t pos1 = jls_raw_chunk_tell(j);
     assert_int_equal(0, jls_raw_rd(j, &hdr, sizeof(data), data));
     assert_memory_equal(PAYLOAD1 + sizeof(PAYLOAD1) - 1, data, 1);
     assert_int_equal(JLS_ERROR_EMPTY, jls_raw_chunk_next(j, NULL));
     assert_int_equal(JLS_ERROR_EMPTY, jls_raw_chunk_next(j, NULL));
-
-    for (int i = 0; i < sizeof(PAYLOAD1); ++i) {
-        assert_int_equal(0, jls_raw_chunk_prev(j, NULL));
-    }
-    assert_int_equal(0, jls_raw_rd(j, &hdr, sizeof(data), data));
-    assert_memory_equal(PAYLOAD1, data, sizeof(PAYLOAD1));
-    assert_int_equal(JLS_ERROR_EMPTY, jls_raw_chunk_prev(j, NULL));
-    assert_int_equal(JLS_ERROR_EMPTY, jls_raw_chunk_prev(j, NULL));
+    assert_int_equal(JLS_ERROR_NOT_FOUND, jls_raw_chunk_prev(j, NULL));
 
     assert_int_equal(0, jls_raw_close(j));
     remove(filename);
@@ -168,10 +193,10 @@ static void test_items_nav(void **state) {
     assert_int_equal(0, jls_raw_open(&j, filename, "w"));
     int64_t pos1 = jls_raw_chunk_tell(j);
 
-    assert_int_equal(0, jls_raw_wr(j, JLS_TAG_SOURCE_DEF, 0, sizeof(PAYLOAD1), PAYLOAD1));
-    assert_int_equal(0, jls_raw_wr(j, JLS_TAG_UTC_DEF, 0, sizeof(PAYLOAD1), PAYLOAD1));
-    assert_int_equal(0, jls_raw_wr(j, JLS_TAG_TS_DEF, 0, sizeof(PAYLOAD1), PAYLOAD1));
-    assert_int_equal(0, jls_raw_wr(j, JLS_TAG_SOURCE_DEF, 1, sizeof(PAYLOAD1), PAYLOAD1));
+    assert_int_equal(0, jls_raw_wr(j, hdr_set(&hdr, JLS_TAG_SOURCE_DEF, 0, sizeof(PAYLOAD1)), PAYLOAD1));
+    assert_int_equal(0, jls_raw_wr(j, hdr_set(&hdr, JLS_TAG_UTC_DEF, 0, sizeof(PAYLOAD1)), PAYLOAD1));
+    assert_int_equal(0, jls_raw_wr(j, hdr_set(&hdr, JLS_TAG_TS_DEF, 0, sizeof(PAYLOAD1)), PAYLOAD1));
+    assert_int_equal(0, jls_raw_wr(j, hdr_set(&hdr, JLS_TAG_SOURCE_DEF, 1, sizeof(PAYLOAD1)), PAYLOAD1));
 
     assert_int_equal(0, jls_raw_chunk_seek(j, pos1, &hdr));
     assert_int_equal(0, jls_raw_item_next(j, &hdr));

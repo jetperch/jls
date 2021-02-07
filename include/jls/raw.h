@@ -37,6 +37,10 @@ extern "C" {
  *
  * @brief JLS raw access.
  *
+ * This module provides low-level write, read, and modify
+ * access to the JLS file format.  The implementation maintains
+ * the state of the "active chunk".
+ *
  * @{
  */
 
@@ -66,48 +70,31 @@ int32_t jls_raw_open(struct jls_raw_s ** instance, const char * path, const char
 int32_t jls_raw_close(struct jls_raw_s * self);
 
 /**
- * @brief Write a chunk to the file at the current location.
+ * @brief Write a chunk to the file at the current location and advance on success.
  *
  * @param self The JLS raw instance.
- * @param tag The tag.
- * @param chuck_meta The chunk metadata.
- * @param payload_length The length of payload, in bytes.
- * @param payload The payload.
+ * @param hdr The header with all fields populated except CRC32.
+ * @param payload The payload of size hdr->payload_length bytes.
  * @return 0 or error code.
  */
-int32_t jls_raw_wr(struct jls_raw_s * self, uint8_t tag, uint16_t chuck_meta, uint32_t payload_length, const uint8_t * payload);
+int32_t jls_raw_wr(struct jls_raw_s * self, struct jls_chunk_header_s * hdr, const uint8_t * payload);
 
 /**
  * @brief Write a chunk header to the file at the current location.
  *
  * @param self The JLS raw instance.
- * @param tag The tag.
- * @param chuck_meta The chunk metadata.
- * @param payload_length The length of payload, in bytes.
+ * @param hdr The header with all fields populated except CRC32.
  * @return 0 or error code.
  */
-int32_t jls_raw_wr_header(struct jls_raw_s * self, uint8_t tag, uint16_t chuck_meta, uint32_t payload_length);
+int32_t jls_raw_wr_header(struct jls_raw_s * self, struct jls_chunk_header_s * hdr);
 
 /**
- * @brief Write a chunk header to the file at the current location.
- *
- * @param self The JLS raw instance.
- * @param hdr The header structure to write.
- * @return 0 or error code.
- *
- * This function computes the CRC32 and updates the hdr instance.
- */
-int32_t jls_raw_wr_header_struct(struct jls_raw_s * self, struct jls_chunk_header_s * hdr);
-
-/**
- * @brief Write a chunk payload the the file at the current location and advance.
+ * @brief Write a chunk payload the the file at the current location.
  *
  * @param self The JLS raw instance.
  * @param payload_length The length of payload, in bytes, which must match the chunk header.
- * @param payload The payload data.
+ * @param payload The payload of size hdr->payload_length bytes.
  * @return 0 or error code.
- *
- * After writing the payload, advance to the next chunk location.
  */
 int32_t jls_raw_wr_payload(struct jls_raw_s * self, uint32_t payload_length, const uint8_t * payload);
 
@@ -126,15 +113,16 @@ int32_t jls_raw_rd(struct jls_raw_s * self, struct jls_chunk_header_s * hdr, uin
  * @brief Read the current chunk header.
  *
  * @param self The JLS raw instance.
- * @param hdr[out] The chunk header.
+ * @param h[out] The chunk header.
  * @return 0 or error code.
  */
-int32_t jls_raw_rd_header(struct jls_raw_s * self, struct jls_chunk_header_s * hdr);
+int32_t jls_raw_rd_header(struct jls_raw_s * self, struct jls_chunk_header_s * h);
 
 /**
  * @brief Read the current chunk payload and advance on success.
  *
  * @param self The JLS raw instance.
+ * @param self The chunk header, normally from jls_raw_rd_header().
  * @param payload_length_max The maximum length in bytes for payload.
  * @param payload The payload data.
  * @return 0 or error code.
@@ -166,6 +154,9 @@ int64_t jls_raw_chunk_tell(struct jls_raw_s * self);
  * @param self The JLS raw instance.
  * @param hdr[out] The next chunk header
  * @return 0, JLS_ERROR_EMPTY at end, or error code.
+ *
+ * Caution: if this function reaches the end, then
+ * jls_raw_chunk_prev() will fail.
  */
 int32_t jls_raw_chunk_next(struct jls_raw_s * self, struct jls_chunk_header_s * hdr);
 
@@ -174,7 +165,10 @@ int32_t jls_raw_chunk_next(struct jls_raw_s * self, struct jls_chunk_header_s * 
  *
  * @param self The JLS raw instance.
  * @param hdr[out] The previous chunk header
- * @return 0, JLS_ERROR_EMPTY at beginning, or error code.
+ * @return 0,
+ *      JLS_ERROR_EMPTY at beginning,
+ *      JLS_ERROR_NOT_FOUND if jls_raw_chunk_next() reached end,
+ *      or error code.
  */
 int32_t jls_raw_chunk_prev(struct jls_raw_s * self, struct jls_chunk_header_s * hdr);
 

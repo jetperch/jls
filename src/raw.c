@@ -38,13 +38,17 @@ static const uint8_t FILE_HDR[] = JLS_HEADER_IDENTIFICATION;
 } while (0)
 
 struct jls_raw_s {
-    struct jls_chunk_header_s hdr;  // the header for the current chunk
+    struct jls_chunk_header_s hdr;  // the current chunk header.
     int64_t offset;                 // the offset for the current chunk
-    int64_t fpos;                   // the current file position (minimize fseek)
-    uint32_t payload_length_prev;
+    int64_t fpos;                   // the current file position, to reduce ftell calls.
+    int64_t fend;                   // the file end offset.
     FILE * f;
     uint8_t write_en;
 };
+
+static inline void invalidate_current_chunk(struct jls_raw_s * self) {
+    self->hdr.tag = JLS_TAG_INVALID;
+}
 
 static inline uint32_t payload_size_on_disk(uint32_t payload_size) {
     uint8_t pad = (uint8_t) ((payload_size + 4) & 7);
@@ -77,6 +81,7 @@ static int32_t wr_file_header(struct jls_raw_s * self) {
     } else {
         self->fpos = sizeof(hdr);
         self->offset = self->fpos;
+        self->fend = self->fpos;
     }
     return rc;
 }
@@ -109,6 +114,22 @@ static int32_t rd_file_header(FILE * file, struct jls_file_header_s * hdr) {
     return 0;
 }
 
+static void fend_get(struct jls_raw_s * self) {
+    int64_t pos = FTELL64(self->f);
+    if (FSEEK64(self->f, 0, SEEK_END)) {
+        JLS_LOGE("seek to end failed");
+    } else {
+        self->fend = FTELL64(self->f);
+        FSEEK64(self->f, pos, SEEK_SET);
+    }
+}
+
+static inline fend_update(struct jls_raw_s * self, int64_t fpos) {
+    if (fpos > self->fend) {
+        self->fend = fpos;
+    }
+}
+
 static int32_t read_verify(struct jls_raw_s * self) {
     struct jls_file_header_s file_hdr;
     struct jls_chunk_header_s hdr;
@@ -119,9 +140,9 @@ static int32_t read_verify(struct jls_raw_s * self) {
     self->offset = sizeof(file_hdr);
     self->fpos = self->offset;
     if (!rc) {
+        fend_get(self);
         rc = jls_raw_rd_header(self, &hdr);
         if (rc == JLS_ERROR_EMPTY) {
-            self->hdr.tag = JLS_TAG_INVALID;
             rc = 0;
         }
     }
@@ -166,7 +187,6 @@ int32_t jls_raw_open(struct jls_raw_s ** instance, const char * path, const char
             } else {
                 self->fpos = FTELL64(self->f);
                 self->offset = self->fpos;
-                self->hdr.tag = JLS_TAG_INVALID;
             }
             break;
         default:
@@ -199,41 +219,32 @@ int32_t jls_raw_close(struct jls_raw_s * self) {
     return 0;
 }
 
-int32_t jls_raw_wr(struct jls_raw_s * self, uint8_t tag, uint16_t chuck_meta, uint32_t payload_length, const uint8_t * payload) {
-    RLE(jls_raw_wr_header(self, tag, chuck_meta, payload_length));
-    RLE(jls_raw_wr_payload(self, payload_length, payload));
+int32_t jls_raw_wr(struct jls_raw_s * self, struct jls_chunk_header_s * hdr, const uint8_t * payload) {
+    RLE(jls_raw_wr_header(self, hdr));
+    RLE(jls_raw_wr_payload(self, hdr->payload_length, payload));
+    invalidate_current_chunk(self);
+    self->offset = self->fpos;
     return 0;
 }
-int32_t jls_raw_wr_header(struct jls_raw_s * self, uint8_t tag, uint16_t chuck_meta, uint32_t payload_length) {
-    struct jls_chunk_header_s * hdr = &self->hdr;
-    self->payload_length_prev = self->hdr.payload_length;
-    hdr->item_next = 0;  // todo
-    hdr->item_prev = 0;  // todo
-    hdr->tag = tag;
-    hdr->rsv0_u8 = 0;
-    hdr->chuck_meta = chuck_meta;
-    hdr->payload_length = payload_length;
-    hdr->payload_prev_length = self->payload_length_prev;
-    return jls_raw_wr_header_struct(self, hdr);
-}
 
-int32_t jls_raw_wr_header_struct(struct jls_raw_s * self, struct jls_chunk_header_s * hdr) {
+int32_t jls_raw_wr_header(struct jls_raw_s * self, struct jls_chunk_header_s * hdr) {
     hdr->crc32 = jls_crc32(0, (uint8_t *) hdr, sizeof(*hdr) - 4);
     size_t sz = fwrite(hdr, 1, sizeof(*hdr), self->f);
     self->fpos += sz;
+    fend_update(self, self->fpos);
+
     if (sz != sizeof(*hdr)) {
         JLS_LOGE("could not write chunk header: %zu != %zu", sizeof(*hdr), sz);
+        invalidate_current_chunk(self);
         return JLS_ERROR_IO;
     }
+    self->hdr = *hdr;
     return 0;
 }
 
 int32_t jls_raw_wr_payload(struct jls_raw_s * self, uint32_t payload_length, const uint8_t * payload) {
-    struct jls_chunk_header_s * hdr = &self->hdr;
     size_t sz;
-    if (payload_length != hdr->payload_length) {
-        return JLS_ERROR_PARAMETER_INVALID;
-    }
+    struct jls_chunk_header_s * hdr = &self->hdr;
     uint8_t footer[11] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
     uint8_t pad = (uint8_t) ((hdr->payload_length + 4) & 7);
     if (pad != 0) {
@@ -255,41 +266,55 @@ int32_t jls_raw_wr_payload(struct jls_raw_s * self, uint32_t payload_length, con
     if (sz != pad + 4) {
         return JLS_ERROR_IO;
     }
-    self->offset = self->fpos;
+    fend_update(self, self->fpos);
     return 0;
 }
 
 int32_t jls_raw_rd(struct jls_raw_s * self, struct jls_chunk_header_s * hdr, uint32_t payload_length_max, uint8_t * payload) {
-    if (self->fpos == (self->offset + sizeof(struct jls_chunk_header_s))) {
-        // normal case, header already read.
+    if ((self->hdr.tag != JLS_TAG_INVALID) && (self->fpos == (self->offset + sizeof(struct jls_chunk_header_s)))) {
+        // header already read.
     } else {
         RLE(jls_raw_rd_header(self, hdr));
     }
     RLE(jls_raw_rd_payload(self, payload_length_max, payload));
+    invalidate_current_chunk(self);
+    self->offset = self->fpos;
     return 0;
 }
 
 int32_t jls_raw_rd_header(struct jls_raw_s * self, struct jls_chunk_header_s * hdr) {
-    if (!hdr) {
-        hdr = &self->hdr;
-    }
-    self->offset = self->fpos;
-    size_t sz = fread((uint8_t *) hdr, 1, sizeof(*hdr), self->f);
-    self->fpos += sz;
-    if (!sz) {
-        self->hdr.tag = JLS_TAG_INVALID;
+    struct jls_chunk_header_s * h = &self->hdr;
+    if (self->fpos >= self->fend) {
         return JLS_ERROR_EMPTY;
     }
-    if (sizeof(*hdr) != sz) {
-        JLS_LOGE("could not read chunk header: %zu != %zu", sizeof(*hdr), sz);
+    if (self->offset != self->fpos) {
+        if (FSEEK64(self->f, self->offset, SEEK_SET)) {
+            JLS_LOGE("seek failed");
+            return JLS_ERROR_IO;
+        }
+        self->fpos = self->offset;
+    }
+    self->offset = self->fpos;
+    size_t sz = fread((uint8_t *) h, 1, sizeof(*h), self->f);
+    self->fpos += sz;
+    if (!sz) {
+        invalidate_current_chunk(self);
+        return JLS_ERROR_EMPTY;
+    }
+    if (sizeof(*h) != sz) {
+        JLS_LOGE("could not read chunk header: %zu != %zu", sizeof(*h), sz);
+        invalidate_current_chunk(self);
         return JLS_ERROR_IO;
     }
-    uint32_t crc32 = jls_crc32(0, (uint8_t *) hdr, sizeof(*hdr) - 4);
-    if (crc32 != hdr->crc32) {
-        JLS_LOGE("chunk header crc error: %u != %u", crc32, hdr->crc32);
+    uint32_t crc32 = jls_crc32(0, (uint8_t *) h, sizeof(*h) - 4);
+    if (crc32 != h->crc32) {
+        JLS_LOGE("chunk header crc error: %u != %u", crc32, h->crc32);
+        invalidate_current_chunk(self);
         return JLS_ERROR_MESSAGE_INTEGRITY;
     }
-    self->hdr = *hdr;
+    if (hdr) {
+        *hdr = self->hdr;
+    }
     return 0;
 }
 
@@ -329,13 +354,13 @@ int32_t jls_raw_rd_payload(struct jls_raw_s * self, uint32_t payload_length_max,
 }
 
 int32_t jls_raw_chunk_seek(struct jls_raw_s * self, int64_t offset, struct jls_chunk_header_s * hdr) {
+    invalidate_current_chunk(self);
     if (FSEEK64(self->f, offset, SEEK_SET)) {
         return JLS_ERROR_IO;
     }
     self->offset = offset;
     self->fpos = offset;
-    jls_raw_rd_header(self, hdr);
-    return 0;
+    return jls_raw_rd_header(self, hdr);
 }
 
 int64_t jls_raw_chunk_tell(struct jls_raw_s * self) {
@@ -346,27 +371,41 @@ int32_t jls_raw_chunk_next(struct jls_raw_s * self, struct jls_chunk_header_s * 
     if (hdr) {
         hdr->tag = JLS_TAG_INVALID;
     }
-    if (self->hdr.tag == JLS_TAG_INVALID) {
-        return JLS_ERROR_EMPTY;
-    }
+    invalidate_current_chunk(self);
     int64_t offset = self->offset;
     int64_t pos = offset;
     pos += sizeof(struct jls_chunk_header_s) + payload_size_on_disk(self->hdr.payload_length);
+    if (pos > self->fend) {
+        return JLS_ERROR_EMPTY;
+    }
     if (pos != self->fpos) {
         // sequential access
         if (FSEEK64(self->f, pos, SEEK_SET)) {
             return JLS_ERROR_EMPTY;
         }
-        self->fpos = FTELL64(self->f);
+        self->fpos = pos;
     }
-    self->payload_length_prev = self->hdr.payload_length;
+    self->offset = pos;
     int32_t rc = jls_raw_rd_header(self, hdr);
+    if (rc) {
+        invalidate_current_chunk(self);
+        if (rc == JLS_ERROR_EMPTY) {
+            self->offset = offset;
+            self->fpos = offset;
+        }
+    }
     return rc;
 }
 
 int32_t jls_raw_chunk_prev(struct jls_raw_s * self, struct jls_chunk_header_s * hdr) {
     if (hdr) {
         hdr->tag = JLS_TAG_INVALID;
+    }
+    if (self->fpos >= self->fend) {
+        return JLS_ERROR_NOT_FOUND;
+    }
+    if (self->hdr.tag == JLS_TAG_INVALID) {
+        jls_raw_rd_header(self, NULL);
     }
     int64_t offset = self->offset;
     int64_t pos = offset;
@@ -379,21 +418,19 @@ int32_t jls_raw_chunk_prev(struct jls_raw_s * self, struct jls_chunk_header_s * 
         FSEEK64(self->f, pos, SEEK_SET);
         self->fpos = pos;
     }
+    self->offset = pos;
 
     int32_t rc = jls_raw_rd_header(self, hdr);
     if (rc == JLS_ERROR_EMPTY) {
         self->offset = offset;
-        self->payload_length_prev = 0;
-    } else {
-        self->payload_length_prev = self->hdr.payload_length;
     }
     return rc;
 }
 
 int32_t jls_raw_item_next(struct jls_raw_s * self, struct jls_chunk_header_s * hdr) {
-
+    return JLS_ERROR_NOT_SUPPORTED;
 }
 
 int32_t jls_raw_item_prev(struct jls_raw_s * self, struct jls_chunk_header_s * hdr) {
-
+    return JLS_ERROR_NOT_SUPPORTED;
 }
