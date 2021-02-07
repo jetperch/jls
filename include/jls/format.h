@@ -289,7 +289,7 @@ struct jls_chunk_header_s {
      * JLS_TAG_INDEX is the same, expect tag_id[15:12] stores the
      * jls_index_type_e.
      */
-    uint16_t chuck_meta;
+    uint16_t chunk_meta;
     
     /**
      * @brief The length of the payload in bytes.  Can be 0.

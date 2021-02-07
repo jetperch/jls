@@ -62,7 +62,7 @@ static void test_open_write(void **state) {
 
 static struct jls_chunk_header_s * hdr_set(struct jls_chunk_header_s * hdr, enum jls_tag_e tag, uint16_t chunk_meta, uint32_t payload_length) {
     hdr->tag = tag;
-    hdr->chuck_meta = chunk_meta;
+    hdr->chunk_meta = chunk_meta;
     hdr->payload_length = payload_length;
     hdr->payload_prev_length = 0;
     hdr->item_next = 0;
@@ -94,7 +94,7 @@ static void construct_n_chunks() {
     uint32_t payload_length = 0;
     assert_int_equal(0, jls_raw_open(&j, filename, "w"));
     for (int i = 0; i < sizeof(PAYLOAD1); ++i) {
-        printf("chunk %d: %d\n", i, (int32_t) jls_raw_chunk_tell(j));
+        // printf("chunk %d: %d\n", i, (int32_t) jls_raw_chunk_tell(j));
         payload_length = sizeof(PAYLOAD1) - i;
         hdr_set(&hdr, JLS_TAG_USER_DATA, 0, payload_length);
         hdr.payload_prev_length = payload_prev_length;
@@ -180,32 +180,41 @@ static void test_seek(void **state) {
 }
 
 static void test_items_nav(void **state) {
-    // next steps:
-    // remove header write intelligence for payload_length_prev
-    // Force full header write, no "smart write".
-    // Add item offset navigation support.
-
     (void) state;
-    uint8_t data[sizeof(PAYLOAD1) + 16];
+    int64_t offset[2] = {0, 0};
+    int64_t pos_cur = 0;
+    int64_t pos_next = 0;
 
     struct jls_raw_s * j = NULL;
     struct jls_chunk_header_s hdr;
+    struct jls_chunk_header_s hdr_prev;
     assert_int_equal(0, jls_raw_open(&j, filename, "w"));
-    int64_t pos1 = jls_raw_chunk_tell(j);
+    int64_t pos_start = jls_raw_chunk_tell(j);
 
-    assert_int_equal(0, jls_raw_wr(j, hdr_set(&hdr, JLS_TAG_SOURCE_DEF, 0, sizeof(PAYLOAD1)), PAYLOAD1));
-    assert_int_equal(0, jls_raw_wr(j, hdr_set(&hdr, JLS_TAG_UTC_DEF, 0, sizeof(PAYLOAD1)), PAYLOAD1));
-    assert_int_equal(0, jls_raw_wr(j, hdr_set(&hdr, JLS_TAG_TS_DEF, 0, sizeof(PAYLOAD1)), PAYLOAD1));
-    assert_int_equal(0, jls_raw_wr(j, hdr_set(&hdr, JLS_TAG_SOURCE_DEF, 1, sizeof(PAYLOAD1)), PAYLOAD1));
-
-    assert_int_equal(0, jls_raw_chunk_seek(j, pos1, &hdr));
+    for (uint8_t i = 0; i < 4; ++i) {
+        pos_cur = jls_raw_chunk_tell(j);
+        hdr_set(&hdr, JLS_TAG_USER_DATA, i, 1);
+        hdr.payload_prev_length = 1;
+        hdr.item_prev = offset[i & 1];
+        assert_int_equal(0, jls_raw_wr(j, &hdr, &i));
+        pos_next = jls_raw_chunk_tell(j);
+        if (hdr.item_prev) {
+            jls_raw_chunk_seek(j, hdr.item_prev, &hdr_prev);
+            hdr_prev.item_next = pos_cur;
+            jls_raw_wr_header(j, &hdr_prev);
+            jls_raw_chunk_seek(j, pos_next, NULL);
+        }
+    }
+    assert_int_equal(0, jls_raw_chunk_seek(j, pos_start, &hdr));
     assert_int_equal(0, jls_raw_item_next(j, &hdr));
-    assert_int_equal(JLS_TAG_SOURCE_DEF, hdr.tag);
-    assert_int_equal(1, hdr.chuck_meta);
-
+    assert_int_equal(2, hdr.chunk_meta);
     assert_int_equal(0, jls_raw_item_prev(j, &hdr));
-    assert_int_equal(JLS_TAG_SOURCE_DEF, hdr.tag);
-    assert_int_equal(0, hdr.chuck_meta);
+    assert_int_equal(0, hdr.chunk_meta);
+    assert_int_equal(JLS_ERROR_EMPTY, jls_raw_item_prev(j, &hdr));
+
+    assert_int_equal(0, jls_raw_item_next(j, &hdr));
+    assert_int_equal(0, jls_raw_item_next(j, &hdr));
+    assert_int_equal(JLS_ERROR_EMPTY, jls_raw_item_next(j, &hdr));
 
     assert_int_equal(0, jls_raw_close(j));
     remove(filename);
