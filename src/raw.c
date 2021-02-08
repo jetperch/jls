@@ -31,6 +31,13 @@
 #define CHUNK_BUFFER_SIZE  (1 << 24)
 static const uint8_t FILE_HDR[] = JLS_HEADER_IDENTIFICATION;
 
+#define ROE(x)  do {                        \
+    int32_t rc__ = (x);                     \
+    if (rc__) {                             \
+        return rc__;                        \
+    }                                       \
+} while (0)
+
 #define RLE(x)  do {                        \
     int32_t rc__ = (x);                     \
     if (rc__) {                             \
@@ -84,7 +91,7 @@ static int32_t f_open(struct jls_raw_s * self, const char * filename, const char
     }
     errno_t err = _sopen_s(&self->fd, filename, oflag, shflag, _S_IREAD | _S_IWRITE);
     if (err != 0) {
-        JLS_LOGE("open failed with %d", err);
+        JLS_LOGW("open failed with %d: filename=%s, mode=%s", err, filename, mode);
         return JLS_ERROR_IO;
     }
     return 0;
@@ -234,7 +241,7 @@ int32_t jls_raw_open(struct jls_raw_s ** instance, const char * path, const char
         return JLS_ERROR_NOT_ENOUGH_MEMORY;
     }
     self->fd = -1;
-    RLE(f_open(self, path, mode));
+    ROE(f_open(self, path, mode));
 
     switch (mode[0]) {
         case 'w':
