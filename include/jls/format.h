@@ -82,33 +82,92 @@ extern "C" {
 /**
  * @brief The maximum signal_id value.
  */
-#define JLS_SIGNAL_ID_MAX  (2047)
+#define JLS_SIGNAL_ID_MAX  (255)
 
+/**
+ * @brief The available track types that store data over time.
+ */
+enum jls_track_type_e {
+    /**
+     * @brief Block tracks contain fixed sample-rate (FSR) data.
+     *
+     * The JLS_TAG_SIGNAL_DEF defines the sampling rate.
+     */
+    JLS_TRACK_TYPE_FSR = 0,
+
+    /**
+     * @brief Fixed-type, variable-sample-rate (VSR) time series data.
+     *
+     * Each entry consists of time in UTC and the data.
+     */
+    JLS_TRACK_TYPE_VSR = 1,
+
+    /**
+     * @brief Annotations contain infrequent, variable-typed data.
+     *
+     * Each annotation entry consists of time and the data.
+     * For signals, time must be samples_id.
+     * For time series, time must be UTC.
+     * Annotations include UTF-8 text and markers.
+     */
+    JLS_TRACK_TYPE_ANNOTATION = 2,
+
+    /**
+     * @brief The UTC track associates sample_id with UTC.
+     *
+     * Each entry consists of sample_id, UTC pairs.  This track
+     * is only used for
+     */
+    JLS_TRACK_TYPE_UTC = 3,
+};
+
+/**
+ * @brief The chunks used to store the track information.
+ */
+enum jls_track_chunk_e {
+    JLS_TRACK_CHUNK_DEF = 0,        // track definition
+    JLS_TRACK_CHUNK_HEAD = 1,       // first INDEX chunk offset for each level (16 total)
+    JLS_TRACK_CHUNK_INDEX = 2,      // The indices of all contributing summary chunks, followed immediately by summary
+    JLS_TRACK_CHUNK_DATA = 3,       // sample data
+    JLS_TRACK_CHUNK_SUMMARY = 4,    // reduction mean, min, max, std
+};
 
 /**
  * @brief The tag definitions.
  */
 enum jls_tag_e {
-    // definition tags
     JLS_TAG_INVALID             = 0x00,
+
+    // file definition tags
     JLS_TAG_SOURCE_DEF          = 0x01,
     JLS_TAG_SIGNAL_DEF          = 0x02,
-    JLS_TAG_UTC_DEF             = 0x03,
-    JLS_TAG_TS_DEF              = 0x04,
-    JLS_TAG_INDEX               = 0x05, // index for summary levels
+
+    JLS_TAG_FSR_DEF             = (0x20 | (JLS_TRACK_TYPE_FSR << 3) | JLS_TRACK_CHUNK_DEF),
+    JLS_TAG_FSR_HEAD            = (0x20 | (JLS_TRACK_TYPE_FSR << 3) | JLS_TRACK_CHUNK_HEAD),
+    JLS_TAG_FSR_INDEX           = (0x20 | (JLS_TRACK_TYPE_FSR << 3) | JLS_TRACK_CHUNK_INDEX),
+    JLS_TAG_FSR_DATA            = (0x20 | (JLS_TRACK_TYPE_FSR << 3) | JLS_TRACK_CHUNK_DATA),
+    JLS_TAG_FSR_SUMMARY         = (0x20 | (JLS_TRACK_TYPE_FSR << 3) | JLS_TRACK_CHUNK_SUMMARY),
+
+    JLS_TAG_VSR_DEF             = (0x20 | (JLS_TRACK_TYPE_VSR << 3) | JLS_TRACK_CHUNK_DEF),
+    JLS_TAG_VSR_HEAD            = (0x20 | (JLS_TRACK_TYPE_VSR << 3) | JLS_TRACK_CHUNK_HEAD),
+    JLS_TAG_VSR_INDEX           = (0x20 | (JLS_TRACK_TYPE_VSR << 3) | JLS_TRACK_CHUNK_INDEX),
+    JLS_TAG_VSR_DATA            = (0x20 | (JLS_TRACK_TYPE_VSR << 3) | JLS_TRACK_CHUNK_DATA),
+    JLS_TAG_VSR_SUMMARY         = (0x20 | (JLS_TRACK_TYPE_VSR << 3) | JLS_TRACK_CHUNK_SUMMARY),
+
+    JLS_TAG_ANNOTATION_DEF      = (0x20 | (JLS_TRACK_TYPE_ANNOTATION << 3) | JLS_TRACK_CHUNK_DEF),  // not used
+    JLS_TAG_ANNOTATION_HEAD     = (0x20 | (JLS_TRACK_TYPE_ANNOTATION << 3) | JLS_TRACK_CHUNK_HEAD),
+    JLS_TAG_ANNOTATION_INDEX    = (0x20 | (JLS_TRACK_TYPE_ANNOTATION << 3) | JLS_TRACK_CHUNK_INDEX),
+    JLS_TAG_ANNOTATION_DATA     = (0x20 | (JLS_TRACK_TYPE_ANNOTATION << 3) | JLS_TRACK_CHUNK_DATA),
+    JLS_TAG_ANNOTATION_SUMMARY  = (0x20 | (JLS_TRACK_TYPE_ANNOTATION << 3) | JLS_TRACK_CHUNK_SUMMARY),
+
+    JLS_TAG_UTC_DEF             = (0x20 | (JLS_TRACK_TYPE_UTC << 3) | JLS_TRACK_CHUNK_DEF),
+    JLS_TAG_UTC_HEAD            = (0x20 | (JLS_TRACK_TYPE_UTC << 3) | JLS_TRACK_CHUNK_HEAD),
+    JLS_TAG_UTC_INDEX           = (0x20 | (JLS_TRACK_TYPE_UTC << 3) | JLS_TRACK_CHUNK_INDEX),
+    JLS_TAG_UTC_DATA            = (0x20 | (JLS_TRACK_TYPE_UTC << 3) | JLS_TRACK_CHUNK_DATA),
+    JLS_TAG_UTC_SUMMARY         = (0x20 | (JLS_TRACK_TYPE_UTC << 3) | JLS_TRACK_CHUNK_SUMMARY),
 
     // other tags
-    JLS_TAG_USER_DATA           = 0x07,
-
-    // data tags
-    JLS_TAG_BLOCK_DATA          = 0x08, // 64-bit sample_id, data
-    JLS_TAG_BLOCK_SUMMARY       = 0x09, // array of indices, reduction mean, min, max, std
-    JLS_TAG_ANNOTATION_DATA     = 0x0A,
-    JLS_TAG_ANNOTATION_SUMMARY  = 0x0B,
-    JLS_TAG_UTC_DATA            = 0x0C, // map sample_id to a timestamp for a utc_id.
-    JLS_TAG_UTC_SUMMARY         = 0x0D,
-    JLS_TAG_TS_DATA             = 0x0E, // utc, binary
-    JLS_TAG_TS_SUMMARY          = 0x0F, // array of utc, index
+    JLS_TAG_USER_DATA           = 0x40,
 };
 
 #define JLS_DATATYPE_BASETYPE_INT        (0x01)
@@ -150,35 +209,51 @@ struct jls_source_def_s {
     const char * serial_number;
 };
 
-struct jls_signal_def_s {       // 0 reserved
-    uint16_t signal_id;
+struct jls_signal_def_base_s {
     uint8_t source_id;
+    uint8_t signal_type;        // 0 = FSR, 1 = VSR
+    uint16_t signal_id;
+    uint32_t data_type;
     const char * name;
     const char * si_units;
-    uint32_t data_type;
+};
+
+struct jls_fsr_def_s {
     uint32_t sample_rate;
     uint32_t samples_per_block;
     uint32_t summary_downsample;
 };
 
-struct jls_utc_s {
+struct jls_vsr_def_s {
+    uint32_t samples_per_block;
+    uint32_t summary_downsample;
+    uint8_t utc_id;
+};
+
+struct jls_signal_def_s {       // 0 reserved for VSR annotations
+    struct jls_signal_def_base_s def;
+    union {
+        struct jls_fsr_def_s fsr;
+        struct jls_vsr_def_s vsr;
+    };
+};
+
+// struct jls_annotation_def_s, not used
+
+struct jls_utc_def_s {
     uint8_t utc_id;         // 0 reserved for local computer time
     const char * name;
 };
 
-struct jls_ts_s {
-    uint16_t ts_id;         // 0 reserved for global annotations
-    const char * name;
-    const char * si_units;
-    uint32_t data_type;
-    uint8_t utc_id;
+struct jls_head_s {
+    uint64_t offset[16];  // 0 = data, 1 = first summary, ...
 };
 
-struct jls_user_data_s {
-    uint16_t chuck_meta;    // user-defined, for chunk header field
-    uint32_t size;
-    const uint8_t * data;
-};
+// struct jls_index_s variable sized, format defined by track
+// struct jls_data_s variable sized, format defined by track
+// struct jls_summary_s variable sized, format defined by track
+
+// struct jls_user_data_s contains raw data.  header field chuck_meta is user-defined.
 
 union jls_version_u {
     uint32_t u32;
@@ -221,13 +296,6 @@ struct jls_file_header_s {
     uint32_t crc32;
 };
 
-enum jls_index_type_e {
-    JLS_INDEX_BLOCK = 0,
-    JLS_INDEX_ANNOTATION = 1,
-    JLS_INDEX_UTC = 2,
-    JLS_INDEX_TS = 3,
-};
-
 /**
  * @brief The JLS chunk header structure.
  *
@@ -250,6 +318,11 @@ struct jls_chunk_header_s {
      * This field indicates the location for the next item in the list.
      * The value is relative to start of the file.
      * 0 indicates end of list.
+     *
+     * This field allows simple, linear traversal of data, but the
+     * next chunk is not known when the chunk is first created.
+     * Therefore, this field requires that chunk headers are updated
+     * when the software writes the next item to the file.
      */
     uint64_t item_next;
 
@@ -279,15 +352,12 @@ struct jls_chunk_header_s {
      * Each tag is free to define the purpose of this field.
      * 
      * However, all data tags use this definition:
-     * - tag_id[10:0] is the signal/time series identifier from 0 to 2047.
-     * - tag_id[11] 0 for signal, 1 for time series.
+     * - tag_id[7:0] is the signal/time series identifier from 0 to 255.
+     * - tag_id[11:8] is reserved.
      * - tag_id[15:12] contains the depth for this chunk from 0 to 15.
      *   - 0 = block (sample level)
      *   - 1 = First-level summary of block samples
      *   - 2 = Second-level summary of first-level summaries.
-     *
-     * JLS_TAG_INDEX is the same, expect tag_id[15:12] stores the
-     * jls_index_type_e.
      */
     uint16_t chunk_meta;
     
@@ -308,10 +378,6 @@ struct jls_chunk_header_s {
     
     /// The CRC32 over the header, excluding this field.
     uint32_t crc32;
-};
-
-struct jls_index_s {
-    uint64_t offset[16];  // 0 = data, 1 = first summary, ...
 };
 
 

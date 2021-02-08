@@ -196,6 +196,7 @@ static void test_items_nav(void **state) {
         hdr_set(&hdr, JLS_TAG_USER_DATA, i, 1);
         hdr.payload_prev_length = 1;
         hdr.item_prev = offset[i & 1];
+        offset[i & 1] = pos_cur;
         assert_int_equal(0, jls_raw_wr(j, &hdr, &i));
         pos_next = jls_raw_chunk_tell(j);
         if (hdr.item_prev) {
