@@ -134,10 +134,9 @@ int32_t jls_raw_rd_payload(struct jls_raw_s * self, uint32_t payload_length_max,
  *
  * @param self The JLS raw instance.
  * @param offset The chuck offset from a previous call to jls_raw_chunk_tell().
- * @param hdr[out] The chunk header at offset.
  * @return 0 or error code.
  */
-int32_t jls_raw_chunk_seek(struct jls_raw_s * self, int64_t offset, struct jls_chunk_header_s * hdr);
+int32_t jls_raw_chunk_seek(struct jls_raw_s * self, int64_t offset);
 
 /**
  * @brief Get the current chunk offset.
@@ -152,43 +151,39 @@ int64_t jls_raw_chunk_tell(struct jls_raw_s * self);
  * @brief Navigate to the next chunk.
  *
  * @param self The JLS raw instance.
- * @param hdr[out] The next chunk header
  * @return 0, JLS_ERROR_EMPTY at end, or error code.
  *
  * Caution: if this function reaches the end, then
  * jls_raw_chunk_prev() will fail.
  */
-int32_t jls_raw_chunk_next(struct jls_raw_s * self, struct jls_chunk_header_s * hdr);
+int32_t jls_raw_chunk_next(struct jls_raw_s * self);
 
 /**
  * @brief Navigate to the previous chunk.
  *
  * @param self The JLS raw instance.
- * @param hdr[out] The previous chunk header
  * @return 0,
  *      JLS_ERROR_EMPTY at beginning,
  *      JLS_ERROR_NOT_FOUND if jls_raw_chunk_next() reached end,
  *      or error code.
  */
-int32_t jls_raw_chunk_prev(struct jls_raw_s * self, struct jls_chunk_header_s * hdr);
+int32_t jls_raw_chunk_prev(struct jls_raw_s * self);
 
 /**
  * @brief Navigate to the next item in the doubly-linked list.
  *
  * @param self The JLS raw instance.
- * @param hdr[out] The chunk header for the next item.
  * @return 0, JLS_ERROR_EMPTY at end, or error code.
  */
-int32_t jls_raw_item_next(struct jls_raw_s * self, struct jls_chunk_header_s * hdr);
+int32_t jls_raw_item_next(struct jls_raw_s * self);
 
 /**
  * @brief Navigate to the previous item in the doubly-linked list.
  *
  * @param self The JLS raw instance.
- * @param hdr[out] The chunk header for the previous item.
  * @return 0, JLS_ERROR_EMPTY at beginning, or error code.
  */
-int32_t jls_raw_item_prev(struct jls_raw_s * self, struct jls_chunk_header_s * hdr);
+int32_t jls_raw_item_prev(struct jls_raw_s * self);
 
 
 /** @} */

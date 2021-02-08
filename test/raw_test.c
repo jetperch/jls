@@ -129,27 +129,27 @@ static void test_chunks_nav(void **state) {
     construct_n_chunks();
 
     assert_int_equal(0, jls_raw_open(&j, filename, "r"));
-    assert_int_equal(0, jls_raw_chunk_next(j, NULL));
+    assert_int_equal(0, jls_raw_chunk_next(j));
     assert_int_equal(0, jls_raw_rd(j, &hdr, sizeof(data), data));
     assert_memory_equal(PAYLOAD1 + 1, data, sizeof(PAYLOAD1) - 1);
 
-    assert_int_equal(0, jls_raw_chunk_prev(j, NULL));
-    assert_int_equal(0, jls_raw_chunk_prev(j, NULL));
+    assert_int_equal(0, jls_raw_chunk_prev(j));
+    assert_int_equal(0, jls_raw_chunk_prev(j));
     assert_int_equal(0, jls_raw_rd(j, &hdr, sizeof(data), data));
     assert_memory_equal(PAYLOAD1, data, sizeof(PAYLOAD1));
-    assert_int_equal(0, jls_raw_chunk_prev(j, NULL));
-    assert_int_equal(JLS_ERROR_EMPTY, jls_raw_chunk_prev(j, NULL));
+    assert_int_equal(0, jls_raw_chunk_prev(j));
+    assert_int_equal(JLS_ERROR_EMPTY, jls_raw_chunk_prev(j));
 
     assert_int_equal(0, jls_raw_open(&j, filename, "r"));
     for (int i = 0; i < sizeof(PAYLOAD1) - 1; ++i) {
-        assert_int_equal(0, jls_raw_chunk_next(j, NULL));
+        assert_int_equal(0, jls_raw_chunk_next(j));
     }
     int64_t pos1 = jls_raw_chunk_tell(j);
     assert_int_equal(0, jls_raw_rd(j, &hdr, sizeof(data), data));
     assert_memory_equal(PAYLOAD1 + sizeof(PAYLOAD1) - 1, data, 1);
-    assert_int_equal(JLS_ERROR_EMPTY, jls_raw_chunk_next(j, NULL));
-    assert_int_equal(JLS_ERROR_EMPTY, jls_raw_chunk_next(j, NULL));
-    assert_int_equal(JLS_ERROR_NOT_FOUND, jls_raw_chunk_prev(j, NULL));
+    assert_int_equal(JLS_ERROR_EMPTY, jls_raw_chunk_next(j));
+    assert_int_equal(JLS_ERROR_EMPTY, jls_raw_chunk_next(j));
+    assert_int_equal(JLS_ERROR_NOT_FOUND, jls_raw_chunk_prev(j));
 
     assert_int_equal(0, jls_raw_close(j));
     remove(filename);
@@ -167,11 +167,11 @@ static void test_seek(void **state) {
     int64_t pos1 = jls_raw_chunk_tell(j);
     assert_int_equal(sizeof(struct jls_file_header_s), pos1);
 
-    assert_int_equal(0, jls_raw_chunk_next(j, NULL));
+    assert_int_equal(0, jls_raw_chunk_next(j));
     int64_t pos2 = jls_raw_chunk_tell(j);
     assert_int_not_equal(pos1, pos2);
 
-    assert_int_equal(0, jls_raw_chunk_seek(j, pos1, &hdr));
+    assert_int_equal(0, jls_raw_chunk_seek(j, pos1));
     assert_int_equal(0, jls_raw_rd(j, &hdr, sizeof(data), data));
     assert_memory_equal(PAYLOAD1, data, sizeof(PAYLOAD1));
 
@@ -196,26 +196,30 @@ static void test_items_nav(void **state) {
         hdr_set(&hdr, JLS_TAG_USER_DATA, i, 1);
         hdr.payload_prev_length = 1;
         hdr.item_prev = offset[i & 1];
+        hdr.chunk_meta = i + 1;
         offset[i & 1] = pos_cur;
         assert_int_equal(0, jls_raw_wr(j, &hdr, &i));
         pos_next = jls_raw_chunk_tell(j);
         if (hdr.item_prev) {
-            jls_raw_chunk_seek(j, hdr.item_prev, &hdr_prev);
+            jls_raw_chunk_seek(j, hdr.item_prev);
+            jls_raw_rd_header(j, &hdr_prev);
             hdr_prev.item_next = pos_cur;
             jls_raw_wr_header(j, &hdr_prev);
-            jls_raw_chunk_seek(j, pos_next, NULL);
+            jls_raw_chunk_seek(j, pos_next);
         }
     }
-    assert_int_equal(0, jls_raw_chunk_seek(j, pos_start, &hdr));
-    assert_int_equal(0, jls_raw_item_next(j, &hdr));
-    assert_int_equal(2, hdr.chunk_meta);
-    assert_int_equal(0, jls_raw_item_prev(j, &hdr));
-    assert_int_equal(0, hdr.chunk_meta);
-    assert_int_equal(JLS_ERROR_EMPTY, jls_raw_item_prev(j, &hdr));
+    assert_int_equal(0, jls_raw_chunk_seek(j, pos_start));
+    assert_int_equal(0, jls_raw_item_next(j));
+    jls_raw_rd_header(j, &hdr);
+    assert_int_equal(3, hdr.chunk_meta);
+    assert_int_equal(0, jls_raw_item_prev(j));
+    jls_raw_rd_header(j, &hdr);
+    assert_int_equal(1, hdr.chunk_meta);
+    assert_int_equal(JLS_ERROR_EMPTY, jls_raw_item_prev(j));
 
-    assert_int_equal(0, jls_raw_item_next(j, &hdr));
-    assert_int_equal(0, jls_raw_item_next(j, &hdr));
-    assert_int_equal(JLS_ERROR_EMPTY, jls_raw_item_next(j, &hdr));
+    assert_int_equal(0, jls_raw_item_next(j));
+    assert_int_equal(JLS_ERROR_EMPTY, jls_raw_item_next(j));
+    assert_int_equal(JLS_ERROR_EMPTY, jls_raw_item_next(j));
 
     assert_int_equal(0, jls_raw_close(j));
     remove(filename);
