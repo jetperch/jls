@@ -188,7 +188,7 @@ static int32_t chunk_first_def_by_tag(struct jls_rd_s * self, enum jls_tag_e tag
     ROE(chunk_first(self));
     while (self->hdr.tag != tag) {
         ROE(chunk_next(self));
-        if (self->hdr.tag == JLS_TAG_FSR_DATA) {
+        if (self->hdr.tag == JLS_TAG_TRACK_FSR_DATA) {
             JLS_LOGW("tag %d not found", tag);
             return JLS_ERROR_NOT_FOUND;
         }

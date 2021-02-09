@@ -152,39 +152,40 @@ enum jls_track_chunk_e {
  * @brief The tag definitions.
  */
 enum jls_tag_e {
-    JLS_TAG_INVALID             = 0x00,
+    JLS_TAG_INVALID                     = 0x00,
 
     // file definition tags
-    JLS_TAG_SOURCE_DEF          = 0x01,
-    JLS_TAG_SIGNAL_DEF          = 0x02,
+    JLS_TAG_SOURCE_DEF                  = 0x01,
+    JLS_TAG_UTC_DEF                     = 0x02,
+    JLS_TAG_SIGNAL_DEF                  = 0x03,
 
     // track tags
-    JLS_TAG_FSR_DEF             = (0x20 | (JLS_TRACK_TYPE_FSR << 3) | JLS_TRACK_CHUNK_DEF),
-    JLS_TAG_FSR_HEAD            = (0x20 | (JLS_TRACK_TYPE_FSR << 3) | JLS_TRACK_CHUNK_HEAD),
-    JLS_TAG_FSR_INDEX           = (0x20 | (JLS_TRACK_TYPE_FSR << 3) | JLS_TRACK_CHUNK_INDEX),
-    JLS_TAG_FSR_DATA            = (0x20 | (JLS_TRACK_TYPE_FSR << 3) | JLS_TRACK_CHUNK_DATA),
-    JLS_TAG_FSR_SUMMARY         = (0x20 | (JLS_TRACK_TYPE_FSR << 3) | JLS_TRACK_CHUNK_SUMMARY),
+    JLS_TAG_TRACK_FSR_DEF               = (0x20 | (JLS_TRACK_TYPE_FSR << 3) | JLS_TRACK_CHUNK_DEF),
+    JLS_TAG_TRACK_FSR_HEAD              = (0x20 | (JLS_TRACK_TYPE_FSR << 3) | JLS_TRACK_CHUNK_HEAD),
+    JLS_TAG_TRACK_FSR_INDEX             = (0x20 | (JLS_TRACK_TYPE_FSR << 3) | JLS_TRACK_CHUNK_INDEX),
+    JLS_TAG_TRACK_FSR_DATA              = (0x20 | (JLS_TRACK_TYPE_FSR << 3) | JLS_TRACK_CHUNK_DATA),
+    JLS_TAG_TRACK_FSR_SUMMARY           = (0x20 | (JLS_TRACK_TYPE_FSR << 3) | JLS_TRACK_CHUNK_SUMMARY),
 
-    JLS_TAG_VSR_DEF             = (0x20 | (JLS_TRACK_TYPE_VSR << 3) | JLS_TRACK_CHUNK_DEF),
-    JLS_TAG_VSR_HEAD            = (0x20 | (JLS_TRACK_TYPE_VSR << 3) | JLS_TRACK_CHUNK_HEAD),
-    JLS_TAG_VSR_INDEX           = (0x20 | (JLS_TRACK_TYPE_VSR << 3) | JLS_TRACK_CHUNK_INDEX),
-    JLS_TAG_VSR_DATA            = (0x20 | (JLS_TRACK_TYPE_VSR << 3) | JLS_TRACK_CHUNK_DATA),
-    JLS_TAG_VSR_SUMMARY         = (0x20 | (JLS_TRACK_TYPE_VSR << 3) | JLS_TRACK_CHUNK_SUMMARY),
+    JLS_TAG_TRACK_VSR_DEF               = (0x20 | (JLS_TRACK_TYPE_VSR << 3) | JLS_TRACK_CHUNK_DEF),
+    JLS_TAG_TRACK_VSR_HEAD              = (0x20 | (JLS_TRACK_TYPE_VSR << 3) | JLS_TRACK_CHUNK_HEAD),
+    JLS_TAG_TRACK_VSR_INDEX             = (0x20 | (JLS_TRACK_TYPE_VSR << 3) | JLS_TRACK_CHUNK_INDEX),
+    JLS_TAG_TRACK_VSR_DATA              = (0x20 | (JLS_TRACK_TYPE_VSR << 3) | JLS_TRACK_CHUNK_DATA),
+    JLS_TAG_TRACK_VSR_SUMMARY           = (0x20 | (JLS_TRACK_TYPE_VSR << 3) | JLS_TRACK_CHUNK_SUMMARY),
 
-    JLS_TAG_ANNOTATION_DEF      = (0x20 | (JLS_TRACK_TYPE_ANNOTATION << 3) | JLS_TRACK_CHUNK_DEF),  // not used
-    JLS_TAG_ANNOTATION_HEAD     = (0x20 | (JLS_TRACK_TYPE_ANNOTATION << 3) | JLS_TRACK_CHUNK_HEAD),
-    JLS_TAG_ANNOTATION_INDEX    = (0x20 | (JLS_TRACK_TYPE_ANNOTATION << 3) | JLS_TRACK_CHUNK_INDEX),
-    JLS_TAG_ANNOTATION_DATA     = (0x20 | (JLS_TRACK_TYPE_ANNOTATION << 3) | JLS_TRACK_CHUNK_DATA),
-    JLS_TAG_ANNOTATION_SUMMARY  = (0x20 | (JLS_TRACK_TYPE_ANNOTATION << 3) | JLS_TRACK_CHUNK_SUMMARY),
+    JLS_TAG_TRACK_ANNOTATION_DEF        = (0x20 | (JLS_TRACK_TYPE_ANNOTATION << 3) | JLS_TRACK_CHUNK_DEF),  // not used
+    JLS_TAG_TRACK_ANNOTATION_HEAD       = (0x20 | (JLS_TRACK_TYPE_ANNOTATION << 3) | JLS_TRACK_CHUNK_HEAD),
+    JLS_TAG_TRACK_ANNOTATION_INDEX      = (0x20 | (JLS_TRACK_TYPE_ANNOTATION << 3) | JLS_TRACK_CHUNK_INDEX),
+    JLS_TAG_TRACK_ANNOTATION_DATA       = (0x20 | (JLS_TRACK_TYPE_ANNOTATION << 3) | JLS_TRACK_CHUNK_DATA),
+    JLS_TAG_TRACK_ANNOTATION_SUMMARY    = (0x20 | (JLS_TRACK_TYPE_ANNOTATION << 3) | JLS_TRACK_CHUNK_SUMMARY),
 
-    JLS_TAG_UTC_DEF             = (0x20 | (JLS_TRACK_TYPE_UTC << 3) | JLS_TRACK_CHUNK_DEF),
-    JLS_TAG_UTC_HEAD            = (0x20 | (JLS_TRACK_TYPE_UTC << 3) | JLS_TRACK_CHUNK_HEAD),
-    JLS_TAG_UTC_INDEX           = (0x20 | (JLS_TRACK_TYPE_UTC << 3) | JLS_TRACK_CHUNK_INDEX),
-    JLS_TAG_UTC_DATA            = (0x20 | (JLS_TRACK_TYPE_UTC << 3) | JLS_TRACK_CHUNK_DATA),
-    JLS_TAG_UTC_SUMMARY         = (0x20 | (JLS_TRACK_TYPE_UTC << 3) | JLS_TRACK_CHUNK_SUMMARY),
+    JLS_TAG_TRACK_UTC_DEF               = (0x20 | (JLS_TRACK_TYPE_UTC << 3) | JLS_TRACK_CHUNK_DEF),
+    JLS_TAG_TRACK_UTC_HEAD              = (0x20 | (JLS_TRACK_TYPE_UTC << 3) | JLS_TRACK_CHUNK_HEAD),
+    JLS_TAG_TRACK_UTC_INDEX             = (0x20 | (JLS_TRACK_TYPE_UTC << 3) | JLS_TRACK_CHUNK_INDEX),
+    JLS_TAG_TRACK_UTC_DATA              = (0x20 | (JLS_TRACK_TYPE_UTC << 3) | JLS_TRACK_CHUNK_DATA),
+    JLS_TAG_TRACK_UTC_SUMMARY           = (0x20 | (JLS_TRACK_TYPE_UTC << 3) | JLS_TRACK_CHUNK_SUMMARY),
 
     // other tags
-    JLS_TAG_USER_DATA           = 0x40,
+    JLS_TAG_USER_DATA                   = 0x40,
 };
 
 #define JLS_DATATYPE_BASETYPE_INT        (0x01)
@@ -218,7 +219,9 @@ enum jls_tag_e {
 #define JLS_DATATYPE_BOOL JLS_DATATYPE_DEF(UINT, 1, 0)
 
 struct jls_source_def_s {
+    // store unique source_id in chunk_meta
     uint8_t source_id;          // 0 reserved for global annotations, must be unique
+    // on disk: reserve 64 bytes as 0 for future use
     const char * name;
     const char * vendor;
     const char * model;
@@ -226,49 +229,42 @@ struct jls_source_def_s {
     const char * serial_number;
 };
 
-struct jls_signal_def_base_s {
+struct jls_utc_def_s {
+    // store unique utc_id in chunk_meta
+    // utc_id: 0 reserved for local computer time
+    // on disk: reserve 64 bytes as 0 for future use
+    const char * name;
+};
+
+struct jls_signal_def_s {       // 0 reserved for VSR annotations
+    // store unique signal_id in chunk_meta
+    uint16_t signal_id;
     uint8_t source_id;          // must match a source_def
     uint8_t signal_type;        // jls_signal_type_e
-    uint16_t signal_id;         // must be unique
+    uint16_t rsv16_0;
     uint32_t data_type;
+    uint32_t sample_rate;       // 0 for VSR
+    uint32_t samples_per_block;
+    uint32_t summary_downsample;
+    uint8_t utc_id;             // UTC reference time used by this signal
+    uint8_t rsv8_0;
+    uint8_t rsv8_1;
+    uint8_t rsv8_2;             // pad to multiple of 8 bytes
+    // on disk: reserve 64 bytes as 0 for future use
     const char * name;
     const char * si_units;
 };
 
-struct jls_fsr_def_s {
-    uint32_t sample_rate;
-    uint32_t samples_per_block;
-    uint32_t summary_downsample;
-};
+//  struct jls_track_def_s  // empty, only need chunk_meta for now
 
-struct jls_vsr_def_s {
-    uint32_t samples_per_block;
-    uint32_t summary_downsample;
-    uint8_t utc_id;
-};
 
-struct jls_signal_def_s {       // 0 reserved for VSR annotations
-    struct jls_signal_def_base_s def;
-    union {
-        struct jls_fsr_def_s fsr;
-        struct jls_vsr_def_s vsr;
-    };
-};
-
-// struct jls_annotation_def_s, not used
-
-struct jls_utc_def_s {
-    uint8_t utc_id;         // 0 reserved for local computer time
-    const char * name;
-};
-
-struct jls_head_s {
+struct jls_track_head_s {
     uint64_t offset[16];  // 0 = data, 1 = first summary, ...
 };
 
-// struct jls_index_s variable sized, format defined by track
-// struct jls_data_s variable sized, format defined by track
-// struct jls_summary_s variable sized, format defined by track
+// struct jls_track_index_s variable sized, format defined by track
+// struct jls_track_data_s variable sized, format defined by track
+// struct jls_track_summary_s variable sized, format defined by track
 
 // struct jls_user_data_s contains raw data.  header field chuck_meta is user-defined.
 

@@ -307,7 +307,14 @@ int32_t jls_raw_wr_header(struct jls_raw_s * self, struct jls_chunk_header_s * h
 }
 
 int32_t jls_raw_wr_payload(struct jls_raw_s * self, uint32_t payload_length, const uint8_t * payload) {
+    if (!payload_length) {
+        return 0;  // no action necessary
+    }
+    if (!self || !payload) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
     struct jls_chunk_header_s * hdr = &self->hdr;
+
     uint8_t footer[11] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
     uint8_t pad = (uint8_t) ((hdr->payload_length + 4) & 7);
     if (pad != 0) {

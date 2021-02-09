@@ -49,16 +49,16 @@ int32_t jls_wr_open(struct jls_wr_s ** instance, const char * path);
 int32_t jls_wr_close(struct jls_wr_s * self);
 
 int32_t jls_wr_source_def(struct jls_wr_s * self, const struct jls_source_def_s * source);
+int32_t jls_wr_utc_def(struct jls_wr_s * self, uint8_t utc_id, const char * name);
 int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signal_def_s * signal);
-int32_t jls_wr_utc_def(struct jls_wr_s * self, struct jls_utc_s * utc);
-int32_t jls_wr_user_data(struct jls_wr_s * self, uint16_t chuck_meta, uint32_t size, const uint8_t * data);
+int32_t jls_wr_user_data(struct jls_wr_s * self, uint16_t chunk_meta, const uint8_t * data, uint32_t data_size);
 
-int32_t jls_wr_fsr_f32(struct jls_wr_s * self, uint16_t signal_id, uint32_t size, const float * data);
+int32_t jls_wr_fsr_f32(struct jls_wr_s * self, uint16_t signal_id, const float * data, uint32_t data_size);
 int32_t jls_wr_fsr_annotation_txt(struct jls_wr_s * self, uint16_t signal_id, uint64_t sample_id, const char * txt);
 int32_t jls_wr_fsr_annotation_marker(struct jls_wr_s * self, uint16_t signal_id, uint64_t sample_id, const char * marker_name);
 int32_t jls_wr_fsr_utc(struct jls_wr_s * self, uint16_t signal_id, uint8_t utc_id, int64_t utc, uint64_t sample_id);
 
-int32_t jls_wr_vsr_f32(struct jls_wr_s * self, uint16_t ts_id, int64_t timestamp, uint32_t size, const char * txt);
+int32_t jls_wr_vsr_f32(struct jls_wr_s * self, uint16_t ts_id, int64_t timestamp, uint32_t data, uint32_t size);
 int32_t jls_wr_vsr_annotation_txt(struct jls_wr_s * self, uint16_t signal_id, int64_t timestamp, const char * txt);
 int32_t jls_wr_vsr_annotation_marker(struct jls_wr_s * self, uint16_t signal_id, uint64_t timestamp, const char * marker_name);
 
