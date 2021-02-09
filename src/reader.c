@@ -44,7 +44,7 @@ struct signal_s {
 
 struct jls_rd_s {
     struct source_s * sources[256];
-    struct signal_s * signals[JLS_SIGNAL_ID_MAX + 1];
+    struct signal_s * signals[JLS_SIGNAL_COUNT];
     struct jls_chunk_header_s hdr;  // the header for the current chunk
     uint8_t * chunk_buffer;         // storage for the
     size_t chunk_buffer_sz;

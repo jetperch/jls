@@ -80,9 +80,25 @@ extern "C" {
      0x20, 0x0a, 0x20, 0x1a, 0x20, 0x20, 0xb2, 0x1c}
 
 /**
- * @brief The maximum signal_id value.
+ * @brief The maximum allowed number of signals.
  */
-#define JLS_SIGNAL_ID_MAX  (255)
+#define JLS_SIGNAL_COUNT (256)
+
+/**
+ * @brief The number of summary levels.
+ */
+#define JLS_SUMMARY_LEVEL_COUNT (16)
+
+
+/**
+ * @brief The signal type definition.
+ */
+enum jls_signal_type_e {
+    /// Fixed sampling rate
+    JLS_SIGNAL_TYPE_FSR = 0,
+    /// Variable sampling rate
+    JLS_SIGNAL_TYPE_VSR = 1,
+};
 
 /**
  * @brief The available track types that store data over time.
@@ -142,6 +158,7 @@ enum jls_tag_e {
     JLS_TAG_SOURCE_DEF          = 0x01,
     JLS_TAG_SIGNAL_DEF          = 0x02,
 
+    // track tags
     JLS_TAG_FSR_DEF             = (0x20 | (JLS_TRACK_TYPE_FSR << 3) | JLS_TRACK_CHUNK_DEF),
     JLS_TAG_FSR_HEAD            = (0x20 | (JLS_TRACK_TYPE_FSR << 3) | JLS_TRACK_CHUNK_HEAD),
     JLS_TAG_FSR_INDEX           = (0x20 | (JLS_TRACK_TYPE_FSR << 3) | JLS_TRACK_CHUNK_INDEX),
@@ -201,7 +218,7 @@ enum jls_tag_e {
 #define JLS_DATATYPE_BOOL JLS_DATATYPE_DEF(UINT, 1, 0)
 
 struct jls_source_def_s {
-    uint8_t source_id;          // 0 reserved for global annotations
+    uint8_t source_id;          // 0 reserved for global annotations, must be unique
     const char * name;
     const char * vendor;
     const char * model;
@@ -210,9 +227,9 @@ struct jls_source_def_s {
 };
 
 struct jls_signal_def_base_s {
-    uint8_t source_id;
-    uint8_t signal_type;        // 0 = FSR, 1 = VSR
-    uint16_t signal_id;
+    uint8_t source_id;          // must match a source_def
+    uint8_t signal_type;        // jls_signal_type_e
+    uint16_t signal_id;         // must be unique
     uint32_t data_type;
     const char * name;
     const char * si_units;

@@ -48,7 +48,7 @@ struct jls_rd_s;
 int32_t jls_rd_open(struct jls_rd_s ** instance, const char * path);
 void jls_rd_close(struct jls_rd_s * self);
 
-jls_rd_source_def_foreach(struct jls_writer_s * self, struct jls_source_def_s const * source);
+int32_t jls_rd_source_iter(struct jls_writer_s * self, struct jls_source_def_s const * source);
 
 #if 0
 int32_t jls_rd_signal_def_foreach(struct jls_writer_s * self, struct jls_signal_def_s const * signal);
