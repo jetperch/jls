@@ -286,6 +286,7 @@ int32_t jls_raw_close(struct jls_raw_s * self) {
 }
 
 int32_t jls_raw_wr(struct jls_raw_s * self, struct jls_chunk_header_s * hdr, const uint8_t * payload) {
+    JLS_LOGI("wr @ %llu : %d %s", jls_raw_chunk_tell(self), (int) hdr->tag, jls_tag_to_name(hdr->tag));
     RLE(jls_raw_wr_header(self, hdr));
     RLE(jls_raw_wr_payload(self, hdr->payload_length, payload));
     invalidate_current_chunk(self);
@@ -307,13 +308,19 @@ int32_t jls_raw_wr_header(struct jls_raw_s * self, struct jls_chunk_header_s * h
 }
 
 int32_t jls_raw_wr_payload(struct jls_raw_s * self, uint32_t payload_length, const uint8_t * payload) {
-    if (!payload_length) {
-        return 0;  // no action necessary
-    }
-    if (!self || !payload) {
+    if (!self) {
         return JLS_ERROR_PARAMETER_INVALID;
     }
     struct jls_chunk_header_s * hdr = &self->hdr;
+    if (hdr->tag == JLS_TAG_INVALID) {
+        RLE(jls_raw_rd_header(self, hdr));
+    }
+    if (!payload_length) {
+        return 0;  // no action necessary
+    }
+    if (!payload) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
 
     uint8_t footer[11] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
     uint8_t pad = (uint8_t) ((hdr->payload_length + 4) & 7);
@@ -331,6 +338,7 @@ int32_t jls_raw_wr_payload(struct jls_raw_s * self, uint32_t payload_length, con
 }
 
 int32_t jls_raw_rd(struct jls_raw_s * self, struct jls_chunk_header_s * hdr, uint32_t payload_length_max, uint8_t * payload) {
+    JLS_LOGI("rd %llu : %d %s", jls_raw_chunk_tell(self), (int) hdr->tag, jls_tag_to_name(hdr->tag));
     RLE(jls_raw_rd_header(self, hdr));
     RLE(jls_raw_rd_payload(self, payload_length_max, payload));
     invalidate_current_chunk(self);
@@ -380,6 +388,10 @@ int32_t jls_raw_rd_payload(struct jls_raw_s * self, uint32_t payload_length_max,
     if (hdr->tag == JLS_TAG_INVALID) {
         RLE(jls_raw_rd_header(self, hdr));
     }
+    if (!hdr->payload_length) {
+        return 0;
+    }
+
     uint32_t rd_size = payload_size_on_disk(hdr->payload_length);
 
     if (rd_size > payload_length_max) {
@@ -489,4 +501,35 @@ int32_t jls_raw_item_prev(struct jls_raw_s * self) {
     RLE(f_seek(self, pos, SEEK_SET));
     self->offset = self->fpos;
     return 0;
+}
+
+const char * jls_tag_to_name(uint8_t tag) {
+    switch (tag) {
+        case JLS_TAG_INVALID:                   return "invalid";
+        case JLS_TAG_SOURCE_DEF:                return "source_def";
+        case JLS_TAG_UTC_DEF:                   return "utc_def";
+        case JLS_TAG_SIGNAL_DEF:                return "signal_def";
+        case JLS_TAG_TRACK_FSR_DEF:             return "track_fsr_def";
+        case JLS_TAG_TRACK_FSR_HEAD:            return "track_fsr_head";
+        case JLS_TAG_TRACK_FSR_INDEX:           return "track_fsr_index";
+        case JLS_TAG_TRACK_FSR_DATA:            return "track_fsr_data";
+        case JLS_TAG_TRACK_FSR_SUMMARY:         return "track_fsr_summary";
+        case JLS_TAG_TRACK_VSR_DEF:             return "track_vsr_def";
+        case JLS_TAG_TRACK_VSR_HEAD:            return "track_vsr_head";
+        case JLS_TAG_TRACK_VSR_INDEX:           return "track_vsr_index";
+        case JLS_TAG_TRACK_VSR_DATA:            return "track_vsr_data";
+        case JLS_TAG_TRACK_VSR_SUMMARY:         return "track_vsr_summary";
+        case JLS_TAG_TRACK_ANNOTATION_DEF:      return "track_annotation_def";
+        case JLS_TAG_TRACK_ANNOTATION_HEAD:     return "track_annotation_head";
+        case JLS_TAG_TRACK_ANNOTATION_INDEX:    return "track_annotation_index";
+        case JLS_TAG_TRACK_ANNOTATION_DATA:     return "track_annotation_data";
+        case JLS_TAG_TRACK_ANNOTATION_SUMMARY:  return "track_annotation_summary";
+        case JLS_TAG_TRACK_UTC_DEF:             return "track_utc_def";
+        case JLS_TAG_TRACK_UTC_HEAD:            return "track_utc_head";
+        case JLS_TAG_TRACK_UTC_INDEX:           return "track_utc_index";
+        case JLS_TAG_TRACK_UTC_DATA:            return "track_utc_data";
+        case JLS_TAG_TRACK_UTC_SUMMARY:         return "track_utc_summary";
+        case JLS_TAG_USER_DATA:                 return "user_data";
+        default:                                return "unknown";
+    }
 }

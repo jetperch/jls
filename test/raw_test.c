@@ -225,6 +225,11 @@ static void test_items_nav(void **state) {
     remove(filename);
 }
 
+static void test_tag_to_name(void **state) {
+    (void) state;
+    assert_string_equal("invalid", jls_tag_to_name(JLS_TAG_INVALID));
+}
+
 int main(void) {
     const struct CMUnitTest tests[] = {
             cmocka_unit_test(test_invalid_open),
@@ -234,6 +239,7 @@ int main(void) {
             cmocka_unit_test(test_chunks_nav),
             cmocka_unit_test(test_seek),
             cmocka_unit_test(test_items_nav),
+            cmocka_unit_test(test_tag_to_name),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);

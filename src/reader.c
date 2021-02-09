@@ -15,6 +15,7 @@
  */
 
 #include "jls/reader.h"
+#include "jls/raw.h"
 #include "jls/format.h"
 #include "jls/ec.h"
 #include "jls/log.h"
@@ -23,16 +24,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define CHUNK_BUFFER_SIZE  (1 << 24)
-static const uint8_t FILE_HDR[] = JLS_HEADER_IDENTIFICATION;
+#define PAYLOAD_BUFFER_SIZE_DEFAULT (1 << 25)   // 32 MB
+#define STRING_BUFFER_SIZE_DEFAULT (1 << 20)    // 1 MB
 
-struct source_s {
-    struct jls_source_def_s def;
-};
-
-struct signal_s {
-    struct jls_signal_def_s def;
-};
 
 #define ROE(x)  do {                        \
     int32_t rc__ = (x);                     \
@@ -41,6 +35,22 @@ struct signal_s {
     }                                       \
 } while (0)
 
+#define RLE(x)  do {                        \
+    int32_t rc__ = (x);                     \
+    if (rc__) {                             \
+        JLS_LOGE("error %d: " #x, rc__);    \
+        return rc__;                        \
+    }                                       \
+} while (0)
+
+#if 0
+struct source_s {
+    struct jls_source_def_s def;
+};
+
+struct signal_s {
+    struct jls_signal_def_s def;
+};
 
 struct jls_rd_s {
     struct source_s * sources[256];
@@ -50,194 +60,93 @@ struct jls_rd_s {
     size_t chunk_buffer_sz;
     FILE * f;
 };
+#endif
 
-static int32_t rd_file_header(FILE * file, struct jls_file_header_s * hdr) {
-    if (sizeof(*hdr) != fread((uint8_t *) hdr, 1, sizeof(*hdr), file)) {
-        JLS_LOGE("could not read file header");
-        return JLS_ERROR_UNSUPPORTED_FILE;
-    }
-    uint32_t crc32 = jls_crc32(0, (uint8_t *) hdr, sizeof(*hdr) - 4);
-    if (crc32 != hdr->crc32) {
-        JLS_LOGE("file header crc mismatch: 0x%08x != 0x%08x", crc32, hdr->crc32);
-        return JLS_ERROR_UNSUPPORTED_FILE;
-    }
+struct jls_rd_s {
+    struct jls_raw_s * raw;
+    struct jls_source_def_s sources[256];
 
-    if (0 != memcmp(FILE_HDR, hdr->identification, sizeof(FILE_HDR))) {
-        JLS_LOGE("invalid file header identification");
-        return JLS_ERROR_UNSUPPORTED_FILE;
-    }
+    uint8_t * payload_buffer;
+    size_t payload_buffer_size;
 
-    if (hdr->version.s.major != JLS_FORMAT_VERSION_MAJOR) {
-        JLS_LOGE("unsupported file format: %d", (int) hdr->version.s.major);
-        return JLS_ERROR_UNSUPPORTED_FILE;
-    }
+    char * string_buffer;
+    size_t string_buffer_size;
+};
 
-    if (0 == hdr->length) {
-        JLS_LOGW("file header length 0, not closed gracefully");
-    }
+static int32_t scan(struct jls_rd_s * self) {
+    int32_t rc = 0;
+    struct jls_chunk_header_s hdr;
+    while (1) {
+        rc = jls_raw_rd(self->raw, &hdr, self->payload_buffer_size, self->payload_buffer);
+        if (rc == JLS_ERROR_TOO_BIG) {
+            size_t sz_new = self->payload_buffer_size;
+            while (sz_new < hdr.payload_length) {
+                sz_new *= 2;
+            }
+            uint8_t * ptr = realloc(self->payload_buffer, sz_new);
+            if (!ptr) {
+                return JLS_ERROR_NOT_ENOUGH_MEMORY;
+            }
+        } else if (rc == JLS_ERROR_EMPTY) {
+            return 0;
+        } else if (rc) {
+            return rc;
+        }
 
-    return 0;
-}
+        JLS_LOGI("tag %d : %s", hdr.tag, jls_tag_to_name(hdr.tag));
 
-static int32_t rd_header(struct jls_rd_s * self) {
-    struct jls_chunk_header_s * hdr = &self->hdr;
-    if (sizeof(hdr) != fread((uint8_t *) hdr, 1, sizeof(*hdr), self->f)) {
-        JLS_LOGE("could not read chunk header");
-        return JLS_ERROR_IO;
-    }
-    uint32_t crc32 = jls_crc32(0, (uint8_t *) hdr, sizeof(*hdr) - 4);
-    if (crc32 != hdr->crc32) {
-        return JLS_ERROR_MESSAGE_INTEGRITY;
-    }
-    return 0;
-}
-
-static inline uint32_t payload_size_on_disk(uint32_t payload_size) {
-    uint8_t pad = (uint8_t) ((payload_size + 4) & 7);
-    if (pad != 0) {
-        pad = 8 - pad;
-    }
-    return payload_size + pad + 4;
-}
-
-static int32_t rd_payload(struct jls_rd_s * self) {
-    uint32_t crc32_file;
-    uint32_t crc32_calc;
-
-    struct jls_chunk_header_s * hdr = &self->hdr;
-    if ((hdr->payload_length + 16) > self->chunk_buffer_sz) {
-        self->chunk_buffer_sz = hdr->payload_length + 1024;
-                JLS_LOGE("increase chunk buffer to %d bytes", self->chunk_buffer_sz);
-        self->chunk_buffer = realloc(self->chunk_buffer, self->chunk_buffer_sz);
-        if (!self->chunk_buffer) {
-            self->chunk_buffer_sz = 0;
-            return JLS_ERROR_NOT_ENOUGH_MEMORY;
+        switch (hdr.tag) {
+            case JLS_TAG_SOURCE_DEF:
+                break;
+            default:
+                break;
         }
     }
-
-    uint8_t pad = (uint8_t) ((hdr->payload_length + 4) & 7);
-    if (pad != 0) {
-        pad = 8 - pad;
-    }
-
-    uint32_t rd_size = hdr->payload_length + pad + sizeof(crc32_file);
-    if (rd_size != fread((uint8_t *) self->chunk_buffer, 1, rd_size, self->f)) {
-        JLS_LOGE("could not read chunk payload");
-        return JLS_ERROR_IO;
-    }
-    uint32_t k = hdr->payload_length + pad;
-    crc32_calc = jls_crc32(0, self->chunk_buffer, hdr->payload_length);
-    crc32_file = ((uint32_t) self->chunk_buffer[k])
-            | (((uint32_t) self->chunk_buffer[k + 1]) << 8)
-            | (((uint32_t) self->chunk_buffer[k + 1]) << 8)
-            | (((uint32_t) self->chunk_buffer[k + 1]) << 8);
-    if (crc32_calc != crc32_file) {
-        JLS_LOGE("crc32 mismatch: 0x%08x != 0x%08x", crc32_file, crc32_calc);
-        return JLS_ERROR_MESSAGE_INTEGRITY;
-    }
-    return 0;
-}
-
-static int32_t chunk_next(struct jls_rd_s * self) {
-    struct jls_chunk_header_s * hdr = &self->hdr;
-    long int offset = payload_size_on_disk(hdr->payload_length);
-    offset += sizeof(*hdr);
-    if (fseek(self->f, offset, SEEK_CUR)) {
-        JLS_LOGW("could not seek next chunk");
-        return JLS_ERROR_EMPTY;
-    }
-    return rd_header(self);
-}
-
-static int32_t chunk_first(struct jls_rd_s * self) {
-    if (fseek(self->f, sizeof(struct jls_file_header_s), SEEK_CUR)) {
-        JLS_LOGW("could not seek first chunk");
-        return JLS_ERROR_EMPTY;
-    }
-    return rd_header(self);
-}
-
-static int32_t chunk_prev(struct jls_rd_s * self) {
-    struct jls_chunk_header_s * hdr = &self->hdr;
-    long int offset = payload_size_on_disk(hdr->payload_prev_length);
-    offset += sizeof(*hdr);
-    if (fseek(self->f, -offset, SEEK_CUR)) {
-        JLS_LOGW("could not seek previous chunk");
-        return JLS_ERROR_EMPTY;
-    }
-    return rd_header(self);
-}
-
-static int32_t item_next(struct jls_rd_s * self) {
-    if (fseek(self->f, (long int) self->hdr.item_next, SEEK_SET)) {
-        JLS_LOGW("could not seek next item");
-        return JLS_ERROR_EMPTY;
-    }
-    return rd_header(self);
-}
-
-static int32_t item_prev(struct jls_rd_s * self) {
-    if (fseek(self->f, (long int) self->hdr.item_prev, SEEK_CUR)) {
-        JLS_LOGW("could not seek previous item");
-        return JLS_ERROR_EMPTY;
-    }
-    return rd_header(self);
-}
-
-static int32_t chunk_first_def_by_tag(struct jls_rd_s * self, enum jls_tag_e tag) {
-    ROE(chunk_first(self));
-    while (self->hdr.tag != tag) {
-        ROE(chunk_next(self));
-        if (self->hdr.tag == JLS_TAG_TRACK_FSR_DATA) {
-            JLS_LOGW("tag %d not found", tag);
-            return JLS_ERROR_NOT_FOUND;
-        }
-    }
-    return 0;
 }
 
 int32_t jls_rd_open(struct jls_rd_s ** instance, const char * path) {
-    if (!instance || !path) {
+    if (!instance) {
         return JLS_ERROR_PARAMETER_INVALID;
     }
 
-    FILE * f = fopen(path, "rb");
-    if (!f) {
-        return JLS_ERROR_IO;
-    }
-    struct jls_file_header_s hdr;
-    int rc = rd_file_header(f, &hdr);
-    if (rc) {
-        fclose(f);
-        return rc;
-    }
-
-    struct jls_rd_s * self = calloc(1, sizeof(struct jls_rd_s));
+    struct jls_rd_s *self = calloc(1, sizeof(struct jls_rd_s));
     if (!self) {
         return JLS_ERROR_NOT_ENOUGH_MEMORY;
     }
-    self->f = f;
-    self->chunk_buffer = malloc(CHUNK_BUFFER_SIZE);
-    if (!self->chunk_buffer) {
+
+    self->payload_buffer = malloc(PAYLOAD_BUFFER_SIZE_DEFAULT);
+    self->string_buffer = malloc(STRING_BUFFER_SIZE_DEFAULT);
+    if (!self->payload_buffer || !self->string_buffer) {
         jls_rd_close(self);
         return JLS_ERROR_NOT_ENOUGH_MEMORY;
     }
-    self->chunk_buffer_sz = CHUNK_BUFFER_SIZE;
+    self->payload_buffer_size = PAYLOAD_BUFFER_SIZE_DEFAULT;
+    self->string_buffer_size = STRING_BUFFER_SIZE_DEFAULT;
 
-    return 0;
+    int32_t rc = jls_raw_open(&self->raw, path, "r");
+    if (rc) {
+        jls_rd_close(self);
+        return rc;
+    }
+
+    ROE(scan(self));
+
+    *instance = self;
+    return rc;
 }
 
 void jls_rd_close(struct jls_rd_s * self) {
     if (self) {
-        if (self->f) {
-            fclose(self->f);
-            self->f = NULL;
+        jls_raw_close(self->raw);
+        if (self->string_buffer) {
+            free(self->string_buffer);
+            self->string_buffer = NULL;
         }
-        if (self->chunk_buffer) {
-            free(self->chunk_buffer);
-            self->chunk_buffer_sz = 0;
-            self->chunk_buffer = 0;
+        if (self->payload_buffer) {
+            free(self->payload_buffer);
+            self->payload_buffer = NULL;
         }
+        self->raw = NULL;
         free(self);
     }
 }

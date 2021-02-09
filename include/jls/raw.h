@@ -185,6 +185,13 @@ int32_t jls_raw_item_next(struct jls_raw_s * self);
  */
 int32_t jls_raw_item_prev(struct jls_raw_s * self);
 
+/**
+ * @brief Convert the JLS tag into a user-meaningful string.
+ *
+ * @param tag The tag value.
+ * @return The string.
+ */
+const char * jls_tag_to_name(uint8_t tag);
 
 /** @} */
 

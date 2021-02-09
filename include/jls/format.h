@@ -152,6 +152,7 @@ enum jls_track_chunk_e {
  * @brief The tag definitions.
  */
 enum jls_tag_e {
+    // CAUTION: update jls_tag_to_name on any changes
     JLS_TAG_INVALID                     = 0x00,
 
     // file definition tags
@@ -206,9 +207,9 @@ enum jls_tag_e {
  *      Set to 0 for FLOAT and BOOL.
  */
 #define JLS_DATATYPE_DEF(basetype, size, q)     \
-    ((JLS_DATATYPE_BASETYPE_##basetype) & 0x0f) |        \
-    (((uint32_t) ((size) & 0xff) << 8) |   \
-    (((uint32_t) (q) & 0xff) << 16)
+    (((JLS_DATATYPE_BASETYPE_##basetype) & 0x0f) |        \
+     (((uint32_t) ((size) & 0xff)) << 8) |   \
+     (((uint32_t) ((q) & 0xff)) << 16))
 
 #define JLS_DATATYPE_I32 JLS_DATATYPE_DEF(INT, 32, 0)
 #define JLS_DATATYPE_I64 JLS_DATATYPE_DEF(INT, 64, 0)

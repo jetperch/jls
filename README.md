@@ -150,52 +150,51 @@ start to retrieve more detailed information as requested.
 ```
 sof
 header
-SOURCE_DEF(0)       // internal, reserved for global annotations
-TS_DEF(0, TS.0)     // internal, reserved for global annotations
-HEAD(TS.0, TS)
-HEAD(TS.0, ANNOTATION)
-UTC_DEF(0)          // reserved for local computer UTC time
-SOURCE_DEF(1)       // input device 1
-SIGNAL_DEF(1, 1)    // our signal, like "current" or "voltage"
-HEAD(SIG.1, BLOCK)
-HEAD(SIG.1, UTC)
-HEAD(SIG.1, ANNOTATION)
+UTC_DEF(0)            // reserved for local computer UTC time
+SOURCE_DEF(0)         // internal, reserved for global annotations
+SIGNAL_DEF(0, 0, TS)  // internal, reserved for global annotations
+TRACK_DEF(0.VSR)
+TRACK_HEAD(0.VSR)
+TRACK_DEF(0.ANNO)
+TRACK_HEAD(0.ANNO)
+SOURCE_DEF(1)         // input device 1
+SIGNAL_DEF(1, 1, FSR) // our signal, like "current" or "voltage"
+TRACK_DEF(1.FSR)
+TRACK_HEAD(1.FSR)
+TRACK_DEF(1.ANNO)
+TRACK_HEAD(1.ANNO)
+TRACK_DEF(1.UTC)
+TRACK_HEAD(1.UTC)
 USER_DATA           // just because
-BLOCK_DATA(SIG.1)
-BLOCK_DATA(SIG.1)
-BLOCK_DATA(SIG.1)
-BLOCK_DATA(SIG.1)
-INDEX(SIG.1, lvl=0)
-BLOCK_SUMMARY(SIG.1, lvl=1)
-BLOCK_DATA(SIG.1)
-BLOCK_DATA(SIG.1)
-BLOCK_DATA(SIG.1)
-BLOCK_DATA(SIG.1)
-INDEX(SIG.1, lvl=0)
-BLOCK_SUMMARY(SIG.1, lvl=1)
-BLOCK_DATA(SIG.1)
-BLOCK_DATA(SIG.1)
-BLOCK_DATA(SIG.1)
-BLOCK_DATA(SIG.1)
-INDEX(SIG.1, lvl=0)
-BLOCK_SUMMARY(SIG.1, lvl=1)
-BLOCK_DATA(SIG.1)
-BLOCK_DATA(SIG.1)
-BLOCK_DATA(SIG.1)
-BLOCK_DATA(SIG.1)
-INDEX(SIG.1, lvl=0)
-BLOCK_SUMMARY(SIG.1, lvl=1)
-INDEX(SIG.1, lvl=1)
-BLOCK_SUMMARY(SIG.1, lvl=2)
+TRACK_DATA(1.FSR)
+TRACK_DATA(1.FSR)
+TRACK_DATA(1.FSR)
+TRACK_DATA(1.FSR)
+TRACK_INDEX(1.FSR, lvl=0)
+TRACK_SUMMARY(1.FSR, lvl=1)
+TRACK_DATA(1.FSR)
+TRACK_DATA(1.FSR)
+TRACK_DATA(1.FSR)
+TRACK_DATA(1.FSR)
+TRACK_INDEX(1.FSR, lvl=0)
+TRACK_SUMMARY(1.FSR, lvl=1)
+TRACK_DATA(1.FSR)
+TRACK_DATA(1.FSR)
+TRACK_DATA(1.FSR)
+TRACK_DATA(1.FSR)
+TRACK_INDEX(1.FSR, lvl=0)
+TRACK_SUMMARY(1.FSR, lvl=1)
+TRACK_INDEX(1.FSR, lvl=1)
+TRACK_SUMMARY(1.FSR, lvl=2)
 USER_DATA           // just because
 eof
 ```
 
-Note that HEAD(SIG.1) points to the first INDEX(SIG.1, lvl=0) and
-INDEX(SIG.1, lvl=1). 
-Each BLOCK_DATA is in a doubly-linked list with its next and previous
-neighbors.  Each INDEX(SIG.1, lvl=0) is likewise in a separate doubly-linked
-list, and the payload of each SUMMARY point to the summarized BLOCK_DATA
-instances.  INDEX(SIG.1, lvl=1) points to each INDEX(SIG.1, lvl=0) instance.
-As more data is added, the INDEX(SIG.1, lvl=1) will also get added to
+Note that TRACK_HEAD(1.FSR) points to the first TRACK_INDEX(1.FSR, lvl=0) and
+TRACK_INDEX(1.FSR, lvl=1). 
+Each TRACK_DATA( is in a doubly-linked list with its next and previous
+neighbors.  Each TRACK_INDEX(1.FSR, lvl=0) is likewise in a separate doubly-linked
+list, and the payload of each TRACK_INDEX points to the summarized TRACK_DATA
+instances.  TRACK_INDEX(1.FSR, lvl=1) points to each TRACK_INDEX(1.FSR, lvl=0) instance.
+As more data is added, the TRACK_INDEX(1.FSR, lvl=1) will also get added to
 the INDEX chunks at the same level.
