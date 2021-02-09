@@ -133,7 +133,7 @@ enum jls_track_type_e {
      * @brief The UTC track associates sample_id with UTC.
      *
      * Each entry consists of sample_id, UTC pairs.  This track
-     * is only used for
+     * is only used for FSR signals.
      */
     JLS_TRACK_TYPE_UTC = 3,
 };
@@ -183,8 +183,7 @@ enum jls_tag_e {
 
     // file definition tags
     JLS_TAG_SOURCE_DEF                  = 0x01,
-    JLS_TAG_UTC_DEF                     = 0x02,
-    JLS_TAG_SIGNAL_DEF                  = 0x03,
+    JLS_TAG_SIGNAL_DEF                  = 0x02,
 
     // track tags
     JLS_TAG_TRACK_FSR_DEF               = (0x20 | (JLS_TRACK_TYPE_FSR << 3) | JLS_TRACK_CHUNK_DEF),
@@ -256,13 +255,6 @@ struct jls_source_def_s {
     const char * serial_number;
 };
 
-struct jls_utc_def_s {
-    // store unique utc_id in chunk_meta
-    // utc_id: 0 reserved for local computer time
-    // on disk: reserve 64 bytes as 0 for future use
-    const char * name;
-};
-
 struct jls_signal_def_s {       // 0 reserved for VSR annotations
     // store unique signal_id in chunk_meta
     uint16_t signal_id;
@@ -273,10 +265,7 @@ struct jls_signal_def_s {       // 0 reserved for VSR annotations
     uint32_t sample_rate;       // 0 for VSR
     uint32_t samples_per_block;
     uint32_t summary_downsample;
-    uint8_t utc_id;             // UTC reference time used by this signal
-    uint8_t rsv8_0;
-    uint8_t rsv8_1;
-    uint8_t rsv8_2;             // pad to multiple of 8 bytes
+    uint32_t utc_rate_auto;     // 0=off, else samples per UTC entry.
     // on disk: reserve 64 bytes as 0 for future use
     const char * name;
     const char * si_units;

@@ -510,7 +510,6 @@ const char * jls_tag_to_name(uint8_t tag) {
     switch (tag) {
         case JLS_TAG_INVALID:                   return "invalid";
         case JLS_TAG_SOURCE_DEF:                return "source_def";
-        case JLS_TAG_UTC_DEF:                   return "utc_def";
         case JLS_TAG_SIGNAL_DEF:                return "signal_def";
         case JLS_TAG_TRACK_FSR_DEF:             return "track_fsr_def";
         case JLS_TAG_TRACK_FSR_HEAD:            return "track_fsr_head";

@@ -150,7 +150,6 @@ start to retrieve more detailed information as requested.
 ```
 sof
 header
-UTC_DEF(0)            // reserved for local computer UTC time
 SOURCE_DEF(0)         // internal, reserved for global annotations
 SIGNAL_DEF(0, 0, TS)  // internal, reserved for global annotations
 TRACK_DEF(0.VSR)

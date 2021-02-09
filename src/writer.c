@@ -64,9 +64,6 @@ struct jls_wr_s {
     struct chunk_s source_info[256];
     struct chunk_s source_mra;  // most recently added
 
-    uint64_t utc_bitmap;
-    struct chunk_s utc_mra;
-
     struct signal_info_s signal_info[JLS_SIGNAL_COUNT];
     struct chunk_s signal_mra;
 
@@ -111,7 +108,7 @@ struct jls_signal_def_s SIGNAL_0 = {       // 0 reserved for VSR annotations
         .sample_rate = 0,
         .samples_per_block = 10000,
         .summary_downsample = 100,
-        .utc_id = 0,
+        .utc_rate_auto = 0,  // disabled
         .name = "global_annotation_signal",
         .si_units = "",
 };
@@ -140,7 +137,6 @@ int32_t jls_wr_open(struct jls_wr_s ** instance, const char * path) {
         return rc;
     }
 
-    ROE(jls_wr_utc_def(self, 0, "host"));
     ROE(jls_wr_source_def(self, &SOURCE_0));
     ROE(jls_wr_signal_def(self, &SIGNAL_0));
 
@@ -291,44 +287,6 @@ int32_t jls_wr_source_def(struct jls_wr_s * self, const struct jls_source_def_s 
     return update_mra(self, &self->source_mra, chunk);
 }
 
-int32_t jls_wr_utc_def(struct jls_wr_s * self, uint8_t utc_id, const char * name) {
-    if (!self | !name) {
-        return JLS_ERROR_PARAMETER_INVALID;
-    }
-    if (utc_id >= 64) {
-        JLS_LOGE("utc_id too big: %d", (int) utc_id);
-        return JLS_ERROR_PARAMETER_INVALID;
-    }
-    uint64_t utc_bitmap = 1LLU << utc_id;
-    if (utc_bitmap & self->utc_bitmap) {
-        JLS_LOGE("Duplicate utc: %d", (int) utc_id);
-        return JLS_ERROR_ALREADY_EXISTS;
-    }
-    self->utc_bitmap |= utc_bitmap;
-
-    // construct payload
-    buf_reset(self);
-    buf_add_zero(self, 64);  // reserve space for future use.
-    ROE(buf_add_str(self, name));
-    uint32_t payload_length = buf_size(self);
-
-    // construct header
-    struct chunk_s chunk;
-    chunk.hdr.item_next = 0;  // update later
-    chunk.hdr.item_prev = self->utc_mra.offset;
-    chunk.hdr.tag = JLS_TAG_UTC_DEF;
-    chunk.hdr.rsv0_u8 = 0;
-    chunk.hdr.chunk_meta = 0;
-    chunk.hdr.payload_length = payload_length;
-    chunk.hdr.payload_prev_length = self->payload_prev_length;
-    chunk.offset = jls_raw_chunk_tell(self->raw);
-
-    // write
-    ROE(jls_raw_wr(self->raw, &chunk.hdr, self->buffer));
-    self->payload_prev_length = payload_length;
-    return update_mra(self, &self->utc_mra, &chunk);
-}
-
 static int32_t track_wr_def(struct jls_wr_s * self, struct track_info_s * track_info) {
     // construct header
     struct chunk_s * chunk = &track_info->def;
@@ -408,7 +366,7 @@ int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signal_def_s 
     ROE(buf_wr_u32(self, signal->sample_rate));
     ROE(buf_wr_u32(self, signal->samples_per_block));
     ROE(buf_wr_u32(self, signal->summary_downsample));
-    ROE(buf_wr_u32(self, signal->utc_id));
+    ROE(buf_wr_u32(self, signal->utc_rate_auto));
     ROE(buf_add_zero(self, 3 + 64));  // reserve space for future use.
     ROE(buf_add_str(self, signal->name));
     ROE(buf_add_str(self, signal->si_units));
@@ -526,7 +484,6 @@ static int32_t anno_wr(struct jls_wr_s * self, uint16_t signal_id, uint64_t time
 int32_t jls_wr_fsr_annotation_txt(struct jls_wr_s * self, uint16_t signal_id, uint64_t sample_id, const char * txt) {
     ROE(signal_validate_typed(self, signal_id,  JLS_SIGNAL_TYPE_FSR));
     return anno_wr(self, signal_id, sample_id, JLS_ANNOTATION_TYPE_TEXT, txt);
-
 }
 
 int32_t jls_wr_fsr_annotation_marker(struct jls_wr_s * self, uint16_t signal_id, uint64_t sample_id, const char * marker_name) {
@@ -534,11 +491,12 @@ int32_t jls_wr_fsr_annotation_marker(struct jls_wr_s * self, uint16_t signal_id,
     return anno_wr(self, signal_id, sample_id, JLS_ANNOTATION_TYPE_MARKER, marker_name);
 }
 
-int32_t jls_wr_fsr_utc(struct jls_wr_s * self, uint16_t signal_id, uint8_t utc_id, uint64_t sample_id, int64_t utc) {
+int32_t jls_wr_fsr_utc(struct jls_wr_s * self, uint16_t signal_id, uint64_t sample_id, int64_t utc) {
     ROE(signal_validate_typed(self, signal_id,  JLS_SIGNAL_TYPE_FSR));
     struct signal_info_s * signal_info = &self->signal_info[signal_id];
 
     // future feature: buffer multiple samples into same record?
+    // todo implement utc_rate_auto
 
     // Construct payload
     uint64_t payload[2] = {sample_id, (uint64_t) utc};
