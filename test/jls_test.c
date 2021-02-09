@@ -21,6 +21,7 @@
 #include "jls/reader.h"
 #include "jls/writer.h"
 #include "jls/format.h"
+#include "jls/time.h"
 #include "jls/ec.h"
 #include <stdio.h>
 #include <string.h>
@@ -66,6 +67,19 @@ static void test_wr_source_duplicate(void **state) {
     assert_int_equal(0, jls_wr_open(&wr, filename));
     assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_1));
     assert_int_equal(JLS_ERROR_ALREADY_EXISTS, jls_wr_source_def(wr, &SOURCE_1));
+    assert_int_equal(0, jls_wr_close(wr));
+}
+
+static void test_annotation(void **state) {
+    (void) state;
+    int64_t now = jls_now();
+    struct jls_wr_s * wr = NULL;
+    struct jls_rd_s * rd = NULL;
+    assert_int_equal(0, jls_wr_open(&wr, filename));
+    assert_int_equal(0, jls_wr_annotation_txt(wr, now - JLS_TIME_SECOND, "hello there"));
+    assert_int_equal(0, jls_wr_annotation_marker(wr, now - JLS_TIME_MILLISECOND, "hello there"));
+    assert_int_equal(0, jls_wr_close(wr));
+
     assert_int_equal(0, jls_rd_open(&rd, filename));
     jls_rd_close(rd);
 }
@@ -74,6 +88,7 @@ int main(void) {
     const struct CMUnitTest tests[] = {
             cmocka_unit_test(test_source),
             cmocka_unit_test(test_wr_source_duplicate),
+            cmocka_unit_test(test_annotation),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);

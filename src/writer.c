@@ -44,7 +44,9 @@ struct track_info_s {
 };
 
 struct signal_info_s {
-    struct chunk_s def;
+    struct chunk_s chunk_def;
+    struct jls_signal_def_s signal_def;
+    char name[1024];
     struct track_info_s tracks[4];   // index jls_track_type_e
 };
 
@@ -223,6 +225,24 @@ static int32_t buf_wr_u32(struct jls_wr_s * self, uint32_t value) {
     return 0;
 }
 
+static int32_t buf_wr_u64(struct jls_wr_s * self, uint64_t value) {
+    struct buf_s * buf = &self->buf;
+    if ((buf->cur + 3) >= buf->end) {
+        return JLS_ERROR_NOT_ENOUGH_MEMORY;
+    }
+    *buf->cur++ = (uint8_t) (value & 0xff);
+    *buf->cur++ = (uint8_t) ((value >> 8) & 0xff);
+    *buf->cur++ = (uint8_t) ((value >> 16) & 0xff);
+    *buf->cur++ = (uint8_t) ((value >> 24) & 0xff);
+    *buf->cur++ = (uint8_t) ((value >> 24) & 0xff);
+    *buf->cur++ = (uint8_t) ((value >> 32) & 0xff);
+    *buf->cur++ = (uint8_t) ((value >> 40) & 0xff);
+    *buf->cur++ = (uint8_t) ((value >> 48) & 0xff);
+    *buf->cur++ = (uint8_t) ((value >> 56) & 0xff);
+    return 0;
+}
+
+
 static int32_t update_mra(struct jls_wr_s * self, struct chunk_s * mra, struct chunk_s * update) {
     if (mra->offset) {
         int64_t current_pos = jls_raw_chunk_tell(self->raw);
@@ -365,7 +385,8 @@ int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signal_def_s 
     if (signal->signal_id >= JLS_SIGNAL_COUNT) {
         return JLS_ERROR_PARAMETER_INVALID;
     }
-    if (self->signal_info[signal->signal_id].def.offset) {
+    struct signal_info_s * signal_info = &self->signal_info[signal->signal_id];
+    if (signal_info->chunk_def.offset) {
         JLS_LOGE("Duplicate signal: %d", (int) signal->signal_id);
         return JLS_ERROR_PARAMETER_INVALID;
     }
@@ -373,6 +394,10 @@ int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signal_def_s 
         JLS_LOGE("Invalid signal type: %d", (int) signal->signal_type);
         return JLS_ERROR_PARAMETER_INVALID;
     }
+
+    signal_info->signal_def = *signal;
+    snprintf(signal_info->name, sizeof(signal_info->name), "%s", signal->name);
+    signal_info->signal_def.name = signal_info->name;
 
     // construct payload
     buf_reset(self);
@@ -390,7 +415,7 @@ int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signal_def_s 
     uint32_t payload_length = buf_size(self);
 
     // construct header
-    struct chunk_s * chunk = &self->signal_info[signal->signal_id].def;
+    struct chunk_s * chunk = &signal_info->chunk_def;
     chunk->hdr.item_next = 0;  // update later
     chunk->hdr.item_prev = self->source_mra.offset;
     chunk->hdr.tag = JLS_TAG_SIGNAL_DEF;
@@ -447,3 +472,102 @@ int32_t jls_wr_user_data(struct jls_wr_s * self, uint16_t chunk_meta, const uint
 // struct jls_track_index_s variable sized, format defined by track
 // struct jls_track_data_s variable sized, format defined by track
 // struct jls_track_summary_s variable sized, format defined by track
+
+static int32_t signal_validate(struct jls_wr_s * self, uint16_t signal_id) {
+    if (signal_id >= JLS_SIGNAL_COUNT) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
+    struct signal_info_s * signal_info = &self->signal_info[signal_id];
+    if (!signal_info->chunk_def.offset) {
+        JLS_LOGW("attempted to annotated an undefined signal %d", (int) signal_id);
+        return JLS_ERROR_NOT_FOUND;
+    }
+    return 0;
+}
+
+static int32_t signal_validate_typed(struct jls_wr_s * self, uint16_t signal_id, enum jls_signal_type_e signal_type) {
+    ROE(signal_validate(self, signal_id));
+    struct signal_info_s * signal_info = &self->signal_info[signal_id];
+    if (signal_info->signal_def.signal_type != signal_type) {
+        return JLS_ERROR_NOT_SUPPORTED;
+    }
+    return 0;
+}
+
+static int32_t anno_wr(struct jls_wr_s * self, uint16_t signal_id, uint64_t timestamp,
+                       enum jls_annotation_type_e annotation_type, const char * data) {
+    struct signal_info_s * signal_info = &self->signal_info[signal_id];
+
+    // construct payload
+    buf_reset(self);
+    ROE(buf_wr_u64(self, timestamp));
+    ROE(buf_wr_u8(self, annotation_type));
+    ROE(buf_add_zero(self, 7));
+    ROE(buf_add_str(self, data));
+    uint32_t payload_length = buf_size(self);
+
+    // construct header
+    struct chunk_s chunk;
+    chunk.hdr.item_next = 0;  // update later
+    chunk.hdr.item_prev = signal_info->tracks[JLS_TRACK_TYPE_ANNOTATION].data.offset;
+    chunk.hdr.tag = JLS_TAG_TRACK_ANNOTATION_DATA;
+    chunk.hdr.rsv0_u8 = 0;
+    chunk.hdr.chunk_meta = signal_id;
+    chunk.hdr.payload_length = payload_length;
+    chunk.hdr.payload_prev_length = self->payload_prev_length;
+    chunk.offset = jls_raw_chunk_tell(self->raw);
+
+    // write
+    ROE(jls_raw_wr(self->raw, &chunk.hdr, data));
+    self->payload_prev_length = payload_length;
+    return update_mra(self, &signal_info->tracks[JLS_TRACK_TYPE_ANNOTATION].data, &chunk);
+}
+
+int32_t jls_wr_fsr_annotation_txt(struct jls_wr_s * self, uint16_t signal_id, uint64_t sample_id, const char * txt) {
+    ROE(signal_validate_typed(self, signal_id,  JLS_SIGNAL_TYPE_FSR));
+    return anno_wr(self, signal_id, sample_id, JLS_ANNOTATION_TYPE_TEXT, txt);
+
+}
+
+int32_t jls_wr_fsr_annotation_marker(struct jls_wr_s * self, uint16_t signal_id, uint64_t sample_id, const char * marker_name) {
+    ROE(signal_validate_typed(self, signal_id,  JLS_SIGNAL_TYPE_FSR));
+    return anno_wr(self, signal_id, sample_id, JLS_ANNOTATION_TYPE_MARKER, marker_name);
+}
+
+int32_t jls_wr_fsr_utc(struct jls_wr_s * self, uint16_t signal_id, uint8_t utc_id, uint64_t sample_id, int64_t utc) {
+    ROE(signal_validate_typed(self, signal_id,  JLS_SIGNAL_TYPE_FSR));
+    struct signal_info_s * signal_info = &self->signal_info[signal_id];
+
+    // future feature: buffer multiple samples into same record?
+
+    // Construct payload
+    uint64_t payload[2] = {sample_id, (uint64_t) utc};
+    uint32_t payload_length = sizeof(payload);
+
+    // construct header
+    struct chunk_s chunk;
+    chunk.hdr.item_next = 0;  // update later
+    chunk.hdr.item_prev = signal_info->tracks[JLS_TRACK_TYPE_UTC].data.offset;
+    chunk.hdr.tag = JLS_TAG_TRACK_UTC_DATA;
+    chunk.hdr.rsv0_u8 = 0;
+    chunk.hdr.chunk_meta = signal_id;
+    chunk.hdr.payload_length = payload_length;
+    chunk.hdr.payload_prev_length = self->payload_prev_length;
+    chunk.offset = jls_raw_chunk_tell(self->raw);
+
+    // write
+    ROE(jls_raw_wr(self->raw, &chunk.hdr, (uint8_t *) payload));
+    self->payload_prev_length = payload_length;
+    return update_mra(self, &signal_info->tracks[JLS_TRACK_TYPE_UTC].data, &chunk);
+}
+
+int32_t jls_wr_vsr_annotation_txt(struct jls_wr_s * self, uint16_t signal_id, int64_t timestamp, const char * txt) {
+    ROE(signal_validate_typed(self, signal_id,  JLS_SIGNAL_TYPE_VSR));
+    return anno_wr(self, signal_id, (uint64_t) timestamp, JLS_ANNOTATION_TYPE_TEXT, txt);
+
+}
+
+int32_t jls_wr_vsr_annotation_marker(struct jls_wr_s * self, uint16_t signal_id, int64_t timestamp, const char * marker_name) {
+    ROE(signal_validate_typed(self, signal_id,  JLS_SIGNAL_TYPE_VSR));
+    return anno_wr(self, signal_id, (uint64_t) timestamp, JLS_ANNOTATION_TYPE_MARKER, marker_name);
+}

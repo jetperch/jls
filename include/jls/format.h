@@ -121,10 +121,11 @@ enum jls_track_type_e {
     /**
      * @brief Annotations contain infrequent, variable-typed data.
      *
+     * @see jls_annotation_type_e for the annotation types.
+     *
      * Each annotation entry consists of time and the data.
-     * For signals, time must be samples_id.
-     * For time series, time must be UTC.
-     * Annotations include UTF-8 text and markers.
+     * For FSR, time must be samples_id.
+     * For VSR, time must be UTC.
      */
     JLS_TRACK_TYPE_ANNOTATION = 2,
 
@@ -135,6 +136,31 @@ enum jls_track_type_e {
      * is only used for
      */
     JLS_TRACK_TYPE_UTC = 3,
+};
+
+/**
+ * @brief The available annotation types.
+ */
+enum jls_annotation_type_e {
+    /**
+     * @brief Unsupported annotation type.
+     */
+    JLS_ANNOTATION_TYPE_UNKNOWN = 0,
+
+    /**
+     * @brief UTF-8 formatted text.
+     */
+    JLS_ANNOTATION_TYPE_TEXT = 1,
+
+    /**
+     * @brief A vertical marker at a given time.
+     *
+     * Marker names can be arbitrary, but the convention is:
+     * - Number strings, like "1", represent a single marker.
+     * - Alpha + number string, like "A1" and "A2", represent
+     *   a marker pair (dual markers).
+     */
+    JLS_ANNOTATION_TYPE_MARKER = 2,
 };
 
 /**

@@ -16,6 +16,7 @@
 
 #include "jls/raw.h"
 #include "jls/format.h"
+#include "jls/time.h"
 #include "jls/ec.h"
 #include "jls/log.h"
 #include "crc32.h"
@@ -23,6 +24,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+// windows
+#include <windows.h>
 #include <io.h>  // windows
 #include <fcntl.h>
 #include <sys\stat.h>
@@ -532,4 +535,18 @@ const char * jls_tag_to_name(uint8_t tag) {
         case JLS_TAG_USER_DATA:                 return "user_data";
         default:                                return "unknown";
     }
+}
+
+int64_t jls_now() {
+    // Contains a 64-bit value representing the number of 100-nanosecond intervals since January 1, 1601 (UTC).
+    // python
+    // import dateutil.parser
+    // dateutil.parser.parse('2018-01-01T00:00:00Z').timestamp() - dateutil.parser.parse('1601-01-01T00:00:00Z').timestamp()
+    static const int64_t offset_s = 131592384000000000LL;  // 100 ns
+    static const uint64_t frequency = 10000000; // 100 ns
+    FILETIME filetime;
+    GetSystemTimePreciseAsFileTime(&filetime);
+    uint64_t t = ((uint64_t) filetime.dwLowDateTime) | (((uint64_t) filetime.dwHighDateTime) << 32);
+    t -= offset_s;
+    return JLS_COUNTER_TO_TIME(t, frequency);
 }
