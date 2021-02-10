@@ -243,3 +243,14 @@ list, and the payload of each TRACK_INDEX points to the summarized TRACK_DATA
 instances.  TRACK_INDEX(1.FSR, lvl=1) points to each TRACK_INDEX(1.FSR, lvl=0) instance.
 As more data is added, the TRACK_INDEX(1.FSR, lvl=1) will also get added to
 the INDEX chunks at the same level.
+
+
+## References
+
+* JLS v1: 
+  [lower-layer](https://github.com/jetperch/pyjoulescope/blob/master/joulescope/datafile.py),
+  [upper-layer](https://github.com/jetperch/pyjoulescope/blob/master/joulescope/data_recorder.py).
+* [Sigrok/v3](https://sigrok.org/wiki/File_format:Sigrok/v3), which shares
+  many of the same motivations.
+* Tag-length-value: [Wikipedia](https://en.wikipedia.org/wiki/Type-length-value).
+* Doubly linked list: [Wikipedia](https://en.wikipedia.org/wiki/Doubly_linked_list).
