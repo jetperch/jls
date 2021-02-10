@@ -48,7 +48,25 @@ struct jls_rd_s;
 int32_t jls_rd_open(struct jls_rd_s ** instance, const char * path);
 void jls_rd_close(struct jls_rd_s * self);
 
-// int32_t jls_rd_source_iter(struct jls_writer_s * self, struct jls_source_def_s const * source);
+/**
+ * @brief Get the array of sources in the file.
+ *
+ * @param self The reader instance.
+ * @param sources[out] The array of sources.
+ * @param count[out] The number of items in sources.
+ * @return 0 or error code.
+ */
+int32_t jls_rd_sources(struct jls_rd_s * self, struct jls_source_def_s ** sources, uint16_t * count);
+
+/**
+ * @brief Get the array of signals in the file.
+ *
+ * @param self The reader instance.
+ * @param signals[out] The array of signals.
+ * @param count[out] The number of items in signals.
+ * @return 0 or error code.
+ */
+int32_t jls_rd_signals(struct jls_rd_s * self, struct jls_signal_def_s ** signals, uint16_t * count);
 
 #if 0
 int32_t jls_rd_signal_def_foreach(struct jls_writer_s * self, struct jls_signal_def_s const * signal);

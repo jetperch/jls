@@ -37,10 +37,12 @@ char const jls_log_level_char[JLS_LOG_LEVEL_ALL + 1] = {
 };
 
 void jls_log_printf_default(const char * fmt, ...) {
+    // todo remove
     va_list arg;
     va_start(arg, fmt);
     vprintf(fmt, arg);
     va_end(arg);
+    fflush(stdout);
 }
 
 volatile jls_log_printf jls_log_printf_ = jls_log_printf_default;

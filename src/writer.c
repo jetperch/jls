@@ -62,7 +62,7 @@ struct jls_wr_s {
     uint8_t buffer[BUFFER_SIZE];
     struct buf_s buf;
 
-    struct chunk_s source_info[256];
+    struct chunk_s source_info[JLS_SOURCE_COUNT];
     struct chunk_s source_mra;  // most recently added
 
     struct signal_info_s signal_info[JLS_SIGNAL_COUNT];
@@ -94,7 +94,8 @@ struct jls_source_def_s SOURCE_0 = {
         .vendor = "None",
         .model = "None",
         .version = "1.0.0",
-        .serial_number = "None"};
+        .serial_number = "None"
+};
 
 struct jls_signal_def_s SIGNAL_0 = {       // 0 reserved for VSR annotations
         .signal_id = 0,
@@ -264,6 +265,9 @@ int32_t jls_wr_source_def(struct jls_wr_s * self, const struct jls_source_def_s 
     if (!self || !source) {
         return JLS_ERROR_PARAMETER_INVALID;
     }
+    if (source->source_id >= JLS_SOURCE_COUNT) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
     if (self->source_info[source->source_id].offset) {
         JLS_LOGE("Duplicate source: %d", (int) source->source_id);
         return JLS_ERROR_ALREADY_EXISTS;
@@ -350,12 +354,21 @@ int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signal_def_s 
     if (!self || !signal) {
         return JLS_ERROR_PARAMETER_INVALID;
     }
-    if (signal->signal_id >= JLS_SIGNAL_COUNT) {
+    uint16_t signal_id = signal->signal_id;
+    if (signal_id >= JLS_SIGNAL_COUNT) {
         return JLS_ERROR_PARAMETER_INVALID;
     }
-    struct signal_info_s * signal_info = &self->signal_info[signal->signal_id];
+    if (signal->source_id >= JLS_SOURCE_COUNT) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
+    if (!self->source_info[signal->source_id].offset) {
+        JLS_LOGW("source %d not found", signal->source_id);
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
+
+    struct signal_info_s * signal_info = &self->signal_info[signal_id];
     if (signal_info->chunk_def.offset) {
-        JLS_LOGE("Duplicate signal: %d", (int) signal->signal_id);
+        JLS_LOGE("Duplicate signal: %d", (int) signal_id);
         return JLS_ERROR_PARAMETER_INVALID;
     }
     if ((signal->signal_type != JLS_SIGNAL_TYPE_FSR) && (signal->signal_type != JLS_SIGNAL_TYPE_VSR)) {
@@ -369,15 +382,15 @@ int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signal_def_s 
 
     // construct payload
     buf_reset(self);
-    ROE(buf_wr_u8(self, signal->source_id));
+    ROE(buf_wr_u16(self, signal->source_id));
     ROE(buf_wr_u8(self, signal->signal_type));
-    ROE(buf_wr_u16(self, 0));  // reserved
+    ROE(buf_wr_u8(self, 0));  // reserved
     ROE(buf_wr_u32(self, signal->data_type));
     ROE(buf_wr_u32(self, signal->sample_rate));
     ROE(buf_wr_u32(self, signal->samples_per_block));
     ROE(buf_wr_u32(self, signal->summary_downsample));
     ROE(buf_wr_u32(self, signal->utc_rate_auto));
-    ROE(buf_add_zero(self, 3 + 64));  // reserve space for future use.
+    ROE(buf_add_zero(self, 4 + 64));  // reserve space for future use.
     ROE(buf_add_str(self, signal->name));
     ROE(buf_add_str(self, signal->si_units));
     uint32_t payload_length = buf_size(self);
@@ -388,7 +401,7 @@ int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signal_def_s 
     chunk->hdr.item_prev = self->signal_mra.offset;
     chunk->hdr.tag = JLS_TAG_SIGNAL_DEF;
     chunk->hdr.rsv0_u8 = 0;
-    chunk->hdr.chunk_meta = signal->signal_id;
+    chunk->hdr.chunk_meta = signal_id;
     chunk->hdr.payload_length = payload_length;
     chunk->hdr.payload_prev_length = self->payload_prev_length;
     chunk->offset = jls_raw_chunk_tell(self->raw);
@@ -398,19 +411,19 @@ int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signal_def_s 
     self->payload_prev_length = payload_length;
     ROE(update_mra(self, &self->signal_mra, chunk));
 
+    struct signal_info_s * info = &self->signal_info[signal_id];
     if (signal->signal_type == JLS_SIGNAL_TYPE_FSR) {
-        ROE(track_wr_def(self, &self->signal_info->tracks[JLS_TRACK_TYPE_FSR]));
-        ROE(track_wr_head(self, &self->signal_info->tracks[JLS_TRACK_TYPE_FSR]));
-        ROE(track_wr_def(self, &self->signal_info->tracks[JLS_TRACK_TYPE_ANNOTATION]));
-        ROE(track_wr_head(self, &self->signal_info->tracks[JLS_TRACK_TYPE_ANNOTATION]));
-        ROE(track_wr_def(self, &self->signal_info->tracks[JLS_TRACK_TYPE_UTC]));
-        ROE(track_wr_head(self, &self->signal_info->tracks[JLS_TRACK_TYPE_UTC]));
+        ROE(track_wr_def(self, &info->tracks[JLS_TRACK_TYPE_FSR]));
+        ROE(track_wr_head(self, &info->tracks[JLS_TRACK_TYPE_FSR]));
+        ROE(track_wr_def(self, &info->tracks[JLS_TRACK_TYPE_ANNOTATION]));
+        ROE(track_wr_head(self, &info->tracks[JLS_TRACK_TYPE_ANNOTATION]));
+        ROE(track_wr_def(self, &info->tracks[JLS_TRACK_TYPE_UTC]));
+        ROE(track_wr_head(self, &info->tracks[JLS_TRACK_TYPE_UTC]));
     } else if (signal->signal_type == JLS_SIGNAL_TYPE_VSR) {
-        fflush(0);
-        ROE(track_wr_def(self, &self->signal_info->tracks[JLS_TRACK_TYPE_VSR]));
-        ROE(track_wr_head(self, &self->signal_info->tracks[JLS_TRACK_TYPE_VSR]));
-        ROE(track_wr_def(self, &self->signal_info->tracks[JLS_TRACK_TYPE_ANNOTATION]));
-        ROE(track_wr_head(self, &self->signal_info->tracks[JLS_TRACK_TYPE_ANNOTATION]));
+        ROE(track_wr_def(self, &info->tracks[JLS_TRACK_TYPE_VSR]));
+        ROE(track_wr_head(self, &info->tracks[JLS_TRACK_TYPE_VSR]));
+        ROE(track_wr_def(self, &info->tracks[JLS_TRACK_TYPE_ANNOTATION]));
+        ROE(track_wr_head(self, &info->tracks[JLS_TRACK_TYPE_ANNOTATION]));
     }
     return 0;
 }

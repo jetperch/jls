@@ -23,9 +23,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
 
 #define PAYLOAD_BUFFER_SIZE_DEFAULT (1 << 25)   // 32 MB
 #define STRING_BUFFER_SIZE_DEFAULT (1 << 20)    // 1 MB
+#define SIGNAL_MASK  (0x0fff)
 
 
 #define ROE(x)  do {                        \
@@ -53,7 +55,7 @@ struct signal_s {
 };
 
 struct jls_rd_s {
-    struct source_s * sources[256];
+    struct source_s * sources[JLS_SOURCE_COUNT];
     struct signal_s * signals[JLS_SIGNAL_COUNT];
     struct jls_chunk_header_s hdr;  // the header for the current chunk
     uint8_t * chunk_buffer;         // storage for the
@@ -82,9 +84,19 @@ struct strings_s {
     size_t alloc_size;
 };
 
+struct signal_s {
+    int64_t track_defs[4];
+    int64_t track_heads[4];
+};
+
 struct jls_rd_s {
     struct jls_raw_s * raw;
-    struct jls_source_def_s sources[256];
+    struct jls_source_def_s source_def[JLS_SOURCE_COUNT];
+    struct jls_source_def_s source_def_api[JLS_SOURCE_COUNT];
+    struct jls_signal_def_s signal_def[JLS_SIGNAL_COUNT];
+    struct jls_signal_def_s signal_def_api[JLS_SOURCE_COUNT];
+
+    struct signal_s signals[JLS_SIGNAL_COUNT];
 
     struct jls_chunk_header_s hdr;
     struct payload_s payload;
@@ -102,8 +114,6 @@ static int32_t payload_skip(struct jls_rd_s * self, size_t count) {
     self->payload.cur += count;
     return 0;
 }
-
-#if 0
 
 static int32_t payload_parse_u8(struct jls_rd_s * self, uint8_t * value) {
     if ((self->payload.cur + 1) > self->payload.end) {
@@ -135,6 +145,8 @@ static int32_t payload_parse_u32(struct jls_rd_s * self, uint32_t * value) {
     self->payload.cur += 4;
     return 0;
 }
+
+#if 0
 
 static int32_t payload_parse_u64(struct jls_rd_s * self, uint64_t * value) {
     if ((self->payload.cur + 8) > self->payload.end) {
@@ -175,7 +187,7 @@ static int32_t payload_parse_str(struct jls_rd_s * self, char ** value) {
         ch = (char) *self->payload.cur++;
         *self->strings.cur++ = ch;
         if (ch == 0) {
-            if (self->payload.cur[1] == 0x1f) {
+            if (*self->payload.cur == 0x1f) {
                 self->payload.cur++;
             }
             *value = str;
@@ -216,15 +228,20 @@ static int32_t scan_sources(struct jls_rd_s * self) {
     ROE(jls_raw_chunk_seek(self->raw, self->source_head.offset));
     while (1) {
         ROE(rd(self));
-        uint8_t source_id = (uint8_t) (self->hdr.chunk_meta & 0x00ff);
-        struct jls_source_def_s * src = &self->sources[source_id];
-        ROE(payload_skip(self, 64));
-        ROE(payload_parse_str(self, (char **) &src->name));
-        ROE(payload_parse_str(self, (char **)&src->vendor));
-        ROE(payload_parse_str(self, (char **)&src->model));
-        ROE(payload_parse_str(self, (char **)&src->version));
-        ROE(payload_parse_str(self, (char **)&src->serial_number));
-        JLS_LOGI("Found source %d : %s", (int) source_id, src->name);
+        uint16_t source_id = self->hdr.chunk_meta;
+        if (source_id >= JLS_SOURCE_COUNT) {
+            JLS_LOGW("source_id %d too big - skip", (int) source_id);
+        } else {
+            struct jls_source_def_s *src = &self->source_def[source_id];
+            ROE(payload_skip(self, 64));
+            ROE(payload_parse_str(self, (char **) &src->name));
+            ROE(payload_parse_str(self, (char **) &src->vendor));
+            ROE(payload_parse_str(self, (char **) &src->model));
+            ROE(payload_parse_str(self, (char **) &src->version));
+            ROE(payload_parse_str(self, (char **) &src->serial_number));
+            src->source_id = source_id;  // indicate that this source is valid!
+            JLS_LOGI("Found source %d : %s", (int) source_id, src->name);
+        }
         if (!self->hdr.item_next) {
             break;
         }
@@ -233,9 +250,139 @@ static int32_t scan_sources(struct jls_rd_s * self) {
     return 0;
 }
 
+static int32_t signal_validate(struct jls_rd_s * self, uint16_t signal_id, struct jls_signal_def_s * s) {
+    if (signal_id >= JLS_SIGNAL_COUNT) {
+        JLS_LOGW("signal_id %d too big - skip", (int) signal_id);
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
+    if (self->source_def[s->source_id].source_id != s->source_id) {
+        JLS_LOGW("signal %d: source_id %d not found", (int) signal_id, (int) s->source_id);
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
+    switch (s->signal_type) {
+        case JLS_SIGNAL_TYPE_FSR: break;
+        case JLS_SIGNAL_TYPE_VSR: break;
+        default:
+            JLS_LOGW("signal %d: invalid signal_type: %d", (int) signal_id, (int) s->signal_type);
+            return JLS_ERROR_PARAMETER_INVALID;
+    }
+
+    // todo check data_type
+    return 0;
+}
+
+static int32_t handle_signal_def(struct jls_rd_s * self) {
+    uint16_t signal_id = self->hdr.chunk_meta;
+    if (signal_id >= JLS_SIGNAL_COUNT) {
+        JLS_LOGW("signal_id %d too big - skip", (int) signal_id);
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
+    struct jls_signal_def_s *s = &self->signal_def[signal_id];
+    s->signal_id = signal_id;
+    ROE(payload_parse_u16(self, &s->source_id));
+    ROE(payload_parse_u8(self, &s->signal_type));
+    ROE(payload_skip(self, 1));
+    ROE(payload_parse_u32(self, &s->data_type));
+    ROE(payload_parse_u32(self, &s->sample_rate));
+    ROE(payload_parse_u32(self, &s->samples_per_block));
+    ROE(payload_parse_u32(self, &s->summary_downsample));
+    ROE(payload_parse_u32(self, &s->utc_rate_auto));
+    ROE(payload_skip(self, 4 + 64));
+    ROE(payload_parse_str(self, (char **) &s->name));
+    ROE(payload_parse_str(self, (char **) &s->si_units));
+    if (0 == signal_validate(self, signal_id, s)) {  // validate passed
+        s->signal_id = signal_id;  // indicate that this signal is valid
+        JLS_LOGI("Found signal %d : %s", (int) signal_id, s->name);
+    }  // else skip
+    return 0;
+}
+
+static bool is_signal_defined(struct jls_rd_s * self, uint16_t signal_id) {
+    signal_id &= SIGNAL_MASK;  // mask off chunk_meta depth
+    if (signal_id >= JLS_SIGNAL_COUNT) {
+        JLS_LOGW("signal_id %d too big", (int) signal_id);
+        return false;
+    }
+    if (self->signal_def[signal_id].signal_id != signal_id) {
+        JLS_LOGW("signal_id %d not defined", (int) signal_id);
+        return false;
+    }
+    return true;
+}
+
+static inline uint8_t tag_parse_track_type(uint8_t tag) {
+    return (tag >> 3) & 3;
+}
+
+static int32_t validate_track_tag(struct jls_rd_s * self, uint16_t signal_id, uint8_t tag) {
+    if (!is_signal_defined(self, signal_id)) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
+    struct jls_signal_def_s * signal_def = &self->signal_def[signal_id];
+    uint8_t track_type = tag_parse_track_type(tag);
+    switch (signal_def->signal_type) {
+        case JLS_SIGNAL_TYPE_FSR:
+            if ((track_type == JLS_TRACK_TYPE_FSR)
+                || (track_type == JLS_TRACK_TYPE_ANNOTATION)
+                || (track_type == JLS_TRACK_TYPE_UTC)) {
+                // good
+            } else {
+                JLS_LOGW("unsupported track %d for FSR signal", (int) track_type);
+                return JLS_ERROR_PARAMETER_INVALID;
+            }
+            break;
+        case JLS_SIGNAL_TYPE_VSR:
+            if ((track_type == JLS_TRACK_TYPE_VSR)
+                || (track_type == JLS_TRACK_TYPE_ANNOTATION)) {
+                // good
+            } else {
+                JLS_LOGW("unsupported track %d for VSR signal", (int) track_type);
+                return JLS_ERROR_PARAMETER_INVALID;
+            }
+            break;
+        default:
+            // should have already been checked.
+            JLS_LOGW("unsupported signal type: %d", (int) signal_def->signal_type);
+            return JLS_ERROR_PARAMETER_INVALID;
+    }
+    return 0;
+}
+
+static int32_t handle_track_def(struct jls_rd_s * self, int64_t pos) {
+    uint16_t signal_id = self->hdr.chunk_meta & SIGNAL_MASK;
+    ROE(validate_track_tag(self, signal_id, self->hdr.tag));
+    self->signals[signal_id].track_defs[tag_parse_track_type(self->hdr.tag)] = pos;
+    return 0;
+}
+
+static int32_t handle_track_head(struct jls_rd_s * self, int64_t pos) {
+    uint16_t signal_id = self->hdr.chunk_meta & SIGNAL_MASK;
+    ROE(validate_track_tag(self, signal_id, self->hdr.tag));
+    self->signals[signal_id].track_heads[tag_parse_track_type(self->hdr.tag)] = pos;
+    return 0;
+}
+
 static int32_t scan_signals(struct jls_rd_s * self) {
-    (void) self;
-    JLS_LOGI("find signals");
+    int64_t pos;
+    JLS_LOGI("scan_signals");
+    ROE(jls_raw_chunk_seek(self->raw, self->signal_head.offset));
+    while (1) {
+        pos = jls_raw_chunk_tell(self->raw);
+        ROE(rd(self));
+        if (self->hdr.tag == JLS_TAG_SIGNAL_DEF) {
+            handle_signal_def(self);
+        } else if ((self->hdr.tag & 7) == JLS_TRACK_CHUNK_DEF) {
+            handle_track_def(self, pos);
+        } else if ((self->hdr.tag & 7) == JLS_TRACK_CHUNK_HEAD) {
+            handle_track_head(self, pos);
+        } else {
+            JLS_LOGW("unknown tag %d in signal list", (int) self->hdr.tag);
+        }
+        if (!self->hdr.item_next) {
+            break;
+        }
+        ROE(jls_raw_chunk_seek(self->raw, self->hdr.item_next));
+    }
     return 0;
 }
 
@@ -337,4 +484,36 @@ void jls_rd_close(struct jls_rd_s * self) {
         self->raw = NULL;
         free(self);
     }
+}
+
+int32_t jls_rd_sources(struct jls_rd_s * self, struct jls_source_def_s ** sources, uint16_t * count) {
+    if (!self || !sources || !count) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
+    uint16_t c = 0;
+    for (uint16_t i = 0; i < JLS_SOURCE_COUNT; ++i) {
+        if (self->source_def[i].source_id == i) {
+            // Note: source 0 is always defined, so calloc is ok
+            self->source_def_api[c++] = self->source_def[i];
+        }
+    }
+    *sources = self->source_def_api;
+    *count = c;
+    return 0;
+}
+
+int32_t jls_rd_signals(struct jls_rd_s * self, struct jls_signal_def_s ** signals, uint16_t * count) {
+    if (!self || !signals || !count) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
+    uint16_t c = 0;
+    for (uint16_t i = 0; i < JLS_SIGNAL_COUNT; ++i) {
+        if (self->signal_def[i].signal_id == i) {
+            // Note: signal 0 is always defined, so calloc is ok
+            self->signal_def_api[c++] = self->signal_def[i];
+        }
+    }
+    *signals = self->signal_def_api;
+    *count = c;
+    return 0;
 }

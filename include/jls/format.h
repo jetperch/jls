@@ -80,6 +80,11 @@ extern "C" {
      0x20, 0x0a, 0x20, 0x1a, 0x20, 0x20, 0xb2, 0x1c}
 
 /**
+ * @brief The maximum allowed number of sources.
+ */
+#define JLS_SOURCE_COUNT (256)
+
+/**
  * @brief The maximum allowed number of signals.
  */
 #define JLS_SIGNAL_COUNT (256)
@@ -88,7 +93,6 @@ extern "C" {
  * @brief The number of summary levels.
  */
 #define JLS_SUMMARY_LEVEL_COUNT (16)
-
 
 /**
  * @brief The signal type definition.
@@ -268,7 +272,7 @@ enum jls_tag_e {
 
 struct jls_source_def_s {
     // store unique source_id in chunk_meta
-    uint8_t source_id;          // 0 reserved for global annotations, must be unique
+    uint16_t source_id;          // 0 reserved for global annotations, must be unique
     // on disk: reserve 64 bytes as 0 for future use
     const char * name;
     const char * vendor;
@@ -280,7 +284,7 @@ struct jls_source_def_s {
 struct jls_signal_def_s {       // 0 reserved for VSR annotations
     // store unique signal_id in chunk_meta
     uint16_t signal_id;
-    uint8_t source_id;          // must match a source_def
+    uint16_t source_id;          // must match a source_def
     uint8_t signal_type;        // jls_signal_type_e
     uint16_t rsv16_0;
     uint32_t data_type;

@@ -43,25 +43,66 @@ const struct jls_source_def_s SOURCE_1 = {
         .serial_number = "serial_number",
 };
 
-const struct jls_source_def_s SOURCE_2 = {
-        .source_id = 2,
-        .name = "source 2",
+const struct jls_source_def_s SOURCE_3 = {
+        .source_id = 3,
+        .name = "source 3",
         .vendor = "vendor",
         .model = "model",
         .version = "version",
         .serial_number = "serial_number",
 };
 
+const struct jls_signal_def_s SIGNAL_5 = {
+        .signal_id = 5,
+        .source_id = 3,
+        .signal_type = JLS_SIGNAL_TYPE_FSR,
+        .data_type = JLS_DATATYPE_F32,
+        .sample_rate = 1000000,
+        .samples_per_block = 1000000,
+        .summary_downsample = 100,
+        .utc_rate_auto = 0,
+        .name = "signal 5",
+        .si_units = "A",
+};
+
+const struct jls_signal_def_s SIGNAL_6 = {
+        .signal_id = 6,
+        .source_id = 3,
+        .signal_type = JLS_SIGNAL_TYPE_VSR,
+        .data_type = JLS_DATATYPE_F32,
+        .sample_rate = 0,
+        .samples_per_block = 1000000,
+        .summary_downsample = 100,
+        .utc_rate_auto = 0,
+        .name = "signal 6",
+        .si_units = "V",
+};
+
+
 static void test_source(void **state) {
     (void) state;
     struct jls_wr_s * wr = NULL;
     struct jls_rd_s * rd = NULL;
     assert_int_equal(0, jls_wr_open(&wr, filename));
+    assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_3));
     assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_1));
-    assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_2));
     assert_int_equal(0, jls_wr_close(wr));
 
     assert_int_equal(0, jls_rd_open(&rd, filename));
+
+    struct jls_source_def_s * sources = NULL;
+    uint16_t count = 0;
+    assert_int_equal(0, jls_rd_sources(rd, &sources, &count));
+    assert_int_equal(3, count);
+    assert_int_equal(0, sources[0].source_id);
+    assert_int_equal(1, sources[1].source_id);
+    assert_int_equal(3, sources[2].source_id);
+    assert_string_equal(SOURCE_1.name, sources[1].name);
+    assert_string_equal(SOURCE_1.vendor, sources[1].vendor);
+    assert_string_equal(SOURCE_1.model, sources[1].model);
+    assert_string_equal(SOURCE_1.version, sources[1].version);
+    assert_string_equal(SOURCE_1.serial_number, sources[1].serial_number);
+    assert_string_equal(SOURCE_3.name, sources[2].name);
     jls_rd_close(rd);
 }
 
@@ -83,7 +124,7 @@ static void test_annotation(void **state) {
     assert_int_equal(0, jls_wr_open(&wr, filename));
     assert_int_equal(0, jls_wr_vsr_annotation(wr, 0, now - JLS_TIME_SECOND,
                                               JLS_ANNOTATION_TYPE_TEXT, JLS_STORAGE_TYPE_STRING,
-                                                (const uint8_t *) "hello there", 0));
+                                              (const uint8_t *) "hello there", 0));
     assert_int_equal(0, jls_wr_close(wr));
 
     assert_int_equal(0, jls_rd_open(&rd, filename));
@@ -103,12 +144,45 @@ static void test_user_data(void **state) {
     jls_rd_close(rd);
 }
 
+static void test_signal(void **state) {
+    (void) state;
+    struct jls_wr_s * wr = NULL;
+    struct jls_rd_s * rd = NULL;
+    assert_int_equal(0, jls_wr_open(&wr, filename));
+    assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_3));
+    assert_int_equal(0, jls_wr_signal_def(wr, &SIGNAL_6));
+    assert_int_equal(0, jls_wr_signal_def(wr, &SIGNAL_5));
+    assert_int_equal(0, jls_wr_close(wr));
+
+    assert_int_equal(0, jls_rd_open(&rd, filename));
+    struct jls_signal_def_s * signals = NULL;
+    uint16_t count = 0;
+    assert_int_equal(0, jls_rd_signals(rd, &signals, &count));
+    assert_int_equal(3, count);
+    assert_int_equal(0, signals[0].signal_id);
+    assert_int_equal(5, signals[1].signal_id);
+    assert_int_equal(6, signals[2].signal_id);
+    assert_int_equal(SIGNAL_5.source_id, signals[1].source_id);
+    assert_int_equal(SIGNAL_5.signal_type, signals[1].signal_type);
+    assert_int_equal(SIGNAL_5.data_type, signals[1].data_type);
+    assert_int_equal(SIGNAL_5.sample_rate, signals[1].sample_rate);
+    assert_int_equal(SIGNAL_5.samples_per_block, signals[1].samples_per_block);
+    assert_int_equal(SIGNAL_5.summary_downsample, signals[1].summary_downsample);
+    assert_int_equal(SIGNAL_5.utc_rate_auto, signals[1].utc_rate_auto);
+    assert_string_equal(SIGNAL_5.name, signals[1].name);
+    assert_string_equal(SIGNAL_5.si_units, signals[1].si_units);
+    assert_string_equal(SIGNAL_6.name, signals[2].name);
+
+    jls_rd_close(rd);
+}
+
 int main(void) {
     const struct CMUnitTest tests[] = {
             cmocka_unit_test(test_source),
             cmocka_unit_test(test_wr_source_duplicate),
             cmocka_unit_test(test_annotation),
             cmocka_unit_test(test_user_data),
+            cmocka_unit_test(test_signal),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
