@@ -139,16 +139,37 @@ enum jls_track_type_e {
 };
 
 /**
+ * @brief The data storage type.
+ *
+ * The data storage type applies to directly user-accessible data including
+ * annotations and user_data.
+ */
+enum jls_storage_type_e {
+    /// Raw binary data.
+    JLS_STORAGE_TYPE_BINARY = 0,
+    /// Null-terminated C-style string with UTF-8 encoding.
+    JLS_STORAGE_TYPE_STRING = 1,
+    /// JSON serialized data structure with NULL terminator and UTF-8 encoding.
+    JLS_STORAGE_TYPE_JSON = 2,
+};
+
+/**
  * @brief The available annotation types.
  */
 enum jls_annotation_type_e {
     /**
-     * @brief Unsupported annotation type.
+     * @brief Arbitrary user data.
+     *
+     * Application-dependent data with no standardized form or purpose.
+     * This type supports any jls_storage_type_e.
      */
-    JLS_ANNOTATION_TYPE_UNKNOWN = 0,
+    JLS_ANNOTATION_TYPE_USER = 0,
 
     /**
      * @brief UTF-8 formatted text.
+     *
+     * Viewers should display this text at the appropriate location.
+     * The jls_storage_type_e must be STRING.
      */
     JLS_ANNOTATION_TYPE_TEXT = 1,
 
@@ -159,6 +180,7 @@ enum jls_annotation_type_e {
      * - Number strings, like "1", represent a single marker.
      * - Alpha + number string, like "A1" and "A2", represent
      *   a marker pair (dual markers).
+     * The jls_storage_type_e must be STRING.
      */
     JLS_ANNOTATION_TYPE_MARKER = 2,
 };
@@ -383,12 +405,16 @@ struct jls_chunk_header_s {
      * Each tag is free to define the purpose of this field.
      * 
      * However, all data tags use this definition:
-     * - tag_id[7:0] is the signal/time series identifier from 0 to 255.
-     * - tag_id[11:8] is reserved.
-     * - tag_id[15:12] contains the depth for this chunk from 0 to 15.
+     * - chunk_meta[7:0] is the signal/time series identifier from 0 to 255.
+     * - chunk_meta[11:8] is reserved.
+     * - chunk_meta[15:12] contains the depth for this chunk from 0 to 15.
      *   - 0 = block (sample level)
      *   - 1 = First-level summary of block samples
      *   - 2 = Second-level summary of first-level summaries.
+     *
+     * User-data reserves chunk_meta[15:12] to store the storage_type and
+     * another internal indications.  chunk_meta[11:0] may be assigned
+     * by the specific application.
      */
     uint16_t chunk_meta;
     

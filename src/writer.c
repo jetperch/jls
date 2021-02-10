@@ -22,6 +22,7 @@
 #include "crc32.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 
 #define BUFFER_SIZE (1 << 20)
@@ -132,7 +133,7 @@ int32_t jls_wr_open(struct jls_wr_s ** instance, const char * path) {
         return rc;
     }
 
-    ROE(jls_wr_user_data(self, 0, NULL, 0));
+    ROE(jls_wr_user_data(self, 0, JLS_STORAGE_TYPE_BINARY, NULL, 0));
     ROE(jls_wr_source_def(self, &SOURCE_0));
     ROE(jls_wr_signal_def(self, &SIGNAL_0));
 
@@ -181,6 +182,17 @@ static int32_t buf_add_str(struct jls_wr_s * self, const char * cstr) {
     }
     JLS_LOGE("buffer to small");
     return JLS_ERROR_NOT_ENOUGH_MEMORY;
+}
+
+static int32_t buf_add_bin(struct jls_wr_s * self, const uint8_t * data, uint32_t data_size) {
+    struct buf_s * buf = &self->buf;
+    if ((buf->cur + data_size) > buf->end) {
+        JLS_LOGE("buffer to small");
+        return JLS_ERROR_NOT_ENOUGH_MEMORY;
+    }
+    memcpy(buf->cur, data, data_size);
+    buf->cur += data_size;
+    return 0;
 }
 
 static uint32_t buf_size(struct jls_wr_s * self) {
@@ -402,13 +414,30 @@ int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signal_def_s 
     return 0;
 }
 
-int32_t jls_wr_user_data(struct jls_wr_s * self, uint16_t chunk_meta, const uint8_t * data, uint32_t data_size) {
+int32_t jls_wr_user_data(struct jls_wr_s * self, uint16_t chunk_meta,
+                         enum jls_storage_type_e storage_type, const uint8_t * data, uint32_t data_size) {
     if (!self) {
         return JLS_ERROR_PARAMETER_INVALID;
     }
     if (data_size & !data) {
         return JLS_ERROR_PARAMETER_INVALID;
     }
+    if (chunk_meta & 0xf000) {
+        JLS_LOGW("chunk_meta[15:12] nonzero.  Will be modified.");
+        chunk_meta &= 0x0fff;
+    }
+
+    switch (storage_type) {
+        case JLS_STORAGE_TYPE_BINARY:
+            break;
+        case JLS_STORAGE_TYPE_STRING:  // intentional fall-through
+        case JLS_STORAGE_TYPE_JSON:
+            data_size = strlen(data) + 1;
+            break;
+        default:
+            return JLS_ERROR_PARAMETER_INVALID;
+    }
+    chunk_meta |= ((uint16_t) storage_type) << 12;
 
     // construct header
     struct chunk_s chunk;
@@ -451,17 +480,37 @@ static int32_t signal_validate_typed(struct jls_wr_s * self, uint16_t signal_id,
     }
     return 0;
 }
-
 static int32_t anno_wr(struct jls_wr_s * self, uint16_t signal_id, uint64_t timestamp,
-                       enum jls_annotation_type_e annotation_type, const char * data) {
+                       enum jls_annotation_type_e annotation_type,
+                       enum jls_storage_type_e storage_type, const uint8_t * data, uint32_t data_size) {
+    ROE(signal_validate(self, signal_id));
     struct signal_info_s * signal_info = &self->signal_info[signal_id];
+    if ((annotation_type & 0xff) != annotation_type) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
+    if ((storage_type & 0xff) != storage_type) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
 
     // construct payload
     buf_reset(self);
     ROE(buf_wr_u64(self, timestamp));
     ROE(buf_wr_u8(self, annotation_type));
-    ROE(buf_add_zero(self, 7));
-    ROE(buf_add_str(self, data));
+    ROE(buf_wr_u8(self, storage_type));
+    ROE(buf_add_zero(self, 6));
+    switch (storage_type) {
+        case JLS_STORAGE_TYPE_BINARY:
+            ROE(buf_add_bin(self, data, data_size));
+            break;
+        case JLS_STORAGE_TYPE_STRING:
+            ROE(buf_add_str(self, data));
+            break;
+        case JLS_STORAGE_TYPE_JSON:
+            ROE(buf_add_str(self, data));
+            break;
+        default:
+            return JLS_ERROR_PARAMETER_INVALID;
+    }
     uint32_t payload_length = buf_size(self);
 
     // construct header
@@ -481,14 +530,11 @@ static int32_t anno_wr(struct jls_wr_s * self, uint16_t signal_id, uint64_t time
     return update_mra(self, &signal_info->tracks[JLS_TRACK_TYPE_ANNOTATION].data, &chunk);
 }
 
-int32_t jls_wr_fsr_annotation_txt(struct jls_wr_s * self, uint16_t signal_id, uint64_t sample_id, const char * txt) {
+int32_t jls_wr_fsr_annotation(struct jls_wr_s * self, uint16_t signal_id, uint64_t sample_id,
+                              enum jls_annotation_type_e annotation_type,
+                              enum jls_storage_type_e storage_type, const uint8_t * data, uint32_t data_size) {
     ROE(signal_validate_typed(self, signal_id,  JLS_SIGNAL_TYPE_FSR));
-    return anno_wr(self, signal_id, sample_id, JLS_ANNOTATION_TYPE_TEXT, txt);
-}
-
-int32_t jls_wr_fsr_annotation_marker(struct jls_wr_s * self, uint16_t signal_id, uint64_t sample_id, const char * marker_name) {
-    ROE(signal_validate_typed(self, signal_id,  JLS_SIGNAL_TYPE_FSR));
-    return anno_wr(self, signal_id, sample_id, JLS_ANNOTATION_TYPE_MARKER, marker_name);
+    return anno_wr(self, signal_id, sample_id, annotation_type, storage_type, data, data_size);
 }
 
 int32_t jls_wr_fsr_utc(struct jls_wr_s * self, uint16_t signal_id, uint64_t sample_id, int64_t utc) {
@@ -519,13 +565,9 @@ int32_t jls_wr_fsr_utc(struct jls_wr_s * self, uint16_t signal_id, uint64_t samp
     return update_mra(self, &signal_info->tracks[JLS_TRACK_TYPE_UTC].data, &chunk);
 }
 
-int32_t jls_wr_vsr_annotation_txt(struct jls_wr_s * self, uint16_t signal_id, int64_t timestamp, const char * txt) {
+int32_t jls_wr_vsr_annotation(struct jls_wr_s * self, uint16_t signal_id, int64_t timestamp,
+                              enum jls_annotation_type_e annotation_type,
+                              enum jls_storage_type_e storage_type, const uint8_t * data, uint32_t data_size) {
     ROE(signal_validate_typed(self, signal_id,  JLS_SIGNAL_TYPE_VSR));
-    return anno_wr(self, signal_id, (uint64_t) timestamp, JLS_ANNOTATION_TYPE_TEXT, txt);
-
-}
-
-int32_t jls_wr_vsr_annotation_marker(struct jls_wr_s * self, uint16_t signal_id, int64_t timestamp, const char * marker_name) {
-    ROE(signal_validate_typed(self, signal_id,  JLS_SIGNAL_TYPE_VSR));
-    return anno_wr(self, signal_id, (uint64_t) timestamp, JLS_ANNOTATION_TYPE_MARKER, marker_name);
+    return anno_wr(self, signal_id, (uint64_t) timestamp, annotation_type, storage_type, data, data_size);
 }
