@@ -103,6 +103,7 @@ static int32_t payload_skip(struct jls_rd_s * self, size_t count) {
     return 0;
 }
 
+#if 0
 
 static int32_t payload_parse_u8(struct jls_rd_s * self, uint8_t * value) {
     if ((self->payload.cur + 1) > self->payload.end) {
@@ -150,6 +151,8 @@ static int32_t payload_parse_u64(struct jls_rd_s * self, uint64_t * value) {
     self->payload.cur += 8;
     return 0;
 }
+
+#endif
 
 static int32_t payload_parse_str(struct jls_rd_s * self, char ** value) {
     char * str = self->strings.cur;
@@ -231,6 +234,7 @@ static int32_t scan_sources(struct jls_rd_s * self) {
 }
 
 static int32_t scan_signals(struct jls_rd_s * self) {
+    (void) self;
     JLS_LOGI("find signals");
     return 0;
 }

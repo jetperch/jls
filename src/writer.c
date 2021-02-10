@@ -339,6 +339,7 @@ static int32_t track_wr_head(struct jls_wr_s * self, struct track_info_s * track
         int64_t pos = jls_raw_chunk_tell(self->raw);
         ROE(jls_raw_chunk_seek(self->raw, chunk->offset));
         ROE(jls_raw_wr_payload(self->raw, sizeof(offsets), (uint8_t *) offsets));
+        ROE(jls_raw_chunk_seek(self->raw, pos));
         self->payload_prev_length = sizeof(offsets);
         return update_mra(self, &self->signal_mra, chunk);
     }
@@ -432,7 +433,7 @@ int32_t jls_wr_user_data(struct jls_wr_s * self, uint16_t chunk_meta,
             break;
         case JLS_STORAGE_TYPE_STRING:  // intentional fall-through
         case JLS_STORAGE_TYPE_JSON:
-            data_size = strlen(data) + 1;
+            data_size = strlen((const char *) data) + 1;
             break;
         default:
             return JLS_ERROR_PARAMETER_INVALID;
@@ -503,10 +504,10 @@ static int32_t anno_wr(struct jls_wr_s * self, uint16_t signal_id, uint64_t time
             ROE(buf_add_bin(self, data, data_size));
             break;
         case JLS_STORAGE_TYPE_STRING:
-            ROE(buf_add_str(self, data));
+            ROE(buf_add_str(self, (const char *) data));
             break;
         case JLS_STORAGE_TYPE_JSON:
-            ROE(buf_add_str(self, data));
+            ROE(buf_add_str(self, (const char *) data));
             break;
         default:
             return JLS_ERROR_PARAMETER_INVALID;

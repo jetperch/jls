@@ -68,7 +68,7 @@ static void test_source(void **state) {
 static void test_wr_source_duplicate(void **state) {
     (void) state;
     struct jls_wr_s * wr = NULL;
-    struct jls_rd_s * rd = NULL;
+    // struct jls_rd_s * rd = NULL;
     assert_int_equal(0, jls_wr_open(&wr, filename));
     assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_1));
     assert_int_equal(JLS_ERROR_ALREADY_EXISTS, jls_wr_source_def(wr, &SOURCE_1));
@@ -82,7 +82,8 @@ static void test_annotation(void **state) {
     struct jls_rd_s * rd = NULL;
     assert_int_equal(0, jls_wr_open(&wr, filename));
     assert_int_equal(0, jls_wr_vsr_annotation(wr, 0, now - JLS_TIME_SECOND,
-                                              JLS_ANNOTATION_TYPE_TEXT, JLS_STORAGE_TYPE_STRING, "hello there", 0));
+                                              JLS_ANNOTATION_TYPE_TEXT, JLS_STORAGE_TYPE_STRING,
+                                                (const uint8_t *) "hello there", 0));
     assert_int_equal(0, jls_wr_close(wr));
 
     assert_int_equal(0, jls_rd_open(&rd, filename));

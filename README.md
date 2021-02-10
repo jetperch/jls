@@ -16,7 +16,7 @@
 
 # JLS
 
-Welcome to the Joulescope® File Format project.  The goal of this project is to
+Welcome to the [Joulescope®](https://www.joulescope.com) File Format project.  The goal of this project is to
 provide performant data storage for huge, simultaneous, one-dimensional 
 signals. This repository contains:
 

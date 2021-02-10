@@ -23,12 +23,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <inttypes.h>
 
 // windows
 #include <windows.h>
 #include <io.h>  // windows
 #include <fcntl.h>
 #include <sys\stat.h>
+#include <share.h>
 
 
 #define CHUNK_BUFFER_SIZE  (1 << 24)
@@ -118,7 +120,7 @@ static int32_t f_write(struct jls_raw_s * self, const void * buffer, unsigned in
     if (self->fpos > self->fend) {
         self->fend = self->fpos;
     }
-    if (sz != count) {
+    if ((unsigned int) sz != count) {
         JLS_LOGE("write mismatch %d != %d", sz, count);
         return JLS_ERROR_IO;
     }
@@ -132,7 +134,7 @@ static int32_t f_read(struct jls_raw_s * self, void * const buffer, unsigned con
         return JLS_ERROR_IO;
     }
     self->fpos += sz;
-    if (sz != buffer_size) {
+    if ((unsigned int) sz != buffer_size) {
         JLS_LOGE("write mismatch %d != %d", sz, buffer_size);
         return JLS_ERROR_IO;
     }
@@ -289,7 +291,7 @@ int32_t jls_raw_close(struct jls_raw_s * self) {
 }
 
 int32_t jls_raw_wr(struct jls_raw_s * self, struct jls_chunk_header_s * hdr, const uint8_t * payload) {
-    JLS_LOGI("wr @ %llu : %d %s", jls_raw_chunk_tell(self), (int) hdr->tag, jls_tag_to_name(hdr->tag));
+    JLS_LOGI("wr @ %" PRId64 " : %d %s", jls_raw_chunk_tell(self), (int) hdr->tag, jls_tag_to_name(hdr->tag));
     RLE(jls_raw_wr_header(self, hdr));
     RLE(jls_raw_wr_payload(self, hdr->payload_length, payload));
     invalidate_current_chunk(self);
@@ -341,7 +343,7 @@ int32_t jls_raw_wr_payload(struct jls_raw_s * self, uint32_t payload_length, con
 }
 
 int32_t jls_raw_rd(struct jls_raw_s * self, struct jls_chunk_header_s * hdr, uint32_t payload_length_max, uint8_t * payload) {
-    JLS_LOGI("rd %llu : %d %s", jls_raw_chunk_tell(self), (int) hdr->tag, jls_tag_to_name(hdr->tag));
+    JLS_LOGI("rd %" PRId64 " : %d %s", jls_raw_chunk_tell(self), (int) hdr->tag, jls_tag_to_name(hdr->tag));
     RLE(jls_raw_rd_header(self, hdr));
     RLE(jls_raw_rd_payload(self, payload_length_max, payload));
     invalidate_current_chunk(self);
@@ -495,9 +497,8 @@ int32_t jls_raw_item_prev(struct jls_raw_s * self) {
         return JLS_ERROR_NOT_FOUND;
     }
     RLE(jls_raw_rd_header(self, NULL));  // ensure that we have the header
-    int64_t offset = self->offset;
     int64_t pos = self->hdr.item_prev;
-    if (pos == 0) {
+    if ((pos == 0) || (pos == self->offset)) {
         return JLS_ERROR_EMPTY;
     }
     invalidate_current_chunk(self);

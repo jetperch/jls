@@ -93,7 +93,7 @@ static void construct_n_chunks() {
     uint32_t payload_prev_length = 0;
     uint32_t payload_length = 0;
     assert_int_equal(0, jls_raw_open(&j, filename, "w"));
-    for (int i = 0; i < sizeof(PAYLOAD1); ++i) {
+    for (size_t i = 0; i < sizeof(PAYLOAD1); ++i) {
         // printf("chunk %d: %d\n", i, (int32_t) jls_raw_chunk_tell(j));
         payload_length = sizeof(PAYLOAD1) - i;
         hdr_set(&hdr, JLS_TAG_USER_DATA, 0, payload_length);
@@ -112,7 +112,7 @@ static void test_n_chunks(void **state) {
     construct_n_chunks();
 
     assert_int_equal(0, jls_raw_open(&j, filename, "r"));
-    for (int i = 0; i < sizeof(PAYLOAD1); ++i) {
+    for (size_t i = 0; i < sizeof(PAYLOAD1); ++i) {
         assert_int_equal(0, jls_raw_rd(j, &hdr, sizeof(data), data));
         assert_memory_equal(PAYLOAD1 + i, data, sizeof(PAYLOAD1) - i);
     }
@@ -141,10 +141,9 @@ static void test_chunks_nav(void **state) {
     assert_int_equal(JLS_ERROR_EMPTY, jls_raw_chunk_prev(j));
 
     assert_int_equal(0, jls_raw_open(&j, filename, "r"));
-    for (int i = 0; i < sizeof(PAYLOAD1) - 1; ++i) {
+    for (size_t i = 0; i < sizeof(PAYLOAD1) - 1; ++i) {
         assert_int_equal(0, jls_raw_chunk_next(j));
     }
-    int64_t pos1 = jls_raw_chunk_tell(j);
     assert_int_equal(0, jls_raw_rd(j, &hdr, sizeof(data), data));
     assert_memory_equal(PAYLOAD1 + sizeof(PAYLOAD1) - 1, data, 1);
     assert_int_equal(JLS_ERROR_EMPTY, jls_raw_chunk_next(j));

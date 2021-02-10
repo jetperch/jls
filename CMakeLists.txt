@@ -39,7 +39,7 @@ endfunction (SET_FILENAME)
 
 
 if (JLS_TOPLEVEL AND CMAKE_COMPILER_IS_GNUCC)
-    add_definitions(-Wall -Wextra -Wpedantic -Werror -fPIC)
+    add_definitions(-Wall -Wextra -Wpedantic -Werror -fPIC -Wno-pedantic-ms-format)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99")
 endif()
