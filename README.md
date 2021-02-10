@@ -24,6 +24,10 @@ signals. This repository contains:
 * The implementation in C
 * Language bindings for Python
 
+> **⚠ CAUTION ⚠**  
+> We are actively developing this library.  Many features are not 
+> implemented and the API is subject to rapid change.
+
 
 ## Features
 
@@ -51,7 +55,10 @@ signals. This repository contains:
 * Annotations
   * Global (UTC time)
   * Attached to signals
-  * Support for text and marker
+  * Support for text, marker, binary, and JSON.
+* User data
+  * Arbitrary data included in the same file.
+  * Support for text, binary, and JSON.
 * Reliability
   * File data still accessible in the case of improper program termination.
   * In case of file corruption, uncorrupted data is still accessible.
@@ -62,7 +69,8 @@ signals. This repository contains:
   * lossy
   * lossy with downsampling below threshold
 
-## Why?
+
+## Why JLS?
 
 The world is already full of file formats, and we would rather not create 
 another one.  However, we could not identify a solution that met these
@@ -89,13 +97,47 @@ However, the standard does not included the ability to store the signal summarie
 and our specific signal types.
 
 
+## Why JLS v2?
+
+This file format is based upon JLS v1 designed for
+[pyjoulescope](https://github.com/jetperch/pyjoulescope) and used by the
+[Joulescope](https://www.joulescope.com/) test instrument.  We are leveraging
+the lessons learned from v1 to make v2 better, faster, and more extensible.
+
+The JLS v1 format has been great for the Joulescope ecosystem and has
+accomplished the objective of long data captures (days) with fast
+sampling rates (MHz).  However, it now has a long list of issues that are difficult
+to address without a significant restructuring.  The issues include:
+
+- Inflexible storage format (always current, voltage, power, current range, GPI0, GPI1).
+- Unable to store from multiple sources.
+- Unable to store other sources and signals.
+- No annotation support: 
+  [41](https://github.com/jetperch/pyjoulescope_ui/issues/41),
+  [93](https://github.com/jetperch/pyjoulescope_ui/issues/93).
+- Inflexible user data support.
+- Inconsistent performance across sampling rates, zoom levels, and file sizes: 
+  [48](https://github.com/jetperch/pyjoulescope_ui/issues/48),
+  [103](https://github.com/jetperch/pyjoulescope_ui/issues/103).
+- Unable to correlate sample times with UTC:
+  [55](https://github.com/jetperch/pyjoulescope_ui/issues/55).
+
+The JLS v2 file format will address all of these issues, dramatically 
+improve performance, and add new capabilities, such as signal compression.
+
+
 ## How?
 
-At its lowest layer, JLS is an enhanced tag-length-value (TLV) format.
-TLV files form the foundation of many reliable image and video formats, 
+At its lowest layer, JLS is an enhanced 
+[tag-length-value](https://en.wikipedia.org/wiki/Type-length-value) (TLV)
+format. TLV files form the foundation of many reliable image and video formats, 
 including MPEG4 and PNG.  The enhanced header contains additional fields
 to speed navigation and improve reliability.  The JLS file format calls 
-each TLV a "chunk", and the enhanced tag-length component the chunk header.
+each TLV a **chunk**.  The enhanced tag-length component the **chunk header**
+or simply **header**.  The file also contains a **file header**, not to be 
+confused with the **chunk header**.  A **chunk** may have zero payload length,
+in which case the next header follows immediately.  Otherwise, a 
+**chunk** consists of a **header** followed by a **payload**. 
 
 The JLS file format supports sources that produce data.  The file allows
 the application to clearly define and label the source.  Each source
@@ -106,7 +148,7 @@ fixed data type.  Each signal can have multiple tracks that contain
 data associated with that signal. The JLS file supports two signal types: 
 fixed sample rate (FSR) and variable sample rate (VSR).  FSR signals
 store their sample data in the FSR track using FSR_DATA and FSR_SUMMARY.
-FSR time is in sample_id.  FSR signals also support:
+FSR time is denoted by samples using sample_id.  FSR signals also support:
 
 * Sample time to UTC time mapping using the UTC track.
 * Annotations with the ANNOTATION track. 
@@ -116,33 +158,36 @@ specify time in UTC (wall-clock time).  VSR signals also
 support annotations with the ANNOTATION track.
 The JLS file format supports VSR signals that only use the 
 ANNOTATION track and not the VSR track.  Such signals are commonly 
-used to store UART data where each line contains a UTC timestamp. 
+used to store UART text data where each line contains a UTC timestamp. 
 
 Signals support DATA chunks and SUMMARY chunks.
 The DATA chunks store the actual sample data.  The SUMMARY chunks
 store the reduced statistics, where each statistic entry represents
 multiple samples.  This file format stores the mean, min, max, 
-and standard deviation.  The previous JLS file format stored variance,
-but variance requires twice the bit size (squared) compared to 
-standard deviation, at least for integer types.
+and standard deviation.  Although standard deviation requires the
+writer to compute the square root, standard deviation keeps the
+same units and bit depth requirements as the other fields.  Variance
+requires twice the bit size for integer types since it is squared.
 
 Before each SUMMARY chunk, the JLS file will contain the INDEX chunk
 which contains the starting time and offset for each chunk that 
 contributed to the summary.  This SUMMARY chunk enables fast O(log n)
-navigation of the file.. 
+navigation of the file. 
 
 The JLS file format design supports SUMMARY of SUMMARY.  It supports
 the DATA and up to 15 layers of SUMMARIES.  sample_id is given as a
 64-bit integer, which allows each summary to include only 20 samples
-and still support the full 64-bit integer space.  In practice, the
+and still support the full 64-bit integer sample_id space.  In practice, the
 first level summary increases a single value to 4 values, so summary
 steps are usually 50 or more.
 
-Many applications, including the Joulescope UI, prioritize visualizing the 
-waveform quickly upon open.  Waiting to scan through a 1 TB file is not a 
-valid option.  The reader opens the file and scans the signal for the highest 
-summary of summaries.  It can very quickly display this data, and then
-start to retrieve more detailed information as requested.
+Many applications, including the Joulescope UI, prioritize read performance,
+especially visualizing the waveform quickly following open, 
+over write performance.   Waiting to scan through a 1 TB file is not a 
+valid option.  The reader opens the file and scans for sources and signals.
+The application can then quickly load the highest summary of summaries 
+for every signal of interest.  The application can very quickly display this
+data, and then start to retrieve more detailed information as requested.
 
 
 ## Example file structure
