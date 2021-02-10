@@ -182,8 +182,8 @@ enum jls_tag_e {
     JLS_TAG_INVALID                     = 0x00,
 
     // file definition tags
-    JLS_TAG_SOURCE_DEF                  = 0x01,
-    JLS_TAG_SIGNAL_DEF                  = 0x02,
+    JLS_TAG_SOURCE_DEF                  = 0x01,   // own doubly-linked list
+    JLS_TAG_SIGNAL_DEF                  = 0x02,   // SIGNAL_DEF, TRACK_*_DEF, and TRACK_*_HEAD for doubly-linked list
 
     // track tags
     JLS_TAG_TRACK_FSR_DEF               = (0x20 | (JLS_TRACK_TYPE_FSR << 3) | JLS_TRACK_CHUNK_DEF),
@@ -211,7 +211,7 @@ enum jls_tag_e {
     JLS_TAG_TRACK_UTC_SUMMARY           = (0x20 | (JLS_TRACK_TYPE_UTC << 3) | JLS_TRACK_CHUNK_SUMMARY),
 
     // other tags
-    JLS_TAG_USER_DATA                   = 0x40,
+    JLS_TAG_USER_DATA                   = 0x40, // own doubly-linked list
 };
 
 #define JLS_DATATYPE_BASETYPE_INT        (0x01)
@@ -343,7 +343,8 @@ struct jls_chunk_header_s {
     /**
      * @brief The next item.
      *
-     * Many tags, such as CHUNK, are connected as a doubly-linked list.
+     * The chunk header enables each chunk to participate in a
+     * single, doubly-linked list.
      * This field indicates the location for the next item in the list.
      * The value is relative to start of the file.
      * 0 indicates end of list.
@@ -358,7 +359,8 @@ struct jls_chunk_header_s {
     /**
      * @brief The previous item.
      *
-     * Many tags, such as CHUNK, are connected as a doubly-linked list.
+     * The chunk header enables each chunk to participate in a
+     * single, doubly-linked list.
      * This field indicates the location for the previous item in the list.
      * The value is relative to start of the file.
      * 0 indicates start of list.

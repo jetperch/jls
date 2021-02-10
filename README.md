@@ -1,5 +1,5 @@
 <!--
-# Copyright 2014-2021 Jetperch LLC
+# Copyright 2021 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -150,8 +150,9 @@ start to retrieve more detailed information as requested.
 ```
 sof
 header
-SOURCE_DEF(0)         // internal, reserved for global annotations
-SIGNAL_DEF(0, 0, TS)  // internal, reserved for global annotations
+USER_DATA(0, NULL)    // Required, point to first real user_data chunk
+SOURCE_DEF(0)         // Required, internal, reserved for global annotations
+SIGNAL_DEF(0, 0.VSR)  // Required, internal, reserved for global annotations
 TRACK_DEF(0.VSR)
 TRACK_HEAD(0.VSR)
 TRACK_DEF(0.ANNO)

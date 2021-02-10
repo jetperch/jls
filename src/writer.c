@@ -66,12 +66,7 @@ struct jls_wr_s {
 
     struct signal_info_s signal_info[JLS_SIGNAL_COUNT];
     struct chunk_s signal_mra;
-
-    struct chunk_s track_def_mra;
-    struct chunk_s track_head_mra;
-
     struct chunk_s user_data_mra;
-
     uint32_t payload_prev_length;
 };
 
@@ -94,7 +89,7 @@ struct jls_wr_s {
 
 struct jls_source_def_s SOURCE_0 = {
         .source_id = 0,
-        .name = "global_annotation_source",
+        .name = "s", // "global_annotation_source",
         .vendor = "None",
         .model = "None",
         .version = "1.0.0",
@@ -137,6 +132,7 @@ int32_t jls_wr_open(struct jls_wr_s ** instance, const char * path) {
         return rc;
     }
 
+    ROE(jls_wr_user_data(self, 0, NULL, 0));
     ROE(jls_wr_source_def(self, &SOURCE_0));
     ROE(jls_wr_signal_def(self, &SIGNAL_0));
 
@@ -178,6 +174,7 @@ static int32_t buf_add_str(struct jls_wr_s * self, const char * cstr) {
     while (buf->cur < end) {
         *buf->cur++ = *cstr++;
         if (!*cstr) {
+            *buf->cur++ = 0;
             *buf->cur++ = 0x1f;
             return 0;
         }
@@ -294,7 +291,7 @@ static int32_t track_wr_def(struct jls_wr_s * self, struct track_info_s * track_
         return 0;  // no need to update
     }
     chunk->hdr.item_next = 0;  // update later
-    chunk->hdr.item_prev = self->source_mra.offset;
+    chunk->hdr.item_prev = self->signal_mra.offset;
     chunk->hdr.tag = 0x20 | ((track_info->track_type & 0x03) << 3) | JLS_TRACK_CHUNK_DEF;
     chunk->hdr.rsv0_u8 = 0;
     chunk->hdr.chunk_meta = track_info->signal_id;
@@ -305,7 +302,7 @@ static int32_t track_wr_def(struct jls_wr_s * self, struct track_info_s * track_
     // write
     ROE(jls_raw_wr(self->raw, &chunk->hdr, NULL));
     self->payload_prev_length = 0;
-    return update_mra(self, &self->track_def_mra, chunk);
+    return update_mra(self, &self->signal_mra, chunk);
 }
 
 static int32_t track_wr_head(struct jls_wr_s * self, struct track_info_s * track_info) {
@@ -318,7 +315,7 @@ static int32_t track_wr_head(struct jls_wr_s * self, struct track_info_s * track
 
     if (!chunk->offset) {
         chunk->hdr.item_next = 0;  // update later
-        chunk->hdr.item_prev = self->source_mra.offset;
+        chunk->hdr.item_prev = self->signal_mra.offset;
         chunk->hdr.tag = 0x20 | ((track_info->track_type & 0x03) << 3) | JLS_TRACK_CHUNK_HEAD;
         chunk->hdr.rsv0_u8 = 0;
         chunk->hdr.chunk_meta = track_info->signal_id;
@@ -331,7 +328,7 @@ static int32_t track_wr_head(struct jls_wr_s * self, struct track_info_s * track
         ROE(jls_raw_chunk_seek(self->raw, chunk->offset));
         ROE(jls_raw_wr_payload(self->raw, sizeof(offsets), (uint8_t *) offsets));
         self->payload_prev_length = sizeof(offsets);
-        return update_mra(self, &self->track_head_mra, chunk);
+        return update_mra(self, &self->signal_mra, chunk);
     }
     return 0;
 }
@@ -375,7 +372,7 @@ int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signal_def_s 
     // construct header
     struct chunk_s * chunk = &signal_info->chunk_def;
     chunk->hdr.item_next = 0;  // update later
-    chunk->hdr.item_prev = self->source_mra.offset;
+    chunk->hdr.item_prev = self->signal_mra.offset;
     chunk->hdr.tag = JLS_TAG_SIGNAL_DEF;
     chunk->hdr.rsv0_u8 = 0;
     chunk->hdr.chunk_meta = signal->signal_id;
@@ -406,7 +403,10 @@ int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signal_def_s 
 }
 
 int32_t jls_wr_user_data(struct jls_wr_s * self, uint16_t chunk_meta, const uint8_t * data, uint32_t data_size) {
-    if (!self || !data) {
+    if (!self) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
+    if (data_size & !data) {
         return JLS_ERROR_PARAMETER_INVALID;
     }
 
@@ -424,7 +424,7 @@ int32_t jls_wr_user_data(struct jls_wr_s * self, uint16_t chunk_meta, const uint
     // write
     ROE(jls_raw_wr(self->raw, &chunk.hdr, data));
     self->payload_prev_length = data_size;
-    return update_mra(self, &self->signal_mra, &chunk);
+    return update_mra(self, &self->user_data_mra, &chunk);
 }
 
 // struct jls_track_index_s variable sized, format defined by track

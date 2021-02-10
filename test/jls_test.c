@@ -28,6 +28,11 @@
 
 
 const char * filename = "tmp.jls";
+const uint8_t USER_DATA_1[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
+const uint16_t CHUNK_META_1 = 0x1234;
+const uint8_t USER_DATA_2[] = {0x11, 0x22, 0xab, 0x34, 0x45, 0x46, 0x42, 42, 42, 3, 7};
+const uint16_t CHUNK_META_2 = 0xBEEF;
+
 
 const struct jls_source_def_s SOURCE_1 = {
         .source_id = 1,
@@ -84,11 +89,25 @@ static void test_annotation(void **state) {
     jls_rd_close(rd);
 }
 
+static void test_user_data(void **state) {
+    (void) state;
+    struct jls_wr_s * wr = NULL;
+    struct jls_rd_s * rd = NULL;
+    assert_int_equal(0, jls_wr_open(&wr, filename));
+    assert_int_equal(0, jls_wr_user_data(wr, CHUNK_META_1, USER_DATA_1, sizeof(USER_DATA_1)));
+    assert_int_equal(0, jls_wr_user_data(wr, CHUNK_META_2, USER_DATA_2, sizeof(USER_DATA_2)));
+    assert_int_equal(0, jls_wr_close(wr));
+
+    assert_int_equal(0, jls_rd_open(&rd, filename));
+    jls_rd_close(rd);
+}
+
 int main(void) {
     const struct CMUnitTest tests[] = {
             cmocka_unit_test(test_source),
             cmocka_unit_test(test_wr_source_duplicate),
             cmocka_unit_test(test_annotation),
+            cmocka_unit_test(test_user_data),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
