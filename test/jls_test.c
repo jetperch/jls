@@ -176,6 +176,24 @@ static void test_signal(void **state) {
     jls_rd_close(rd);
 }
 
+static void test_wr_signal_without_source(void **state) {
+    (void) state;
+    struct jls_wr_s * wr = NULL;
+    assert_int_equal(0, jls_wr_open(&wr, filename));
+    assert_int_equal(JLS_ERROR_NOT_FOUND, jls_wr_signal_def(wr, &SIGNAL_6));
+    assert_int_equal(0, jls_wr_close(wr));
+}
+
+static void test_wr_signal_duplicate(void **state) {
+    (void) state;
+    struct jls_wr_s * wr = NULL;
+    assert_int_equal(0, jls_wr_open(&wr, filename));
+    assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_3));
+    assert_int_equal(0, jls_wr_signal_def(wr, &SIGNAL_6));
+    assert_int_equal(JLS_ERROR_ALREADY_EXISTS, jls_wr_signal_def(wr, &SIGNAL_6));
+    assert_int_equal(0, jls_wr_close(wr));
+}
+
 int main(void) {
     const struct CMUnitTest tests[] = {
             cmocka_unit_test(test_source),
@@ -183,6 +201,8 @@ int main(void) {
             cmocka_unit_test(test_annotation),
             cmocka_unit_test(test_user_data),
             cmocka_unit_test(test_signal),
+            cmocka_unit_test(test_wr_signal_without_source),
+            cmocka_unit_test(test_wr_signal_duplicate),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);

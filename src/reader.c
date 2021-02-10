@@ -26,7 +26,7 @@
 #include <stdbool.h>
 
 #define PAYLOAD_BUFFER_SIZE_DEFAULT (1 << 25)   // 32 MB
-#define STRING_BUFFER_SIZE_DEFAULT (1 << 20)    // 1 MB
+#define STRING_BUFFER_SIZE_DEFAULT (1 << 23)    // 8 MB
 #define SIGNAL_MASK  (0x0fff)
 
 
@@ -78,10 +78,10 @@ struct payload_s {
 };
 
 struct strings_s {
+    struct strings_s * next;
     char * start;
     char * cur;
     char * end;
-    size_t alloc_size;
 };
 
 struct signal_s {
@@ -100,12 +100,41 @@ struct jls_rd_s {
 
     struct jls_chunk_header_s hdr;
     struct payload_s payload;
-    struct strings_s strings;
+    struct strings_s * strings_tail;
+    struct strings_s * strings_head;
 
     struct chunk_s source_head;  // source_def
     struct chunk_s signal_head;  // signal_det, track_*_def, track_*_head
     struct chunk_s user_data_head;  // user_data, ignore first
 };
+
+static int32_t strings_alloc(struct jls_rd_s * self) {
+    struct strings_s * s = malloc(STRING_BUFFER_SIZE_DEFAULT);
+    if (!s) {
+        return JLS_ERROR_NOT_ENOUGH_MEMORY;
+    }
+    char * c8 = (char *) s;
+    s->next = NULL;
+    s->start = c8 + sizeof(struct strings_s);
+    s->cur = s->start;
+    s->end = c8 + STRING_BUFFER_SIZE_DEFAULT;
+    if (!self->strings_head) {
+        self->strings_head = s;
+        self->strings_tail = s;
+    } else {
+        self->strings_tail->next = s;
+    }
+    return 0;
+}
+
+static void strings_free(struct jls_rd_s * self) {
+    struct strings_s * s = self->strings_head;
+    while (s) {
+        struct strings_s * n = s->next;
+        free(s);
+        s = n;
+    }
+}
 
 static int32_t payload_skip(struct jls_rd_s * self, size_t count) {
     if ((self->payload.cur + count) > self->payload.end) {
@@ -167,25 +196,22 @@ static int32_t payload_parse_u64(struct jls_rd_s * self, uint64_t * value) {
 #endif
 
 static int32_t payload_parse_str(struct jls_rd_s * self, char ** value) {
-    char * str = self->strings.cur;
+    struct strings_s * s = self->strings_tail;
+    char * str = s->cur;
     char ch;
     while (self->payload.cur != self->payload.end) {
-        if (self->strings.cur >= self->strings.end) {
-            size_t offset = self->strings.cur - self->strings.start;
-            size_t sz = self->strings.alloc_size * 2;
-            char * ptr = realloc(self->strings.start, sz);
-            if (!ptr) {
-                return JLS_ERROR_NOT_ENOUGH_MEMORY;
+        if (s->cur >= s->end) {
+            ROE(strings_alloc(self));
+            // copy over partial.
+            while (str <= s->end) {
+                *self->strings_tail->cur++ = *str++;
             }
-            str = (str - self->strings.start) + ptr;
-            self->strings.start = ptr;
-            self->strings.cur = ptr + offset;
-            self->strings.end = ptr + sz;
-            self->strings.alloc_size = sz;
+            s = self->strings_tail;
+            str = s->start;
         }
 
         ch = (char) *self->payload.cur++;
-        *self->strings.cur++ = ch;
+        *s->cur++ = ch;
         if (ch == 0) {
             if (*self->payload.cur == 0x1f) {
                 self->payload.cur++;
@@ -447,17 +473,15 @@ int32_t jls_rd_open(struct jls_rd_s ** instance, const char * path) {
     }
 
     self->payload.start = malloc(PAYLOAD_BUFFER_SIZE_DEFAULT);
-    self->strings.start = malloc(STRING_BUFFER_SIZE_DEFAULT);
-    if (!self->payload.start || !self->strings.start) {
+    strings_alloc(self);
+
+    if (!self->payload.start || !self->strings_head) {
         jls_rd_close(self);
         return JLS_ERROR_NOT_ENOUGH_MEMORY;
     }
     self->payload.alloc_size = PAYLOAD_BUFFER_SIZE_DEFAULT;
     self->payload.cur = self->payload.start;
     self->payload.end = self->payload.start;
-    self->strings.alloc_size = STRING_BUFFER_SIZE_DEFAULT;
-    self->strings.cur = self->strings.start;
-    self->strings.end = self->strings.start + STRING_BUFFER_SIZE_DEFAULT;
 
     int32_t rc = jls_raw_open(&self->raw, path, "r");
     if (rc) {
@@ -473,10 +497,7 @@ int32_t jls_rd_open(struct jls_rd_s ** instance, const char * path) {
 void jls_rd_close(struct jls_rd_s * self) {
     if (self) {
         jls_raw_close(self->raw);
-        if (self->strings.start) {
-            free(self->strings.start);
-            self->strings.start = NULL;
-        }
+        strings_free(self);
         if (self->payload.start) {
             free(self->payload.start);
             self->payload.start = NULL;

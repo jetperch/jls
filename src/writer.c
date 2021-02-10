@@ -363,13 +363,13 @@ int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signal_def_s 
     }
     if (!self->source_info[signal->source_id].offset) {
         JLS_LOGW("source %d not found", signal->source_id);
-        return JLS_ERROR_PARAMETER_INVALID;
+        return JLS_ERROR_NOT_FOUND;
     }
 
     struct signal_info_s * signal_info = &self->signal_info[signal_id];
     if (signal_info->chunk_def.offset) {
         JLS_LOGE("Duplicate signal: %d", (int) signal_id);
-        return JLS_ERROR_PARAMETER_INVALID;
+        return JLS_ERROR_ALREADY_EXISTS;
     }
     if ((signal->signal_type != JLS_SIGNAL_TYPE_FSR) && (signal->signal_type != JLS_SIGNAL_TYPE_VSR)) {
         JLS_LOGE("Invalid signal type: %d", (int) signal->signal_type);
