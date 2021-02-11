@@ -68,27 +68,28 @@ int32_t jls_rd_sources(struct jls_rd_s * self, struct jls_source_def_s ** source
  */
 int32_t jls_rd_signals(struct jls_rd_s * self, struct jls_signal_def_s ** signals, uint16_t * count);
 
-#if 0
-int32_t jls_rd_signal_def_foreach(struct jls_writer_s * self, struct jls_signal_def_s const * signal);
-int32_t jls_rd_utc_def_foreach(struct jls_writer_s * self, struct jls_utc_def_s * utc);
-int32_t jls_rd_ts_def_foreach(struct jls_writer_s * self, struct jls_ts_def_s * ts);
-int32_t jls_rd_user_data_foreach(struct jls_writer_s * self, struct jls_user_data_def_s * user_data);
+struct jls_rd_annotation_s {
+    uint64_t sample_id;
+    uint8_t annotation_type;
+    uint8_t storage_type;
+    uint32_t data_size;
+    const uint8_t * data;
+};
 
+int32_t jls_rd_annotations(struct jls_rd_s * self, uint16_t signal_id,
+                          struct jls_rd_annotation_s ** annotations, uint32_t * count);
+void jls_rd_annotations_free(struct jls_rd_s * self, struct jls_rd_annotation_s * annotations);
 
-int32_t jls_rd_source_def(struct jls_writer_s * self, uint8_t source_id, struct jls_source_def_s const ** source);
-int32_t jls_rd_signal_def(struct jls_writer_s * self, uint16_t signal_id, uint8_t source_id, const struct jls_signal_def_s ** signal);
-//int32_t jls_wr_utc_def(struct jls_writer_s * self, uint8_t utc_id, const char * name);
-//int32_t jls_wr_ts_def(struct jls_writer_s * self, uint16_t ts_id, const struct jls_ts_def_s * ts);
-int32_t jls_rd_user_data(struct jls_writer_s * self, uint16_t tag_id, uint32_t size, const uint8_t * data);
+struct jls_rd_user_data_s {
+    uint16_t chunk_meta;
+    enum jls_storage_type_e storage_type;
+    uint8_t * data;
+    uint32_t data_size;
+};
 
-int32_t jls_rd_signal_f32(struct jls_writer_s * self, uint16_t signal_id, uint32_t size, const float * data);
-int32_t jls_rd_signal_annotation_txt(struct jls_writer_s * self, uint16_t signal_id, uint64_t sample_id, const char * txt);
-int32_t jls_rd_signal_annotation_marker(struct jls_writer_s * self, uint16_t signal_id, uint64_t sample_id, const char * marker_name);
-//int32_t jls_wr_utc(struct jls_writer_s * self, uint16_t signal_id, uint8_t utc_id, int64_t utc, uint64_t sample_id);
-
-int32_t jls_wr_ts_f32(struct jls_writer_s * self, uint16_t ts_id, int64_t timestamp, uint32_t size, const char * txt);
-int32_t jls_wr_ts_annotation_txt(struct jls_writer_s * self, uint16_t signal_id, int64_t timestamp, const char * txt);
-#endif
+int32_t jls_rd_user_data_reset(struct jls_rd_s * self);
+int32_t jls_rd_user_data_next(struct jls_rd_s * self, struct jls_rd_user_data_s * user_data);
+int32_t jls_rd_user_data_prev(struct jls_rd_s * self, struct jls_rd_user_data_s * user_data);
 
 
 /** @} */

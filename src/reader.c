@@ -27,6 +27,7 @@
 
 #define PAYLOAD_BUFFER_SIZE_DEFAULT (1 << 25)   // 32 MB
 #define STRING_BUFFER_SIZE_DEFAULT (1 << 23)    // 8 MB
+#define ANNOTATIONS_SIZE_DEFAULT (1 << 20)      // 1 MB
 #define SIGNAL_MASK  (0x0fff)
 
 
@@ -98,14 +99,16 @@ struct jls_rd_s {
 
     struct signal_s signals[JLS_SIGNAL_COUNT];
 
-    struct jls_chunk_header_s hdr;
+    struct chunk_s chunk_cur;
     struct payload_s payload;
     struct strings_s * strings_tail;
     struct strings_s * strings_head;
 
     struct chunk_s source_head;  // source_def
     struct chunk_s signal_head;  // signal_det, track_*_def, track_*_head
+
     struct chunk_s user_data_head;  // user_data, ignore first
+    struct chunk_s user_data_cur;
 };
 
 static int32_t strings_alloc(struct jls_rd_s * self) {
@@ -227,10 +230,11 @@ static int32_t payload_parse_str(struct jls_rd_s * self, char ** value) {
 
 static int32_t rd(struct jls_rd_s * self) {
     while (1) {
-        int32_t rc = jls_raw_rd(self->raw, &self->hdr, self->payload.alloc_size, self->payload.start);
+        self->chunk_cur.offset = jls_raw_chunk_tell(self->raw);
+        int32_t rc = jls_raw_rd(self->raw, &self->chunk_cur.hdr, self->payload.alloc_size, self->payload.start);
         if (rc == JLS_ERROR_TOO_BIG) {
             size_t sz_new = self->payload.alloc_size;
-            while (sz_new < self->hdr.payload_length) {
+            while (sz_new < self->chunk_cur.hdr.payload_length) {
                 sz_new *= 2;
             }
             uint8_t *ptr = realloc(self->payload.start, sz_new);
@@ -240,7 +244,7 @@ static int32_t rd(struct jls_rd_s * self) {
             self->payload.start = ptr;
             self->payload.alloc_size = sz_new;
         } else if (rc == 0) {
-            self->payload.end = self->payload.start + self->hdr.payload_length;
+            self->payload.end = self->payload.start + self->chunk_cur.hdr.payload_length;
             self->payload.cur = self->payload.start;
             return 0;
         } else {
@@ -254,7 +258,7 @@ static int32_t scan_sources(struct jls_rd_s * self) {
     ROE(jls_raw_chunk_seek(self->raw, self->source_head.offset));
     while (1) {
         ROE(rd(self));
-        uint16_t source_id = self->hdr.chunk_meta;
+        uint16_t source_id = self->chunk_cur.hdr.chunk_meta;
         if (source_id >= JLS_SOURCE_COUNT) {
             JLS_LOGW("source_id %d too big - skip", (int) source_id);
         } else {
@@ -268,10 +272,10 @@ static int32_t scan_sources(struct jls_rd_s * self) {
             src->source_id = source_id;  // indicate that this source is valid!
             JLS_LOGI("Found source %d : %s", (int) source_id, src->name);
         }
-        if (!self->hdr.item_next) {
+        if (!self->chunk_cur.hdr.item_next) {
             break;
         }
-        ROE(jls_raw_chunk_seek(self->raw, self->hdr.item_next));
+        ROE(jls_raw_chunk_seek(self->raw, self->chunk_cur.hdr.item_next));
     }
     return 0;
 }
@@ -298,7 +302,7 @@ static int32_t signal_validate(struct jls_rd_s * self, uint16_t signal_id, struc
 }
 
 static int32_t handle_signal_def(struct jls_rd_s * self) {
-    uint16_t signal_id = self->hdr.chunk_meta;
+    uint16_t signal_id = self->chunk_cur.hdr.chunk_meta;
     if (signal_id >= JLS_SIGNAL_COUNT) {
         JLS_LOGW("signal_id %d too big - skip", (int) signal_id);
         return JLS_ERROR_PARAMETER_INVALID;
@@ -310,8 +314,8 @@ static int32_t handle_signal_def(struct jls_rd_s * self) {
     ROE(payload_skip(self, 1));
     ROE(payload_parse_u32(self, &s->data_type));
     ROE(payload_parse_u32(self, &s->sample_rate));
-    ROE(payload_parse_u32(self, &s->samples_per_block));
-    ROE(payload_parse_u32(self, &s->summary_downsample));
+    ROE(payload_parse_u32(self, &s->summary_decimate_factor));
+    ROE(payload_parse_u32(self, &s->decimations_per_chunk));
     ROE(payload_parse_u32(self, &s->utc_rate_auto));
     ROE(payload_skip(self, 4 + 64));
     ROE(payload_parse_str(self, (char **) &s->name));
@@ -375,39 +379,37 @@ static int32_t validate_track_tag(struct jls_rd_s * self, uint16_t signal_id, ui
 }
 
 static int32_t handle_track_def(struct jls_rd_s * self, int64_t pos) {
-    uint16_t signal_id = self->hdr.chunk_meta & SIGNAL_MASK;
-    ROE(validate_track_tag(self, signal_id, self->hdr.tag));
-    self->signals[signal_id].track_defs[tag_parse_track_type(self->hdr.tag)] = pos;
+    uint16_t signal_id = self->chunk_cur.hdr.chunk_meta & SIGNAL_MASK;
+    ROE(validate_track_tag(self, signal_id, self->chunk_cur.hdr.tag));
+    self->signals[signal_id].track_defs[tag_parse_track_type(self->chunk_cur.hdr.tag)] = pos;
     return 0;
 }
 
 static int32_t handle_track_head(struct jls_rd_s * self, int64_t pos) {
-    uint16_t signal_id = self->hdr.chunk_meta & SIGNAL_MASK;
-    ROE(validate_track_tag(self, signal_id, self->hdr.tag));
-    self->signals[signal_id].track_heads[tag_parse_track_type(self->hdr.tag)] = pos;
+    uint16_t signal_id = self->chunk_cur.hdr.chunk_meta & SIGNAL_MASK;
+    ROE(validate_track_tag(self, signal_id, self->chunk_cur.hdr.tag));
+    self->signals[signal_id].track_heads[tag_parse_track_type(self->chunk_cur.hdr.tag)] = pos;
     return 0;
 }
 
 static int32_t scan_signals(struct jls_rd_s * self) {
-    int64_t pos;
     JLS_LOGI("scan_signals");
     ROE(jls_raw_chunk_seek(self->raw, self->signal_head.offset));
     while (1) {
-        pos = jls_raw_chunk_tell(self->raw);
         ROE(rd(self));
-        if (self->hdr.tag == JLS_TAG_SIGNAL_DEF) {
+        if (self->chunk_cur.hdr.tag == JLS_TAG_SIGNAL_DEF) {
             handle_signal_def(self);
-        } else if ((self->hdr.tag & 7) == JLS_TRACK_CHUNK_DEF) {
-            handle_track_def(self, pos);
-        } else if ((self->hdr.tag & 7) == JLS_TRACK_CHUNK_HEAD) {
-            handle_track_head(self, pos);
+        } else if ((self->chunk_cur.hdr.tag & 7) == JLS_TRACK_CHUNK_DEF) {
+            handle_track_def(self, self->chunk_cur.offset);
+        } else if ((self->chunk_cur.hdr.tag & 7) == JLS_TRACK_CHUNK_HEAD) {
+            handle_track_head(self, self->chunk_cur.offset);
         } else {
-            JLS_LOGW("unknown tag %d in signal list", (int) self->hdr.tag);
+            JLS_LOGW("unknown tag %d in signal list", (int) self->chunk_cur.hdr.tag);
         }
-        if (!self->hdr.item_next) {
+        if (!self->chunk_cur.hdr.item_next) {
             break;
         }
-        ROE(jls_raw_chunk_seek(self->raw, self->hdr.item_next));
+        ROE(jls_raw_chunk_seek(self->raw, self->chunk_cur.hdr.item_next));
     }
     return 0;
 }
@@ -428,28 +430,29 @@ static int32_t scan(struct jls_rd_s * self) {
             return rc;
         }
 
-        JLS_LOGI("tag %d : %s", self->hdr.tag, jls_tag_to_name(self->hdr.tag));
+        JLS_LOGI("tag %d : %s", self->chunk_cur.hdr.tag, jls_tag_to_name(self->chunk_cur.hdr.tag));
 
-        switch (self->hdr.tag) {
+        switch (self->chunk_cur.hdr.tag) {
             case JLS_TAG_USER_DATA:
                 found |= 1;
                 if (!self->user_data_head.offset) {
                     self->user_data_head.offset = pos;
-                    self->user_data_head.hdr = self->hdr;
+                    self->user_data_head.hdr = self->chunk_cur.hdr;
+                    self->user_data_cur = self->user_data_head;
                 }
                 break;
             case JLS_TAG_SOURCE_DEF:
                 found |= 2;
                 if (!self->source_head.offset) {
                     self->source_head.offset = pos;
-                    self->source_head.hdr = self->hdr;
+                    self->source_head.hdr = self->chunk_cur.hdr;
                 }
                 break;
             case JLS_TAG_SIGNAL_DEF:
                 found |= 4;
                 if (!self->signal_head.offset) {
                     self->signal_head.offset = pos;
-                    self->signal_head.hdr = self->hdr;
+                    self->signal_head.hdr = self->chunk_cur.hdr;
                 }
                 break;
             default:
@@ -537,4 +540,73 @@ int32_t jls_rd_signals(struct jls_rd_s * self, struct jls_signal_def_s ** signal
     *signals = self->signal_def_api;
     *count = c;
     return 0;
+}
+
+int32_t rd_user_data(struct jls_rd_s * self, struct jls_rd_user_data_s * user_data) {
+    ROE(rd(self));
+    if (self->chunk_cur.hdr.tag != JLS_TAG_USER_DATA) {
+        return JLS_ERROR_NOT_FOUND;
+    }
+    uint8_t storage_type = (uint8_t) ((self->chunk_cur.hdr.chunk_meta >> 12) & 0x0f);
+    switch (storage_type) {
+        case JLS_STORAGE_TYPE_BINARY:  // intentional fall-through
+        case JLS_STORAGE_TYPE_STRING:  // intentional fall-through
+        case JLS_STORAGE_TYPE_JSON:
+            break;
+        default:
+            return JLS_ERROR_PARAMETER_INVALID;
+    }
+    user_data->chunk_meta = self->chunk_cur.hdr.chunk_meta & 0x0fff;
+    user_data->storage_type = storage_type;
+    user_data->data = self->payload.start;
+    user_data->data_size = self->chunk_cur.hdr.payload_length;
+    self->user_data_cur = self->chunk_cur;
+    return 0;
+}
+
+int32_t jls_rd_annotations(struct jls_rd_s * self, uint16_t signal_id,
+                           struct jls_rd_annotation_s ** annotations, uint32_t * count) {
+    if (!is_signal_defined(self, signal_id)) {
+        return JLS_ERROR_NOT_FOUND;
+    }
+    if (!annotations || !count) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
+    uint8_t * p = malloc(ANNOTATIONS_SIZE_DEFAULT);
+    if (!p) {
+        return JLS_ERROR_NOT_ENOUGH_MEMORY;
+    }
+
+    // todo
+    *annotations = 0;
+    *count = 0;
+
+    return 0;
+}
+
+void jls_rd_annotations_free(struct jls_rd_s * self, struct jls_rd_annotation_s * annotations);
+
+int32_t jls_rd_user_data_reset(struct jls_rd_s * self) {
+    self->user_data_cur = self->user_data_head;
+    return 0;
+}
+
+int32_t jls_rd_user_data_next(struct jls_rd_s * self, struct jls_rd_user_data_s * user_data) {
+    if (!self->user_data_cur.offset || !self->user_data_cur.hdr.item_next) {
+        return JLS_ERROR_EMPTY;
+    }
+    ROE(jls_raw_chunk_seek(self->raw, self->user_data_cur.hdr.item_next));
+    return rd_user_data(self, user_data);
+}
+
+int32_t jls_rd_user_data_prev(struct jls_rd_s * self, struct jls_rd_user_data_s * user_data) {
+    if ((self->user_data_cur.offset <= 0) || !self->user_data_cur.hdr.item_prev) {
+        return JLS_ERROR_EMPTY;
+    }
+    if (self->user_data_cur.hdr.item_prev == (uint64_t) self->user_data_head.offset) {
+        jls_rd_user_data_reset(self);
+        return JLS_ERROR_EMPTY;
+    }
+    ROE(jls_raw_chunk_seek(self->raw, self->user_data_cur.hdr.item_prev));
+    return rd_user_data(self, user_data);
 }

@@ -66,7 +66,8 @@ int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signal_def_s 
 int32_t jls_wr_user_data(struct jls_wr_s * self, uint16_t chunk_meta,
         enum jls_storage_type_e storage_type, const uint8_t * data, uint32_t data_size);
 
-int32_t jls_wr_fsr_f32(struct jls_wr_s * self, uint16_t signal_id, const float * data, uint32_t data_size);
+int32_t jls_wr_fsr_f32(struct jls_wr_s * self, uint16_t signal_id,
+        uint64_t sample_id, const float * data, uint32_t data_length);
 
 /**
  * @brief Add an annotation to a FSR signal.
@@ -85,9 +86,11 @@ int32_t jls_wr_fsr_annotation(struct jls_wr_s * self, uint16_t signal_id, uint64
                               enum jls_annotation_type_e annotation_type,
                               enum jls_storage_type_e storage_type, const uint8_t * data, uint32_t data_size);
 
-int32_t jls_wr_fsr_utc(struct jls_wr_s * self, uint16_t signal_id, uint64_t sample_id, int64_t utc);
+// todo jls_wr_fsr_utc test
+//int32_t jls_wr_fsr_utc(struct jls_wr_s * self, uint16_t signal_id, uint64_t sample_id, int64_t utc);
 
-int32_t jls_wr_vsr_f32(struct jls_wr_s * self, uint16_t ts_id, int64_t timestamp, uint32_t data, uint32_t size);
+// todo jls_wr_vsr_f32
+//int32_t jls_wr_vsr_f32(struct jls_wr_s * self, uint16_t ts_id, int64_t timestamp, uint32_t data, uint32_t size);
 
 /**
  * Add an annotation to a VSR signal.

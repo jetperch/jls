@@ -149,12 +149,14 @@ enum jls_track_type_e {
  * annotations and user_data.
  */
 enum jls_storage_type_e {
+    /// Invalid (unknown) storage type.
+    JLS_STORAGE_TYPE_INVALID = 0,
     /// Raw binary data.
-    JLS_STORAGE_TYPE_BINARY = 0,
+    JLS_STORAGE_TYPE_BINARY = 1,
     /// Null-terminated C-style string with UTF-8 encoding.
-    JLS_STORAGE_TYPE_STRING = 1,
+    JLS_STORAGE_TYPE_STRING = 2,
     /// JSON serialized data structure with NULL terminator and UTF-8 encoding.
-    JLS_STORAGE_TYPE_JSON = 2,
+    JLS_STORAGE_TYPE_JSON = 3,
 };
 
 /**
@@ -289,8 +291,8 @@ struct jls_signal_def_s {       // 0 reserved for VSR annotations
     uint16_t rsv16_0;
     uint32_t data_type;
     uint32_t sample_rate;       // 0 for VSR
-    uint32_t samples_per_block;
-    uint32_t summary_downsample;
+    uint32_t summary_decimate_factor;
+    uint32_t decimations_per_chunk;
     uint32_t utc_rate_auto;     // 0=off, else samples per UTC entry.
     // on disk: reserve 64 bytes as 0 for future use
     const char * name;
