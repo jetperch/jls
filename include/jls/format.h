@@ -189,6 +189,8 @@ enum jls_annotation_type_e {
      * The jls_storage_type_e must be STRING.
      */
     JLS_ANNOTATION_TYPE_MARKER = 2,
+
+    /// consider sample_loss: start, stop
 };
 
 /**

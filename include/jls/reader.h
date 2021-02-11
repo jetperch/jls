@@ -69,7 +69,7 @@ int32_t jls_rd_sources(struct jls_rd_s * self, struct jls_source_def_s ** source
 int32_t jls_rd_signals(struct jls_rd_s * self, struct jls_signal_def_s ** signals, uint16_t * count);
 
 struct jls_rd_annotation_s {
-    uint64_t sample_id;
+    int64_t sample_id;
     uint8_t annotation_type;
     uint8_t storage_type;
     uint32_t data_size;

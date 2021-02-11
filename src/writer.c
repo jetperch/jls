@@ -626,6 +626,8 @@ int32_t jls_wr_fsr_f32(struct jls_wr_s * self, uint16_t signal_id,
                 ROE(track_wr_head(self, track_info));
             }
 
+            // todo compute 1st level summary data
+
             // write summaries as needed.
             // todo write summaries
         }
