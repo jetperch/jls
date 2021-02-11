@@ -125,21 +125,21 @@ static void test_annotation(void **state) {
     struct jls_wr_s * wr = NULL;
     struct jls_rd_s * rd = NULL;
     assert_int_equal(0, jls_wr_open(&wr, filename));
-    assert_int_equal(0, jls_wr_vsr_annotation(wr, 0, now + 0 * JLS_TIME_MILLISECOND,
-                                              JLS_ANNOTATION_TYPE_TEXT, JLS_STORAGE_TYPE_STRING,
-                                              (const uint8_t *) STRING_1, 0));
-    assert_int_equal(0, jls_wr_vsr_annotation(wr, 0, now + 1 * JLS_TIME_MILLISECOND,
-                                              JLS_ANNOTATION_TYPE_MARKER, JLS_STORAGE_TYPE_STRING,
-                                              (const uint8_t *) "1", 0));
-    assert_int_equal(0, jls_wr_vsr_annotation(wr, 0, now + 2 * JLS_TIME_MILLISECOND,
-                                              JLS_ANNOTATION_TYPE_USER, JLS_STORAGE_TYPE_BINARY,
-                                              USER_DATA_1, sizeof(USER_DATA_1)));
-    assert_int_equal(0, jls_wr_vsr_annotation(wr, 0, now + 3 * JLS_TIME_MILLISECOND,
-                                              JLS_ANNOTATION_TYPE_USER, JLS_STORAGE_TYPE_STRING,
-                                              (const uint8_t *) STRING_1, 0));
-    assert_int_equal(0, jls_wr_vsr_annotation(wr, 0, now + 4 * JLS_TIME_MILLISECOND,
-                                              JLS_ANNOTATION_TYPE_USER, JLS_STORAGE_TYPE_JSON,
-                                              (const uint8_t *) JSON_1, 0));
+    assert_int_equal(0, jls_wr_annotation(wr, 0, now + 0 * JLS_TIME_MILLISECOND,
+                                          JLS_ANNOTATION_TYPE_TEXT, JLS_STORAGE_TYPE_STRING,
+                                          (const uint8_t *) STRING_1, 0));
+    assert_int_equal(0, jls_wr_annotation(wr, 0, now + 1 * JLS_TIME_MILLISECOND,
+                                          JLS_ANNOTATION_TYPE_MARKER, JLS_STORAGE_TYPE_STRING,
+                                          (const uint8_t *) "1", 0));
+    assert_int_equal(0, jls_wr_annotation(wr, 0, now + 2 * JLS_TIME_MILLISECOND,
+                                          JLS_ANNOTATION_TYPE_USER, JLS_STORAGE_TYPE_BINARY,
+                                          USER_DATA_1, sizeof(USER_DATA_1)));
+    assert_int_equal(0, jls_wr_annotation(wr, 0, now + 3 * JLS_TIME_MILLISECOND,
+                                          JLS_ANNOTATION_TYPE_USER, JLS_STORAGE_TYPE_STRING,
+                                          (const uint8_t *) STRING_1, 0));
+    assert_int_equal(0, jls_wr_annotation(wr, 0, now + 4 * JLS_TIME_MILLISECOND,
+                                          JLS_ANNOTATION_TYPE_USER, JLS_STORAGE_TYPE_JSON,
+                                          (const uint8_t *) JSON_1, 0));
     assert_int_equal(0, jls_wr_close(wr));
 
     assert_int_equal(0, jls_rd_open(&rd, filename));
