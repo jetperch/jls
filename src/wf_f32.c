@@ -24,7 +24,6 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
-#include <assert.h>
 
 
 #define SUMMARY_DECIMATE_FACTOR_MIN     (10)
@@ -41,7 +40,7 @@ struct sample_buffer_s {  // for a single chunk
 struct summary_index_s {
     uint32_t length;
     uint32_t offset;
-    int64_t index[];
+    int64_t data[];
 };
 
 struct summary_buffer_s {
@@ -78,7 +77,7 @@ static int32_t summary_alloc(struct jls_wf_f32_s * self, uint8_t level) {
     b->level = level;
     b->length = self->def.entries_per_summary;
     b->offset = 0;
-    b->index = malloc(index_sz);
+    b->index = calloc(1, index_sz);
     if (!b->index) {
         free(b);
         return JLS_ERROR_NOT_ENOUGH_MEMORY;
@@ -102,7 +101,7 @@ static void summary_free(struct jls_wf_f32_s * self, uint8_t level) {
     }
 }
 
-static uint32_t v_max(uint32_t a, uint32_t b) {
+static inline uint32_t u32_max(uint32_t a, uint32_t b) {
     return (a > b) ? a : b;
 }
 
@@ -119,9 +118,9 @@ int32_t jls_wf_f32_align_def(struct jls_wf_f32_def_s * def) {
     samples_per_data = def->samples_per_data;
     entries_per_summary = def->entries_per_summary;
 
-    summary_decimation_factor = v_max(summary_decimation_factor, SUMMARY_DECIMATE_FACTOR_MIN);
-    samples_per_data = v_max(samples_per_data, SAMPLES_PER_DATA_MIN);
-    entries_per_summary = v_max(entries_per_summary, ENTRIES_PER_SUMMARY_MIN);
+    summary_decimation_factor = u32_max(summary_decimation_factor, SUMMARY_DECIMATE_FACTOR_MIN);
+    samples_per_data = u32_max(samples_per_data, SAMPLES_PER_DATA_MIN);
+    entries_per_summary = u32_max(entries_per_summary, ENTRIES_PER_SUMMARY_MIN);
     entries_per_summary = round_up_to_multiple(entries_per_summary, summary_decimation_factor);
     samples_per_data = round_up_to_multiple(samples_per_data, entries_per_summary);
 
@@ -170,7 +169,7 @@ static int32_t wr_index(struct jls_wf_f32_s * self, uint8_t level) {
         JLS_LOGE("internal memory error");
     }
     uint32_t len = idx->offset * sizeof(int64_t);
-    return jls_wr_index_prv(self->wr, self->def.signal_id, level, (uint8_t *) &idx->index, len);
+    return jls_wr_index_prv(self->wr, self->def.signal_id, level, (uint8_t *) idx->data, len);
 }
 
 static int32_t wr_summary(struct jls_wf_f32_s * self, uint8_t level) {
@@ -255,7 +254,6 @@ static int32_t summaryN(struct jls_wf_f32_s * self, uint8_t level, int64_t pos) 
     struct summary_buffer_s * src = self->summary[level - 1];
     struct summary_buffer_s * dst = self->summary[level];
 
-    assert(src);
     if (!dst) {
         ROE(summary_alloc(self, level));
         dst = self->summary[level];
@@ -263,7 +261,7 @@ static int32_t summaryN(struct jls_wf_f32_s * self, uint8_t level, int64_t pos) 
 
     const double mean_scale = 1.0 / self->def.summary_decimation_factor;
     const double var_scale = mean_scale;
-    dst->index->index[dst->index->offset++] = pos;
+    //dst->index->index[dst->index->offset++] = pos;
 
     uint32_t summaries_per = src->offset / self->def.summary_decimation_factor;
     for (uint32_t idx = 0; idx < summaries_per; ++idx) {
@@ -303,14 +301,13 @@ static int32_t summaryN(struct jls_wf_f32_s * self, uint8_t level, int64_t pos) 
 }
 
 static int32_t summary1(struct jls_wf_f32_s * self, int64_t pos) {
-    assert(self->sample_buffer);
     const float * data = self->sample_buffer->data;
     struct summary_buffer_s * dst = self->summary[1];
 
     const double mean_scale = 1.0 / self->def.summary_decimation_factor;
     const double var_scale = 1.0 / (self->def.summary_decimation_factor - 1);
 
-    dst->index->index[dst->index->offset++] = pos;
+    dst->index->data[dst->index->offset++] = pos;
 
     uint32_t summaries_per = self->sample_buffer->offset / self->def.summary_decimation_factor;
     for (uint32_t idx = 0; idx < summaries_per; ++idx) {
@@ -350,7 +347,6 @@ static int32_t summary1(struct jls_wf_f32_s * self, int64_t pos) {
 }
 
 int32_t jls_wf_f32_data(struct jls_wf_f32_s * self, int64_t sample_id, const float * data, uint32_t data_length) {
-    assert(self->sample_buffer);
     struct sample_buffer_s * b = self->sample_buffer;
 
     // todo check for & handle sample_id skips
@@ -367,7 +363,6 @@ int32_t jls_wf_f32_data(struct jls_wf_f32_s * self, int64_t sample_id, const flo
         b->offset += length;
         data += length;
         data_length -= length;
-        assert(b->offset <= b->length);
         if (b->offset >= b->length) {
             ROE(wr_data(self));
             b->timestamp += self->sample_buffer->length;
