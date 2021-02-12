@@ -24,6 +24,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <inttypes.h>
 
 #define PAYLOAD_BUFFER_SIZE_DEFAULT (1 << 25)   // 32 MB
 #define STRING_BUFFER_SIZE_DEFAULT (1 << 23)    // 8 MB
@@ -74,7 +75,8 @@ struct chunk_s {
 struct payload_s {
     uint8_t * start;
     uint8_t * cur;
-    uint8_t * end;
+    uint8_t * end;  // current end
+    size_t length;  // current length
     size_t alloc_size;
 };
 
@@ -86,8 +88,11 @@ struct strings_s {
 };
 
 struct signal_s {
+    int64_t timestamp_start;
+    int64_t timestamp_end;
     int64_t track_defs[4];
-    int64_t track_heads[4];
+    int64_t track_head_offsets[4];
+    int64_t track_head_data[4][JLS_SUMMARY_LEVEL_COUNT];
 };
 
 struct jls_rd_s {
@@ -242,10 +247,14 @@ static int32_t rd(struct jls_rd_s * self) {
                 return JLS_ERROR_NOT_ENOUGH_MEMORY;
             }
             self->payload.start = ptr;
+            self->payload.cur = ptr;
+            self->payload.end = ptr;
+            self->payload.length = 0;
             self->payload.alloc_size = sz_new;
         } else if (rc == 0) {
-            self->payload.end = self->payload.start + self->chunk_cur.hdr.payload_length;
             self->payload.cur = self->payload.start;
+            self->payload.length = self->chunk_cur.hdr.payload_length;
+            self->payload.end = self->payload.start + self->payload.length;
             return 0;
         } else {
             return rc;
@@ -390,7 +399,17 @@ static int32_t handle_track_def(struct jls_rd_s * self, int64_t pos) {
 static int32_t handle_track_head(struct jls_rd_s * self, int64_t pos) {
     uint16_t signal_id = self->chunk_cur.hdr.chunk_meta & SIGNAL_MASK;
     ROE(validate_track_tag(self, signal_id, self->chunk_cur.hdr.tag));
-    self->signals[signal_id].track_heads[tag_parse_track_type(self->chunk_cur.hdr.tag)] = pos;
+    uint8_t track_type = tag_parse_track_type(self->chunk_cur.hdr.tag);
+
+    self->signals[signal_id].track_head_offsets[track_type] = pos;
+    size_t expect_sz = JLS_SUMMARY_LEVEL_COUNT * sizeof(int64_t);
+
+    if (self->payload.length != expect_sz) {
+        JLS_LOGW("cannot parse signal %d head, sz=%zu, expect=%zu",
+                 (int) signal_id, self->payload.length, expect_sz);
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
+    memcpy(self->signals[signal_id].track_head_data[track_type], self->payload.start, expect_sz);
     return 0;
 }
 
@@ -541,6 +560,50 @@ int32_t jls_rd_signals(struct jls_rd_s * self, struct jls_signal_def_s ** signal
     }
     *signals = self->signal_def_api;
     *count = c;
+    return 0;
+}
+
+int32_t jls_rd_fsr_length(struct jls_rd_s * self, uint16_t signal_id, int64_t * samples) {
+    if (!is_signal_defined(self, signal_id)) {
+        return JLS_ERROR_NOT_FOUND;
+    }
+    if (self->signal_def[signal_id].signal_type != JLS_SIGNAL_TYPE_FSR) {
+        JLS_LOGW("fsr_length not support for signal type %d", (int) self->signal_def[signal_id].signal_type);
+        return JLS_ERROR_NOT_SUPPORTED;
+    }
+    struct signal_s * s = &self->signals[signal_id];
+    int64_t offset = 0;
+    int64_t * offsets = s->track_head_data[JLS_TRACK_TYPE_FSR];
+    int level = JLS_SUMMARY_LEVEL_COUNT - 1;
+    for (; level >= 0; --level) {
+        if (offsets[level]) {
+            offset = offsets[level];
+            break;
+        }
+    }
+    if (!offset) {
+        *samples = 0;
+        return 0;
+    }
+
+    for (int lvl = level; lvl > 0; --lvl) {
+        JLS_LOGI("signal %d, level %d, index=%" PRIi64, (int) signal_id, lvl, offset);
+        ROE(jls_raw_chunk_seek(self->raw, offset));
+        ROE(rd(self));
+
+        int64_t * payload = (int64_t *) self->payload.start;
+        if (((2 + payload[1]) * sizeof(int64_t)) > self->payload.length) {
+            JLS_LOGE("invalid payload length");
+            return JLS_ERROR_PARAMETER_INVALID;
+        }
+        JLS_LOGI("idx0 = %" PRIi64, payload[2]);
+        offset = payload[2 + payload[1] - 1];
+    }
+
+    ROE(jls_raw_chunk_seek(self->raw, offset));
+    ROE(rd(self));
+    int64_t * payload = (int64_t *) self->payload.start;
+    *samples = payload[0] + payload[1];
     return 0;
 }
 

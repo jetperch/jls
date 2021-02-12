@@ -148,7 +148,7 @@ fixed data type.  Each signal can have multiple tracks that contain
 data associated with that signal. The JLS file supports two signal types: 
 fixed sample rate (FSR) and variable sample rate (VSR).  FSR signals
 store their sample data in the FSR track using FSR_DATA and FSR_SUMMARY.
-FSR time is denoted by samples using sample_id.  FSR signals also support:
+FSR time is denoted by samples using timestamp.  FSR signals also support:
 
 * Sample time to UTC time mapping using the UTC track.
 * Annotations with the ANNOTATION track. 
@@ -175,9 +175,9 @@ contributed to the summary.  This SUMMARY chunk enables fast O(log n)
 navigation of the file. 
 
 The JLS file format design supports SUMMARY of SUMMARY.  It supports
-the DATA and up to 15 layers of SUMMARIES.  sample_id is given as a
+the DATA and up to 15 layers of SUMMARIES.  timestamp is given as a
 64-bit integer, which allows each summary to include only 20 samples
-and still support the full 64-bit integer sample_id space.  In practice, the
+and still support the full 64-bit integer timestamp space.  In practice, the
 first level summary increases a single value to 4 values, so summary
 steps are usually 50 or more.
 

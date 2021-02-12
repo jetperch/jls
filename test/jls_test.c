@@ -27,6 +27,8 @@
 #include <string.h>
 
 
+#define SKIP_BASIC 1
+
 const char * filename = "tmp.jls";
 const uint8_t USER_DATA_1[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
 const uint16_t CHUNK_META_1 = 0x0123;
@@ -85,6 +87,7 @@ const struct jls_signal_def_s SIGNAL_6 = {
         .si_units = "V",
 };
 
+#if !SKIP_BASIC
 static void test_source(void **state) {
     (void) state;
     struct jls_wr_s * wr = NULL;
@@ -253,6 +256,7 @@ static void test_wr_signal_duplicate(void **state) {
     assert_int_equal(JLS_ERROR_ALREADY_EXISTS, jls_wr_signal_def(wr, &SIGNAL_6));
     assert_int_equal(0, jls_wr_close(wr));
 }
+#endif
 
 struct triangle_waveform_s {
     float y_scale;
@@ -298,10 +302,24 @@ static void test_data(void **state) {
     }
 
     assert_int_equal(0, jls_wr_close(wr));
+
+    struct jls_rd_s * rd = NULL;
+    assert_int_equal(0, jls_rd_open(&rd, filename));
+    struct jls_signal_def_s * signals = NULL;
+    uint16_t count = 0;
+    assert_int_equal(0, jls_rd_signals(rd, &signals, &count));
+    assert_int_equal(2, count);
+    assert_int_equal(0, signals[0].signal_id);
+    assert_int_equal(5, signals[1].signal_id);
+    int64_t samples = 0;
+    assert_int_equal(0, jls_rd_fsr_length(rd, 5, &samples));
+    assert_int_equal(WINDOW_SIZE * 1000, samples);
+    jls_rd_close(rd);
 }
 
 int main(void) {
     const struct CMUnitTest tests[] = {
+#if !SKIP_BASIC
             cmocka_unit_test(test_source),
             cmocka_unit_test(test_wr_source_duplicate),
             cmocka_unit_test(test_annotation),
@@ -309,6 +327,7 @@ int main(void) {
             cmocka_unit_test(test_signal),
             cmocka_unit_test(test_wr_signal_without_source),
             cmocka_unit_test(test_wr_signal_duplicate),
+#endif
             cmocka_unit_test(test_data),
     };
 

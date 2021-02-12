@@ -62,7 +62,7 @@ struct signal_info_s {
     uint8_t data_tag;
     uint8_t summary_tag;
     uint8_t index_tag;
-    uint8_t track_type;
+    uint8_t data_track_type;
 };
 
 struct buf_s {
@@ -252,7 +252,6 @@ static int32_t buf_wr_i64(struct jls_wr_s * self, int64_t value) {
     return 0;
 }
 
-
 static int32_t update_mra(struct jls_wr_s * self, struct chunk_s * mra, struct chunk_s * update) {
     if (mra->offset) {
         int64_t current_pos = jls_raw_chunk_tell(self->raw);
@@ -337,14 +336,17 @@ static int32_t track_wr_head(struct jls_wr_s * self, struct track_info_s * track
         chunk->hdr.payload_length = sizeof(track_info->head_offsets);
         chunk->hdr.payload_prev_length = self->payload_prev_length;
         chunk->offset = jls_raw_chunk_tell(self->raw);
+        JLS_LOGI("track_wr_head %d 0x%02x new %" PRIi64, (int) chunk->hdr.chunk_meta, chunk->hdr.tag, chunk->offset);
         ROE(jls_raw_wr(self->raw, &chunk->hdr, (uint8_t *) track_info->head_offsets));
+        self->payload_prev_length = sizeof(track_info->head_offsets);
+        track_info->head = *chunk;
+        return update_mra(self, &self->signal_mra, chunk);
     } else {
+        JLS_LOGI("track_wr_head %d 0x%02x update %" PRIi64, (int) chunk->hdr.chunk_meta, chunk->hdr.tag, chunk->offset);
         int64_t pos = jls_raw_chunk_tell(self->raw);
         ROE(jls_raw_chunk_seek(self->raw, chunk->offset));
         ROE(jls_raw_wr_payload(self->raw, sizeof(track_info->head_offsets), (uint8_t *) track_info->head_offsets));
         ROE(jls_raw_chunk_seek(self->raw, pos));
-        self->payload_prev_length = sizeof(track_info->head_offsets);
-        return update_mra(self, &self->signal_mra, chunk);
     }
     return 0;
 }
@@ -405,7 +407,7 @@ int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signal_def_s 
             info->data_tag = JLS_TAG_TRACK_FSR_DATA;
             info->summary_tag = JLS_TAG_TRACK_FSR_SUMMARY;
             info->index_tag = JLS_TAG_TRACK_FSR_INDEX;
-            info->track_type = JLS_TAG_TRACK_FSR_DATA;
+            info->data_track_type = JLS_TRACK_TYPE_FSR;
             break;
         case JLS_SIGNAL_TYPE_VSR:
             if (def->sample_rate) {
@@ -415,7 +417,7 @@ int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signal_def_s 
             info->data_tag = JLS_TAG_TRACK_VSR_DATA;
             info->summary_tag = JLS_TAG_TRACK_VSR_SUMMARY;
             info->index_tag = JLS_TAG_TRACK_VSR_INDEX;
-            info->track_type = JLS_TAG_TRACK_VSR_DATA;
+            info->data_track_type = JLS_TRACK_TYPE_VSR;
             break;
         default:
             JLS_LOGE("Invalid signal type: %d", (int) def->signal_type);
@@ -557,7 +559,7 @@ int32_t jls_wr_data_prv(struct jls_wr_s * self, uint16_t signal_id, uint8_t leve
                         const uint8_t * payload, uint32_t payload_length) {
     ROE(signal_validate(self, signal_id));
     struct signal_info_s * info = &self->signal_info[signal_id];
-    struct track_info_s * track = &info->tracks[info->track_type];
+    struct track_info_s * track = &info->tracks[info->data_track_type];
     struct chunk_s chunk;
 
     if (!level) {  // data chunk
@@ -589,6 +591,12 @@ int32_t jls_wr_data_prv(struct jls_wr_s * self, uint16_t signal_id, uint8_t leve
         self->payload_prev_length = chunk.hdr.payload_length;
         ROE(update_mra(self, &track->summary[level], &chunk));
     }
+
+    if (!track->head_offsets[level]) {
+        track->head_offsets[level] = chunk.offset;
+        ROE(track_wr_head(self, track));
+    }
+
     return 0;
 }
 
@@ -596,7 +604,7 @@ int32_t jls_wr_index_prv(struct jls_wr_s * self, uint16_t signal_id, uint8_t lev
                          const uint8_t * payload, uint32_t payload_length) {
     ROE(signal_validate(self, signal_id));
     struct signal_info_s * info = &self->signal_info[signal_id];
-    struct track_info_s * track = &info->tracks[info->track_type];
+    struct track_info_s * track = &info->tracks[info->data_track_type];
     struct chunk_s chunk;
 
     chunk.hdr.item_next = 0;  // update later
