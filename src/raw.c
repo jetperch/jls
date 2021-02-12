@@ -291,7 +291,7 @@ int32_t jls_raw_close(struct jls_raw_s * self) {
 }
 
 int32_t jls_raw_wr(struct jls_raw_s * self, struct jls_chunk_header_s * hdr, const uint8_t * payload) {
-    JLS_LOGI("wr @ %" PRId64 " : %d %s", jls_raw_chunk_tell(self), (int) hdr->tag, jls_tag_to_name(hdr->tag));
+    JLS_LOGD3("wr @ %" PRId64 " : %d %s", jls_raw_chunk_tell(self), (int) hdr->tag, jls_tag_to_name(hdr->tag));
     RLE(jls_raw_wr_header(self, hdr));
     RLE(jls_raw_wr_payload(self, hdr->payload_length, payload));
     invalidate_current_chunk(self);

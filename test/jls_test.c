@@ -61,8 +61,9 @@ const struct jls_signal_def_s SIGNAL_5 = {
         .signal_type = JLS_SIGNAL_TYPE_FSR,
         .data_type = JLS_DATATYPE_F32,
         .sample_rate = 100000,
-        .decimations_per_chunk = 1000,
+        .samples_per_data = 1000,
         .summary_decimate_factor = 100,
+        .entries_per_summary = 200,
         .utc_rate_auto = 0,
         .name = "signal 5",
         .si_units = "A",
@@ -74,8 +75,9 @@ const struct jls_signal_def_s SIGNAL_6 = {
         .signal_type = JLS_SIGNAL_TYPE_VSR,
         .data_type = JLS_DATATYPE_F32,
         .sample_rate = 0,
-        .decimations_per_chunk = 1000000,
+        .samples_per_data = 1000000,
         .summary_decimate_factor = 100,
+        .entries_per_summary = 200,
         .utc_rate_auto = 0,
         .name = "signal 6",
         .si_units = "V",
@@ -222,8 +224,9 @@ static void test_signal(void **state) {
     assert_int_equal(SIGNAL_5.signal_type, signals[1].signal_type);
     assert_int_equal(SIGNAL_5.data_type, signals[1].data_type);
     assert_int_equal(SIGNAL_5.sample_rate, signals[1].sample_rate);
-    assert_int_equal(SIGNAL_5.decimations_per_chunk, signals[1].decimations_per_chunk);
+    assert_int_equal(SIGNAL_5.samples_per_data, signals[1].samples_per_data);
     assert_int_equal(SIGNAL_5.summary_decimate_factor, signals[1].summary_decimate_factor);
+    assert_int_equal(SIGNAL_5.entries_per_summary, signals[1].entries_per_summary);
     assert_int_equal(SIGNAL_5.utc_rate_auto, signals[1].utc_rate_auto);
     assert_string_equal(SIGNAL_5.name, signals[1].name);
     assert_string_equal(SIGNAL_5.si_units, signals[1].si_units);

@@ -23,6 +23,7 @@ set(SOURCES
         raw.c
         reader.c
         writer.c
+        wf_f32.c
 )
 
 foreach(f IN LISTS SOURCES)

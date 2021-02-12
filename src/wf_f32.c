@@ -1,0 +1,369 @@
+/*
+ * Copyright 2021 Jetperch LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "wf_f32.h"
+#include "cdef.h"
+#include "wr_prv.h"
+#include "jls/ec.h"
+#include "jls/log.h"
+#include <inttypes.h>
+#include <limits.h>
+#include <math.h>
+#include <stdlib.h>
+#include <string.h>
+
+
+#define SUMMARY_DECIMATE_FACTOR_MIN     (10)
+#define SAMPLES_PER_DATA_MIN            (SUMMARY_DECIMATE_FACTOR_MIN)
+#define ENTRIES_PER_SUMMARY_MIN         (SUMMARY_DECIMATE_FACTOR_MIN)
+
+struct sample_buffer_s {  // for a single chunk
+    uint32_t length;
+    uint32_t offset;
+    int64_t timestamp;
+    float data[];
+};
+
+struct summary_index_s {
+    uint32_t length;
+    uint32_t offset;
+    int64_t index[];
+};
+
+struct summary_buffer_s {
+    uint8_t level;
+    uint32_t length;
+    uint32_t offset;
+    struct summary_index_s * index;
+    int64_t timestamp;
+    float data[][4];
+};
+
+struct jls_wf_f32_s {
+    struct jls_wr_s * wr;
+    struct jls_wf_f32_def_s def;
+    struct sample_buffer_s * sample_buffer;
+    struct summary_buffer_s * summary[JLS_SUMMARY_LEVEL_COUNT - 1];
+};
+
+static int32_t summaryN(struct jls_wf_f32_s * self, uint8_t level, int64_t pos);
+static int32_t summary1(struct jls_wf_f32_s * self, int64_t pos);
+
+
+static int32_t summary_alloc(struct jls_wf_f32_s * self, uint8_t level) {
+    uint32_t entries_per_chunk = self->def.samples_per_data / self->def.summary_decimation_factor;
+    uint32_t chunks_per_summary = self->def.entries_per_summary / entries_per_chunk;
+
+    size_t buffer_sz = sizeof(struct summary_buffer_s) + 4 * self->def.entries_per_summary * sizeof(float);
+    size_t index_sz = sizeof(struct summary_index_s) + chunks_per_summary * sizeof(int64_t);
+
+    struct summary_buffer_s * b = malloc(buffer_sz);
+    if (!b) {
+        return JLS_ERROR_NOT_ENOUGH_MEMORY;
+    }
+    b->level = level;
+    b->length = self->def.entries_per_summary;
+    b->offset = 0;
+    b->index = malloc(index_sz);
+    if (!b->index) {
+        free(b);
+        return JLS_ERROR_NOT_ENOUGH_MEMORY;
+    }
+    b->timestamp = 0;
+    b->index->length = chunks_per_summary;
+    b->index->offset = 0;
+
+    self->summary[level] = b;
+    return 0;
+}
+
+static void summary_free(struct jls_wf_f32_s * self, uint8_t level) {
+    if (self->summary[level]) {
+        if (self->summary[level]->index) {
+            free(self->summary[level]->index);
+            self->summary[level]->index = NULL;
+        }
+        free(self->summary[level]);
+        self->summary[level] = NULL;
+    }
+}
+
+static uint32_t v_max(uint32_t a, uint32_t b) {
+    return (a > b) ? a : b;
+}
+
+static uint32_t round_up_to_multiple(uint32_t x, uint32_t m) {
+    return ((x + m - 1) / m) * m;
+}
+
+int32_t jls_wf_f32_align_def(struct jls_wf_f32_def_s * def) {
+    uint32_t samples_per_data;
+    uint32_t summary_decimation_factor;
+    uint32_t entries_per_summary;
+
+    summary_decimation_factor = def->summary_decimation_factor;
+    samples_per_data = def->samples_per_data;
+    entries_per_summary = def->entries_per_summary;
+
+    summary_decimation_factor = v_max(summary_decimation_factor, SUMMARY_DECIMATE_FACTOR_MIN);
+    samples_per_data = v_max(samples_per_data, SAMPLES_PER_DATA_MIN);
+    entries_per_summary = v_max(entries_per_summary, ENTRIES_PER_SUMMARY_MIN);
+    entries_per_summary = round_up_to_multiple(entries_per_summary, summary_decimation_factor);
+    samples_per_data = round_up_to_multiple(samples_per_data, entries_per_summary);
+
+    if (samples_per_data != def->samples_per_data) {
+        JLS_LOGI("samples_per_data adjusted from %" PRIu32 " to %" PRIu32,
+                 def->samples_per_data, samples_per_data);
+    }
+
+    if (entries_per_summary != def->entries_per_summary) {
+        JLS_LOGI("entries_per_summary adjusted from %" PRIu32 " to %" PRIu32,
+                 def->entries_per_summary, entries_per_summary);
+    }
+
+    def->summary_decimation_factor = summary_decimation_factor;
+    def->samples_per_data = samples_per_data;
+    def->entries_per_summary = entries_per_summary;
+    return 0;
+}
+
+static int32_t wr_data(struct jls_wf_f32_s * self) {
+    struct sample_buffer_s * b = self->sample_buffer;
+    if (!b->offset) {
+        return 0;
+    }
+    if (b->offset > b->length) {
+        JLS_LOGE("internal memory error");
+    }
+    uint32_t payload_length = sizeof(uint64_t) + b->offset * sizeof(float);
+    int64_t pos = jls_wr_tell_prv(self->wr);
+    ROE(jls_wr_data_prv(self->wr, self->def.signal_id, 0, (uint8_t *) &b->timestamp, payload_length));
+    ROE(summary1(self, pos));
+    b->offset = 0;
+    return 0;
+}
+
+static int32_t wr_index(struct jls_wf_f32_s * self, uint8_t level) {
+    if (!self->summary[level]) {
+        JLS_LOGW("No summary buffer, cannot write index");
+        return 0;
+    }
+    struct summary_index_s * idx = self->summary[level]->index;
+    if (!idx->offset) {
+        return 0;
+    }
+    if (idx->offset > idx->length) {
+        JLS_LOGE("internal memory error");
+    }
+    uint32_t len = idx->offset * sizeof(int64_t);
+    return jls_wr_index_prv(self->wr, self->def.signal_id, level, (uint8_t *) &idx->index, len);
+}
+
+static int32_t wr_summary(struct jls_wf_f32_s * self, uint8_t level) {
+    struct summary_buffer_s * dst = self->summary[level];
+    if (!dst->offset) {
+        return 0;
+    }
+    if (dst->offset > dst->length) {
+        JLS_LOGE("internal memory error");
+    }
+    uint32_t payload_len = sizeof(int64_t) + dst->offset * 4 * sizeof(float);
+    ROE(wr_index(self, level));
+    int64_t pos_next = jls_wr_tell_prv(self->wr);
+    ROE(jls_wr_data_prv(self->wr, self->def.signal_id, level, (uint8_t *) &dst->timestamp, payload_len));
+    ROE(summaryN(self, level + 1, pos_next));
+    dst->offset = 0;
+    dst->index->offset = 0;
+    return 0;
+}
+
+static int32_t summary_close(struct jls_wf_f32_s * self, uint8_t level) {
+    struct summary_buffer_s * dst = self->summary[level];
+    if (!dst) {
+        return 0;
+    }
+    int32_t rc = wr_summary(self, level);
+    summary_free(self, level);
+    return rc;
+}
+
+int32_t jls_wf_f32_open(struct jls_wf_f32_s ** instance, struct jls_wr_s * wr, const struct jls_wf_f32_def_s * def) {
+    struct jls_wf_f32_s * self = calloc(1, sizeof(struct jls_wf_f32_s));
+    if (!self) {
+        return JLS_ERROR_NOT_ENOUGH_MEMORY;
+    }
+    self->wr = wr;
+    self->def = *def;
+    int32_t rc = jls_wf_f32_align_def(&self->def);
+    if (rc) {
+        jls_wf_f32_close(self);
+        return rc;
+    }
+
+    size_t sample_buffer_sz = sizeof(struct sample_buffer_s) + sizeof(float) * def->samples_per_data;
+    self->sample_buffer = malloc(sample_buffer_sz);
+    if (!self->sample_buffer) {
+        jls_wf_f32_close(self);
+        return JLS_ERROR_NOT_ENOUGH_MEMORY;
+    }
+    self->sample_buffer->timestamp = 0;
+    self->sample_buffer->offset = 0;
+    self->sample_buffer->length = def->samples_per_data;
+
+    rc = summary_alloc(self, 1);
+    if (rc) {
+        jls_wf_f32_close(self);
+        return rc;
+    }
+
+    *instance = self;
+    return 0;
+}
+
+int32_t jls_wf_f32_close(struct jls_wf_f32_s * self) {
+    if (self) {
+        if (self->sample_buffer) {
+            wr_data(self);  // write remaining sample data
+            free(self->sample_buffer);
+            self->sample_buffer = NULL;
+        }
+
+        for (size_t i = 0; i < JLS_ARRAY_SIZE(self->summary); ++i) {
+            summary_close(self, (uint8_t) i);
+        }
+    }
+    return 0;
+}
+
+static int32_t summaryN(struct jls_wf_f32_s * self, uint8_t level, int64_t pos) {
+    struct summary_buffer_s * src = self->summary[level - 1];
+    struct summary_buffer_s * dst = self->summary[level];
+
+    if (!dst) {
+        ROE(summary_alloc(self, level));
+        dst = self->summary[level];
+    }
+
+    const double mean_scale = 1.0 / self->def.summary_decimation_factor;
+    const double var_scale = mean_scale;
+    dst->index->index[dst->index->offset++] = pos;
+
+    uint32_t summaries_per = src->offset / self->def.summary_decimation_factor;
+    for (uint32_t idx = 0; idx < summaries_per; ++idx) {
+        uint32_t sample_idx = idx * self->def.summary_decimation_factor;
+        double v_mean = 0.0;
+        float v_min = INFINITY;
+        float v_max = -INFINITY;
+        double v_var = 0.0;
+        for (uint32_t sample = 0; sample < self->def.summary_decimation_factor; ++sample) {
+            v_mean += src->data[sample_idx][0];
+            if (src->data[sample_idx][1] < v_min) {
+                v_min = src->data[sample_idx][1];
+            }
+            if (src->data[sample_idx][2] > v_max) {
+                v_max = src->data[sample_idx][2];
+            }
+            ++sample_idx;
+        }
+        sample_idx = idx * self->def.summary_decimation_factor;
+        for (uint32_t sample = 0; sample < self->def.summary_decimation_factor; ++sample) {
+            double v = src->data[sample_idx][0] - v_mean;
+            double std = src->data[sample_idx][3];
+            v_var += (std * std) + (v * v);
+            ++sample_idx;
+        }
+        dst->data[dst->offset][0] = (float) (v_mean * mean_scale);
+        dst->data[dst->offset][1] = v_min;
+        dst->data[dst->offset][2] = v_max;
+        dst->data[dst->offset][3] = (float) (sqrt(v_var * var_scale));
+        ++dst->offset;
+    }
+
+    if (dst->offset >= dst->length) {
+        ROE(wr_summary(self, level));
+    }
+    return 0;
+}
+
+static int32_t summary1(struct jls_wf_f32_s * self, int64_t pos) {
+    const float * data = self->sample_buffer->data;
+    struct summary_buffer_s * dst = self->summary[1];
+
+    const double mean_scale = 1.0 / self->def.summary_decimation_factor;
+    const double var_scale = 1.0 / (self->def.summary_decimation_factor - 1);
+
+    dst->index->index[dst->index->offset++] = pos;
+
+    uint32_t summaries_per = self->sample_buffer->offset / self->def.summary_decimation_factor;
+    for (uint32_t idx = 0; idx < summaries_per; ++idx) {
+        uint32_t sample_idx = idx * self->def.summary_decimation_factor;
+        double v_mean = 0.0;
+        float v_min = INFINITY;
+        float v_max = -INFINITY;
+        double v_var = 0.0;
+        for (uint32_t sample = 0; sample < self->def.summary_decimation_factor; ++sample) {
+            float v = data[sample_idx];
+            v_mean += v;
+            if (v < v_min) {
+                v_min = v;
+            }
+            if (v > v_max) {
+                v_max = v;
+            }
+            ++sample_idx;
+        }
+        sample_idx = idx * self->def.summary_decimation_factor;
+        for (uint32_t sample = 0; sample < self->def.summary_decimation_factor; ++sample) {
+            double v = data[sample_idx] - v_mean;
+            v_var += v * v;
+            ++sample_idx;
+        }
+        dst->data[dst->offset][0] = (float) (v_mean * mean_scale);
+        dst->data[dst->offset][1] = v_min;
+        dst->data[dst->offset][2] = v_max;
+        dst->data[dst->offset][3] = (float) (sqrt(v_var * var_scale));
+        ++dst->offset;
+    }
+
+    if (dst->offset >= dst->length) {
+        ROE(wr_summary(self, 1));
+    }
+    return 0;
+}
+
+int32_t jls_wf_f32_data(struct jls_wf_f32_s * self, int64_t sample_id, const float * data, uint32_t data_length) {
+    struct sample_buffer_s * b = self->sample_buffer;
+
+    // todo check for & handle sample_id skips
+    if (!b->offset) {
+        b->timestamp = sample_id;
+    }
+
+    while (data_length) {
+        uint32_t length = b->length - b->offset;
+        if (data_length < length) {
+            length = data_length;
+        }
+        memcpy(b->data + b->offset, data, length * sizeof(float));
+        b->offset += length;
+        data_length -= length;
+        if (b->offset >= b->length) {
+            ROE(wr_data(self));
+            b->timestamp += self->sample_buffer->length;
+        }
+    }
+    return 0;
+}
