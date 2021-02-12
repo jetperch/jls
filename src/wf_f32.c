@@ -24,6 +24,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 
 #define SUMMARY_DECIMATE_FACTOR_MIN     (10)
@@ -215,6 +216,7 @@ int32_t jls_wf_f32_open(struct jls_wf_f32_s ** instance, struct jls_wr_s * wr, c
 
     size_t sample_buffer_sz = sizeof(struct sample_buffer_s) + sizeof(float) * def->samples_per_data;
     self->sample_buffer = malloc(sample_buffer_sz);
+    JLS_LOGI("%d sample_buffer alloc %p", self->def.signal_id, self->sample_buffer);
     if (!self->sample_buffer) {
         jls_wf_f32_close(self);
         return JLS_ERROR_NOT_ENOUGH_MEMORY;
@@ -237,6 +239,7 @@ int32_t jls_wf_f32_close(struct jls_wf_f32_s * self) {
     if (self) {
         if (self->sample_buffer) {
             wr_data(self);  // write remaining sample data
+            JLS_LOGI("%d sample_buffer free %p", self->def.signal_id, self->sample_buffer);
             free(self->sample_buffer);
             self->sample_buffer = NULL;
         }
@@ -252,6 +255,7 @@ static int32_t summaryN(struct jls_wf_f32_s * self, uint8_t level, int64_t pos) 
     struct summary_buffer_s * src = self->summary[level - 1];
     struct summary_buffer_s * dst = self->summary[level];
 
+    assert(src);
     if (!dst) {
         ROE(summary_alloc(self, level));
         dst = self->summary[level];
@@ -299,6 +303,7 @@ static int32_t summaryN(struct jls_wf_f32_s * self, uint8_t level, int64_t pos) 
 }
 
 static int32_t summary1(struct jls_wf_f32_s * self, int64_t pos) {
+    assert(self->sample_buffer);
     const float * data = self->sample_buffer->data;
     struct summary_buffer_s * dst = self->summary[1];
 
@@ -345,6 +350,7 @@ static int32_t summary1(struct jls_wf_f32_s * self, int64_t pos) {
 }
 
 int32_t jls_wf_f32_data(struct jls_wf_f32_s * self, int64_t sample_id, const float * data, uint32_t data_length) {
+    assert(self->sample_buffer);
     struct sample_buffer_s * b = self->sample_buffer;
 
     // todo check for & handle sample_id skips
@@ -359,7 +365,9 @@ int32_t jls_wf_f32_data(struct jls_wf_f32_s * self, int64_t sample_id, const flo
         }
         memcpy(b->data + b->offset, data, length * sizeof(float));
         b->offset += length;
+        data += length;
         data_length -= length;
+        assert(b->offset <= b->length);
         if (b->offset >= b->length) {
             ROE(wr_data(self));
             b->timestamp += self->sample_buffer->length;
