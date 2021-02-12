@@ -26,9 +26,10 @@
 #include <string.h>
 
 
-#define SUMMARY_DECIMATE_FACTOR_MIN     (10)
-#define SAMPLES_PER_DATA_MIN            (SUMMARY_DECIMATE_FACTOR_MIN)
-#define ENTRIES_PER_SUMMARY_MIN         (SUMMARY_DECIMATE_FACTOR_MIN)
+#define SAMPLE_DECIMATE_FACTOR_MIN     (10)
+#define SAMPLES_PER_DATA_MIN            (SAMPLE_DECIMATE_FACTOR_MIN)
+#define ENTRIES_PER_SUMMARY_MIN         (SAMPLE_DECIMATE_FACTOR_MIN)
+#define SUMMARY_DECIMATE_FACTOR_MIN     (SAMPLE_DECIMATE_FACTOR_MIN)
 
 struct sample_buffer_s {  // for a single chunk
     uint32_t length;
@@ -64,11 +65,19 @@ static int32_t summary1(struct jls_wf_f32_s * self, int64_t pos);
 
 
 static int32_t summary_alloc(struct jls_wf_f32_s * self, uint8_t level) {
-    uint32_t entries_per_chunk = self->def.samples_per_data / self->def.summary_decimation_factor;
-    uint32_t chunks_per_summary = self->def.entries_per_summary / entries_per_chunk;
+    uint32_t index_entries;
+
+    if (level == 0) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    } else if (level == 1) {
+        uint32_t entries_per_data = self->def.samples_per_data / self->def.sample_decimate_factor;
+        index_entries = self->def.entries_per_summary / entries_per_data;
+    } else {
+        index_entries = self->def.summary_decimate_factor;
+    }
 
     size_t buffer_sz = sizeof(struct summary_buffer_s) + 4 * self->def.entries_per_summary * sizeof(float);
-    size_t index_sz = sizeof(struct summary_index_s) + chunks_per_summary * sizeof(int64_t);
+    size_t index_sz = sizeof(struct summary_index_s) + index_entries * sizeof(int64_t);
 
     struct summary_buffer_s * b = malloc(buffer_sz);
     if (!b) {
@@ -83,7 +92,7 @@ static int32_t summary_alloc(struct jls_wf_f32_s * self, uint8_t level) {
         return JLS_ERROR_NOT_ENOUGH_MEMORY;
     }
     b->timestamp = 0;
-    b->index->length = chunks_per_summary;
+    b->index->length = index_entries;
     b->index->offset = 0;
 
     self->summary[level] = b;
@@ -110,33 +119,39 @@ static uint32_t round_up_to_multiple(uint32_t x, uint32_t m) {
 }
 
 int32_t jls_wf_f32_align_def(struct jls_wf_f32_def_s * def) {
-    uint32_t samples_per_data;
-    uint32_t summary_decimation_factor;
-    uint32_t entries_per_summary;
+    uint32_t sample_decimate_factor = u32_max(def->sample_decimate_factor, SAMPLE_DECIMATE_FACTOR_MIN);
+    uint32_t samples_per_data = u32_max(def->samples_per_data, SAMPLES_PER_DATA_MIN);
+    uint32_t entries_per_summary = u32_max(def->entries_per_summary, ENTRIES_PER_SUMMARY_MIN);
+    uint32_t summary_decimate_factor = u32_max(def->summary_decimate_factor, SUMMARY_DECIMATE_FACTOR_MIN);
 
-    summary_decimation_factor = def->summary_decimation_factor;
-    samples_per_data = def->samples_per_data;
-    entries_per_summary = def->entries_per_summary;
+    entries_per_summary = round_up_to_multiple(entries_per_summary, summary_decimate_factor);
+    samples_per_data = round_up_to_multiple(samples_per_data, sample_decimate_factor);
+    uint32_t entries_per_data = samples_per_data / sample_decimate_factor;
 
-    summary_decimation_factor = u32_max(summary_decimation_factor, SUMMARY_DECIMATE_FACTOR_MIN);
-    samples_per_data = u32_max(samples_per_data, SAMPLES_PER_DATA_MIN);
-    entries_per_summary = u32_max(entries_per_summary, ENTRIES_PER_SUMMARY_MIN);
-    entries_per_summary = round_up_to_multiple(entries_per_summary, summary_decimation_factor);
-    samples_per_data = round_up_to_multiple(samples_per_data, entries_per_summary);
+    while (entries_per_summary != ((entries_per_summary / entries_per_data) * entries_per_data)) {
+        // reduce until fits.
+        --entries_per_data;
+    }
 
+    samples_per_data = sample_decimate_factor * entries_per_data;
+
+    if (sample_decimate_factor != def->sample_decimate_factor) {
+        JLS_LOGI("sample_decimate_factor adjusted from %" PRIu32 " to %" PRIu32,
+                 def->sample_decimate_factor, sample_decimate_factor);
+    }
     if (samples_per_data != def->samples_per_data) {
         JLS_LOGI("samples_per_data adjusted from %" PRIu32 " to %" PRIu32,
                  def->samples_per_data, samples_per_data);
     }
-
     if (entries_per_summary != def->entries_per_summary) {
         JLS_LOGI("entries_per_summary adjusted from %" PRIu32 " to %" PRIu32,
                  def->entries_per_summary, entries_per_summary);
     }
 
-    def->summary_decimation_factor = summary_decimation_factor;
+    def->sample_decimate_factor = sample_decimate_factor;
     def->samples_per_data = samples_per_data;
     def->entries_per_summary = entries_per_summary;
+    def->summary_decimate_factor = summary_decimate_factor;
     return 0;
 }
 
@@ -259,18 +274,18 @@ static int32_t summaryN(struct jls_wf_f32_s * self, uint8_t level, int64_t pos) 
         dst = self->summary[level];
     }
 
-    const double mean_scale = 1.0 / self->def.summary_decimation_factor;
+    const double mean_scale = 1.0 / self->def.summary_decimate_factor;
     const double var_scale = mean_scale;
     //dst->index->index[dst->index->offset++] = pos;
 
-    uint32_t summaries_per = src->offset / self->def.summary_decimation_factor;
+    uint32_t summaries_per = src->offset / self->def.summary_decimate_factor;
     for (uint32_t idx = 0; idx < summaries_per; ++idx) {
-        uint32_t sample_idx = idx * self->def.summary_decimation_factor;
+        uint32_t sample_idx = idx * self->def.summary_decimate_factor;
         double v_mean = 0.0;
         float v_min = INFINITY;
         float v_max = -INFINITY;
         double v_var = 0.0;
-        for (uint32_t sample = 0; sample < self->def.summary_decimation_factor; ++sample) {
+        for (uint32_t sample = 0; sample < self->def.summary_decimate_factor; ++sample) {
             v_mean += src->data[sample_idx][0];
             if (src->data[sample_idx][1] < v_min) {
                 v_min = src->data[sample_idx][1];
@@ -280,8 +295,8 @@ static int32_t summaryN(struct jls_wf_f32_s * self, uint8_t level, int64_t pos) 
             }
             ++sample_idx;
         }
-        sample_idx = idx * self->def.summary_decimation_factor;
-        for (uint32_t sample = 0; sample < self->def.summary_decimation_factor; ++sample) {
+        sample_idx = idx * self->def.summary_decimate_factor;
+        for (uint32_t sample = 0; sample < self->def.summary_decimate_factor; ++sample) {
             double v = src->data[sample_idx][0] - v_mean;
             double std = src->data[sample_idx][3];
             v_var += (std * std) + (v * v);
@@ -304,19 +319,19 @@ static int32_t summary1(struct jls_wf_f32_s * self, int64_t pos) {
     const float * data = self->sample_buffer->data;
     struct summary_buffer_s * dst = self->summary[1];
 
-    const double mean_scale = 1.0 / self->def.summary_decimation_factor;
-    const double var_scale = 1.0 / (self->def.summary_decimation_factor - 1);
+    const double mean_scale = 1.0 / self->def.sample_decimate_factor;
+    const double var_scale = 1.0 / (self->def.sample_decimate_factor - 1);
 
     dst->index->data[dst->index->offset++] = pos;
 
-    uint32_t summaries_per = self->sample_buffer->offset / self->def.summary_decimation_factor;
+    uint32_t summaries_per = self->sample_buffer->offset / self->def.sample_decimate_factor;
     for (uint32_t idx = 0; idx < summaries_per; ++idx) {
-        uint32_t sample_idx = idx * self->def.summary_decimation_factor;
+        uint32_t sample_idx = idx * self->def.sample_decimate_factor;
         double v_mean = 0.0;
         float v_min = INFINITY;
         float v_max = -INFINITY;
         double v_var = 0.0;
-        for (uint32_t sample = 0; sample < self->def.summary_decimation_factor; ++sample) {
+        for (uint32_t sample = 0; sample < self->def.sample_decimate_factor; ++sample) {
             float v = data[sample_idx];
             v_mean += v;
             if (v < v_min) {
@@ -327,8 +342,8 @@ static int32_t summary1(struct jls_wf_f32_s * self, int64_t pos) {
             }
             ++sample_idx;
         }
-        sample_idx = idx * self->def.summary_decimation_factor;
-        for (uint32_t sample = 0; sample < self->def.summary_decimation_factor; ++sample) {
+        sample_idx = idx * self->def.sample_decimate_factor;
+        for (uint32_t sample = 0; sample < self->def.sample_decimate_factor; ++sample) {
             double v = data[sample_idx] - v_mean;
             v_var += v * v;
             ++sample_idx;

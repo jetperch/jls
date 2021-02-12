@@ -100,8 +100,9 @@ struct jls_signal_def_s SIGNAL_0 = {       // 0 reserved for VSR annotations
         .data_type = JLS_DATATYPE_F32,
         .sample_rate = 0,
         .samples_per_data = 10,
-        .summary_decimate_factor = 10,
+        .samples_decimate_factor = 10,
         .entries_per_summary = 10,
+        .summary_decimate_factor = 10,
         .utc_rate_auto = 0,  // disabled
         .name = "global_annotation_signal",
         .si_units = "",
@@ -417,10 +418,11 @@ int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signal_def_s 
     ROE(buf_wr_u32(self, signal->data_type));
     ROE(buf_wr_u32(self, info->signal_def.sample_rate));
     ROE(buf_wr_u32(self, info->signal_def.samples_per_data));
-    ROE(buf_wr_u32(self, info->signal_def.summary_decimate_factor));
+    ROE(buf_wr_u32(self, info->signal_def.samples_decimate_factor));
     ROE(buf_wr_u32(self, info->signal_def.entries_per_summary));
+    ROE(buf_wr_u32(self, info->signal_def.summary_decimate_factor));
     ROE(buf_wr_u32(self, signal->utc_rate_auto));
-    ROE(buf_add_zero(self, 4 + 64));  // reserve space for future use.
+    ROE(buf_add_zero(self, 64));  // reserve space for future use.
     ROE(buf_add_str(self, signal->name));
     ROE(buf_add_str(self, signal->si_units));
     uint32_t payload_length = buf_size(self);
@@ -459,8 +461,9 @@ int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signal_def_s 
     struct jls_wf_f32_def_s def = {
             .signal_id = signal->signal_id,
             .samples_per_data = signal->samples_per_data,
-            .summary_decimation_factor = signal->summary_decimate_factor,
+            .sample_decimate_factor = signal->samples_decimate_factor,
             .entries_per_summary = signal->entries_per_summary,
+            .summary_decimate_factor = signal->summary_decimate_factor,
     };
     ROE(jls_wf_f32_open(&info->signal_writer, self, &def));
 

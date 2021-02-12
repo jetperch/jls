@@ -46,8 +46,9 @@ struct jls_wf_f32_s;
 struct jls_wf_f32_def_s {
     uint16_t signal_id;
     uint32_t samples_per_data;
-    uint32_t summary_decimation_factor;
+    uint32_t sample_decimate_factor;
     uint32_t entries_per_summary;
+    uint32_t summary_decimate_factor;
 };
 
 int32_t jls_wf_f32_align_def(struct jls_wf_f32_def_s * def);
