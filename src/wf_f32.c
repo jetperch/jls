@@ -58,11 +58,32 @@ struct jls_wf_f32_s {
     struct jls_wf_f32_def_s def;
     struct sample_buffer_s * sample_buffer;
     struct summary_buffer_s * summary[JLS_SUMMARY_LEVEL_COUNT - 1];
+    int64_t sample_id_offset;
 };
 
 static int32_t summaryN(struct jls_wf_f32_s * self, uint8_t level, int64_t pos);
 static int32_t summary1(struct jls_wf_f32_s * self, int64_t pos);
 
+static int32_t sample_buffer_alloc(struct jls_wf_f32_s * self) {
+    size_t sample_buffer_sz = sizeof(struct sample_buffer_s) + sizeof(float) * self->def.samples_per_data;
+    self->sample_buffer = malloc(sample_buffer_sz);
+            JLS_LOGI("%d sample_buffer alloc %p", self->def.signal_id, self->sample_buffer);
+    if (!self->sample_buffer) {
+        jls_wf_f32_close(self);
+        return JLS_ERROR_NOT_ENOUGH_MEMORY;
+    }
+    self->sample_buffer->timestamp = 0;
+    self->sample_buffer->offset = 0;
+    self->sample_buffer->length = self->def.samples_per_data;
+    return 0;
+}
+
+static void sample_buffer_free(struct jls_wf_f32_s * self) {
+    if (self->sample_buffer) {
+        free(self->sample_buffer);
+    }
+    self->sample_buffer = NULL;
+}
 
 static int32_t summary_alloc(struct jls_wf_f32_s * self, uint8_t level) {
     uint32_t index_entries;
@@ -228,23 +249,6 @@ int32_t jls_wf_f32_open(struct jls_wf_f32_s ** instance, struct jls_wr_s * wr, c
         return rc;
     }
 
-    size_t sample_buffer_sz = sizeof(struct sample_buffer_s) + sizeof(float) * def->samples_per_data;
-    self->sample_buffer = malloc(sample_buffer_sz);
-    JLS_LOGI("%d sample_buffer alloc %p", self->def.signal_id, self->sample_buffer);
-    if (!self->sample_buffer) {
-        jls_wf_f32_close(self);
-        return JLS_ERROR_NOT_ENOUGH_MEMORY;
-    }
-    self->sample_buffer->timestamp = 0;
-    self->sample_buffer->offset = 0;
-    self->sample_buffer->length = def->samples_per_data;
-
-    rc = summary_alloc(self, 1);
-    if (rc) {
-        jls_wf_f32_close(self);
-        return rc;
-    }
-
     *instance = self;
     return 0;
 }
@@ -254,8 +258,7 @@ int32_t jls_wf_f32_close(struct jls_wf_f32_s * self) {
         if (self->sample_buffer) {
             wr_data(self);  // write remaining sample data
             JLS_LOGI("%d sample_buffer free %p", self->def.signal_id, self->sample_buffer);
-            free(self->sample_buffer);
-            self->sample_buffer = NULL;
+            sample_buffer_free(self);
         }
 
         for (size_t i = 0; i < JLS_ARRAY_SIZE(self->summary); ++i) {
@@ -319,6 +322,11 @@ static int32_t summary1(struct jls_wf_f32_s * self, int64_t pos) {
     const float * data = self->sample_buffer->data;
     struct summary_buffer_s * dst = self->summary[1];
 
+    if (!dst) {
+        ROE(summary_alloc(self, 1));
+        dst = self->summary[1];
+    }
+
     const double mean_scale = 1.0 / self->def.sample_decimate_factor;
     const double var_scale = 1.0 / (self->def.sample_decimate_factor - 1);
 
@@ -363,6 +371,13 @@ static int32_t summary1(struct jls_wf_f32_s * self, int64_t pos) {
 
 int32_t jls_wf_f32_data(struct jls_wf_f32_s * self, int64_t sample_id, const float * data, uint32_t data_length) {
     struct sample_buffer_s * b = self->sample_buffer;
+
+    if (!b) {
+        ROE(sample_buffer_alloc(self));
+        b = self->sample_buffer;
+        self->sample_id_offset = sample_id;
+    }
+    sample_id -= self->sample_id_offset;
 
     // todo check for & handle sample_id skips
     if (!b->offset) {

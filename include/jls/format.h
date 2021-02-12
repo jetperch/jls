@@ -276,7 +276,7 @@ enum jls_tag_e {
 
 struct jls_source_def_s {
     // store unique source_id in chunk_meta
-    uint16_t source_id;          // 0 reserved for global annotations, must be unique
+    uint16_t source_id;          // 0 reserved for global annotations, must be unique per instance
     // on disk: reserve 64 bytes as 0 for future use
     const char * name;
     const char * vendor;
@@ -287,17 +287,17 @@ struct jls_source_def_s {
 
 struct jls_signal_def_s {       // 0 reserved for VSR annotations
     // store unique signal_id in chunk_meta
-    uint16_t signal_id;
-    uint16_t source_id;          // must match a source_def
-    uint8_t signal_type;        // jls_signal_type_e
-    uint16_t rsv16_0;
-    uint32_t data_type;
-    uint32_t sample_rate;       // 0 for VSR
+    uint16_t signal_id;                 // 0 to JLS_SIGNAL_COUNT - 1, must be unique per instance
+    uint16_t source_id;                 // must match a source_def
+    uint8_t signal_type;                // jls_signal_type_e
+    uint16_t rsv16_0;                   // JLS_DATATYPE_*
+    uint32_t data_type;                 //
+    uint32_t sample_rate;               // 0 for VSR
     uint32_t samples_per_data;          // suggestion, will be rounded
     uint32_t sample_decimate_factor;    // definite
     uint32_t entries_per_summary;       // suggestion, will be rounded
     uint32_t summary_decimate_factor;   // definite
-    uint32_t utc_rate_auto;     // 0=off, else samples per UTC entry.
+    uint32_t utc_rate_auto;             // 0=off, else samples per UTC entry.
     // on disk: reserve 64 bytes as 0 for future use
     const char * name;
     const char * si_units;
