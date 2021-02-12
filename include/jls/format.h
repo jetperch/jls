@@ -294,7 +294,7 @@ struct jls_signal_def_s {       // 0 reserved for VSR annotations
     uint32_t data_type;
     uint32_t sample_rate;       // 0 for VSR
     uint32_t samples_per_data;          // suggestion, will be rounded
-    uint32_t samples_decimate_factor;   // definite
+    uint32_t sample_decimate_factor;    // definite
     uint32_t entries_per_summary;       // suggestion, will be rounded
     uint32_t summary_decimate_factor;   // definite
     uint32_t utc_rate_auto;     // 0=off, else samples per UTC entry.

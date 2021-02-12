@@ -315,7 +315,7 @@ static int32_t handle_signal_def(struct jls_rd_s * self) {
     ROE(payload_parse_u32(self, &s->data_type));
     ROE(payload_parse_u32(self, &s->sample_rate));
     ROE(payload_parse_u32(self, &s->samples_per_data));
-    ROE(payload_parse_u32(self, &s->samples_decimate_factor));
+    ROE(payload_parse_u32(self, &s->sample_decimate_factor));
     ROE(payload_parse_u32(self, &s->entries_per_summary));
     ROE(payload_parse_u32(self, &s->summary_decimate_factor));
     ROE(payload_parse_u32(self, &s->utc_rate_auto));

@@ -55,6 +55,7 @@ struct signal_info_s {
     struct chunk_s chunk_def;
     struct jls_signal_def_s signal_def;
     char name[1024];
+    char si_units[128];
     struct track_info_s tracks[4];   // index jls_track_type_e
     struct jls_wf_f32_s * signal_writer;
 
@@ -100,7 +101,7 @@ struct jls_signal_def_s SIGNAL_0 = {       // 0 reserved for VSR annotations
         .data_type = JLS_DATATYPE_F32,
         .sample_rate = 0,
         .samples_per_data = 10,
-        .samples_decimate_factor = 10,
+        .sample_decimate_factor = 10,
         .entries_per_summary = 10,
         .summary_decimate_factor = 10,
         .utc_rate_auto = 0,  // disabled
@@ -374,13 +375,30 @@ int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signal_def_s 
         return JLS_ERROR_PARAMETER_INVALID;
     }
 
+    // copy signal def
     info->signal_def = *signal;
     snprintf(info->name, sizeof(info->name), "%s", signal->name);
+    snprintf(info->si_units, sizeof(info->si_units), "%s", signal->si_units);
     info->signal_def.name = info->name;
+    struct jls_signal_def_s * def = &info->signal_def;
 
-    switch (signal->signal_type) {
+    // Open the signal
+    struct jls_wf_f32_def_s writer_def = {
+            .signal_id = def->signal_id,
+            .samples_per_data = def->samples_per_data,
+            .sample_decimate_factor = def->sample_decimate_factor,
+            .entries_per_summary = def->entries_per_summary,
+            .summary_decimate_factor = def->summary_decimate_factor,
+    };
+    ROE(jls_wf_f32_align_def(&writer_def));
+    def->samples_per_data = writer_def.samples_per_data;
+    def->sample_decimate_factor = writer_def.sample_decimate_factor;
+    def->entries_per_summary = writer_def.entries_per_summary;
+    def->summary_decimate_factor = writer_def.summary_decimate_factor;
+
+    switch (def->signal_type) {
         case JLS_SIGNAL_TYPE_FSR:
-            if (!signal->sample_rate) {
+            if (!def->sample_rate) {
                 JLS_LOGE("FSR requires sample rate");
                 return JLS_ERROR_PARAMETER_INVALID;
             }
@@ -390,9 +408,9 @@ int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signal_def_s 
             info->track_type = JLS_TAG_TRACK_FSR_DATA;
             break;
         case JLS_SIGNAL_TYPE_VSR:
-            if (signal->sample_rate) {
+            if (def->sample_rate) {
                 JLS_LOGE("VSR but sample rate specified, ignoring");
-                info->signal_def.sample_rate = 0;
+                def->sample_rate = 0;
             }
             info->data_tag = JLS_TAG_TRACK_VSR_DATA;
             info->summary_tag = JLS_TAG_TRACK_VSR_SUMMARY;
@@ -400,11 +418,11 @@ int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signal_def_s 
             info->track_type = JLS_TAG_TRACK_VSR_DATA;
             break;
         default:
-            JLS_LOGE("Invalid signal type: %d", (int) signal->signal_type);
+            JLS_LOGE("Invalid signal type: %d", (int) def->signal_type);
             return JLS_ERROR_PARAMETER_INVALID;
     }
 
-    if (signal->data_type != JLS_DATATYPE_F32) {
+    if (def->data_type != JLS_DATATYPE_F32) {
         JLS_LOGW("Only f32 datatype currently supported");
         // todo: support other data types.
         return JLS_ERROR_NOT_SUPPORTED;
@@ -412,19 +430,19 @@ int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signal_def_s 
 
     // construct payload
     buf_reset(self);
-    ROE(buf_wr_u16(self, signal->source_id));
-    ROE(buf_wr_u8(self, signal->signal_type));
+    ROE(buf_wr_u16(self, def->source_id));
+    ROE(buf_wr_u8(self, def->signal_type));
     ROE(buf_wr_u8(self, 0));  // reserved
-    ROE(buf_wr_u32(self, signal->data_type));
-    ROE(buf_wr_u32(self, info->signal_def.sample_rate));
-    ROE(buf_wr_u32(self, info->signal_def.samples_per_data));
-    ROE(buf_wr_u32(self, info->signal_def.samples_decimate_factor));
-    ROE(buf_wr_u32(self, info->signal_def.entries_per_summary));
-    ROE(buf_wr_u32(self, info->signal_def.summary_decimate_factor));
-    ROE(buf_wr_u32(self, signal->utc_rate_auto));
+    ROE(buf_wr_u32(self, def->data_type));
+    ROE(buf_wr_u32(self, def->sample_rate));
+    ROE(buf_wr_u32(self, def->samples_per_data));
+    ROE(buf_wr_u32(self, def->sample_decimate_factor));
+    ROE(buf_wr_u32(self, def->entries_per_summary));
+    ROE(buf_wr_u32(self, def->summary_decimate_factor));
+    ROE(buf_wr_u32(self, def->utc_rate_auto));
     ROE(buf_add_zero(self, 64));  // reserve space for future use.
-    ROE(buf_add_str(self, signal->name));
-    ROE(buf_add_str(self, signal->si_units));
+    ROE(buf_add_str(self, def->name));
+    ROE(buf_add_str(self, def->si_units));
     uint32_t payload_length = buf_size(self);
 
     // construct header
@@ -443,30 +461,21 @@ int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signal_def_s 
     self->payload_prev_length = payload_length;
     ROE(update_mra(self, &self->signal_mra, chunk));
 
-    if (signal->signal_type == JLS_SIGNAL_TYPE_FSR) {
+    if (def->signal_type == JLS_SIGNAL_TYPE_FSR) {
         ROE(track_wr_def(self, &info->tracks[JLS_TRACK_TYPE_FSR]));
         ROE(track_wr_head(self, &info->tracks[JLS_TRACK_TYPE_FSR]));
         ROE(track_wr_def(self, &info->tracks[JLS_TRACK_TYPE_ANNOTATION]));
         ROE(track_wr_head(self, &info->tracks[JLS_TRACK_TYPE_ANNOTATION]));
         ROE(track_wr_def(self, &info->tracks[JLS_TRACK_TYPE_UTC]));
         ROE(track_wr_head(self, &info->tracks[JLS_TRACK_TYPE_UTC]));
-    } else if (signal->signal_type == JLS_SIGNAL_TYPE_VSR) {
+    } else if (def->signal_type == JLS_SIGNAL_TYPE_VSR) {
         ROE(track_wr_def(self, &info->tracks[JLS_TRACK_TYPE_VSR]));
         ROE(track_wr_head(self, &info->tracks[JLS_TRACK_TYPE_VSR]));
         ROE(track_wr_def(self, &info->tracks[JLS_TRACK_TYPE_ANNOTATION]));
         ROE(track_wr_head(self, &info->tracks[JLS_TRACK_TYPE_ANNOTATION]));
     }
 
-    // Open the signal
-    struct jls_wf_f32_def_s def = {
-            .signal_id = signal->signal_id,
-            .samples_per_data = signal->samples_per_data,
-            .sample_decimate_factor = signal->samples_decimate_factor,
-            .entries_per_summary = signal->entries_per_summary,
-            .summary_decimate_factor = signal->summary_decimate_factor,
-    };
-    ROE(jls_wf_f32_open(&info->signal_writer, self, &def));
-
+    ROE(jls_wf_f32_open(&info->signal_writer, self, &writer_def));
     return 0;
 }
 
