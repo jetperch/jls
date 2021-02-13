@@ -24,6 +24,7 @@
 #include "jls/time.h"
 #include "jls/ec.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 
@@ -258,47 +259,44 @@ static void test_wr_signal_duplicate(void **state) {
 }
 #endif
 
-struct triangle_waveform_s {
-    float y_scale;
-    int32_t incr;
-    int32_t steps;
-    int32_t value;
-};
+#define WINDOW_SIZE (937)
 
-void triangle_fill(struct triangle_waveform_s * self, float * data, size_t count) {
-    for (size_t i = 0; i < count; ++i) {
-        if (self->value <= 0) {
-            self->incr = 1;
-        } else if (self->value >= self->steps) {
-            self->incr = -1;
-        }
-        self->value += self->incr;
-        data[i] = self->value * self->y_scale;
+float * gen_triangle(uint32_t period_samples, int64_t length_samples) {
+    float * y = malloc(sizeof(float) * (size_t) length_samples);
+    if (!y) {
+        return NULL;
     }
+    int64_t v_max = (period_samples + 1) / 2;
+    float offset = v_max / 2.0f;
+    float gain = 2.0f / v_max;
+    int64_t v = v_max / 2;
+    int64_t incr = 1;
+    for (int64_t i = 0; i < length_samples; ++i) {
+        y[i] = gain * (v - offset);
+        if (v <= 0) {
+            incr = 1;
+        } else if (v >= v_max) {
+            incr = -1;
+        }
+        v += incr;
+    }
+    return y;
 }
 
-#define WINDOW_SIZE (937)
 
 static void test_data(void **state) {
     (void) state;
     struct jls_wr_s * wr = NULL;
+    const int64_t sample_count = WINDOW_SIZE * 1000;
+    float * signal = gen_triangle(1000, sample_count);
+    assert_non_null(signal);
+
     assert_int_equal(0, jls_wr_open(&wr, filename));
     assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_3));
     assert_int_equal(0, jls_wr_signal_def(wr, &SIGNAL_5));
 
-    struct triangle_waveform_s twav = {
-            .y_scale = 0.001f,
-            .incr = 1,
-            .steps = 1000,
-            .value = 0,
-    };
-    float data[WINDOW_SIZE]; // random number
-    uint64_t sample_id = 0;
-
-    for (int i = 0; i < 1000; ++i) {
-        triangle_fill(&twav, data, WINDOW_SIZE);
-        assert_int_equal(0, jls_wr_fsr_f32(wr, 5, sample_id, data, WINDOW_SIZE));
-        sample_id += WINDOW_SIZE;
+    for (int sample_id = 0; sample_id < sample_count; sample_id += WINDOW_SIZE) {
+        assert_int_equal(0, jls_wr_fsr_f32(wr, 5, sample_id, signal + sample_id, WINDOW_SIZE));
     }
 
     assert_int_equal(0, jls_wr_close(wr));
@@ -313,8 +311,19 @@ static void test_data(void **state) {
     assert_int_equal(5, signals[1].signal_id);
     int64_t samples = 0;
     assert_int_equal(0, jls_rd_fsr_length(rd, 5, &samples));
-    assert_int_equal(sample_id, samples);
+    assert_int_equal(sample_count, samples);
+
+    // get entire first data chunk.
+    float data[2000];
+    assert_int_equal(0, jls_rd_fsr_f32(rd, 5, 0, data, 1000));
+    assert_memory_equal(signal, data, 1000 * sizeof(float));
+
+    // get span over 2nd - 4th data chunk.
+    assert_int_equal(0, jls_rd_fsr_f32(rd, 5, 1999, data, 1002));
+    assert_memory_equal(signal + 1999, data, 1002 * sizeof(float));
+
     jls_rd_close(rd);
+    free(signal);
 }
 
 int main(void) {

@@ -78,7 +78,7 @@ int32_t jls_rd_signals(struct jls_rd_s * self, struct jls_signal_def_s ** signal
 
 int32_t jls_rd_fsr_length(struct jls_rd_s * self, uint16_t signal_id, int64_t * samples);
 int32_t jls_rd_fsr_f32(struct jls_rd_s * self, uint16_t signal_id, int64_t start_sample_id,
-                       float * data, size_t data_length);
+                       float * data, int64_t data_length);
 
 
 int32_t jls_rd_annotations(struct jls_rd_s * self, uint16_t signal_id,

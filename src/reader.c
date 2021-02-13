@@ -563,12 +563,65 @@ int32_t jls_rd_signals(struct jls_rd_s * self, struct jls_signal_def_s ** signal
     return 0;
 }
 
+int32_t seek(struct jls_rd_s * self, uint16_t signal_id, uint8_t level, int64_t sample_id) {
+    if (!is_signal_defined(self, signal_id)) {
+        return JLS_ERROR_NOT_FOUND;
+    }
+    struct jls_signal_def_s * signal_def = &self->signal_def[signal_id];
+    if (signal_def->signal_type != JLS_SIGNAL_TYPE_FSR) {
+                JLS_LOGW("fsr_length not support for signal type %d", (int) signal_def->signal_type);
+        return JLS_ERROR_NOT_SUPPORTED;
+    }
+    struct signal_s * s = &self->signals[signal_id];
+    int64_t offset = 0;
+    int64_t * offsets = s->track_head_data[JLS_TRACK_TYPE_FSR];
+    int initial_level = JLS_SUMMARY_LEVEL_COUNT - 1;
+    for (; initial_level >= 0; --initial_level) {
+        if (offsets[initial_level]) {
+            offset = offsets[initial_level];
+            break;
+        }
+    }
+    if (!offset) {
+        return JLS_ERROR_NOT_FOUND;
+    }
+
+    for (int lvl = initial_level; lvl > level; --lvl) {
+        JLS_LOGI("signal %d, level %d, index=%" PRIi64, (int) signal_id, (int) lvl, offset);
+        int64_t step_size = signal_def->samples_per_data;
+        for (int k = 1; k < lvl; ++k) {
+            step_size *= signal_def->entries_per_summary;
+        }
+        ROE(jls_raw_chunk_seek(self->raw, offset));
+        ROE(rd(self));
+
+        int64_t * payload = (int64_t *) self->payload.start;
+        int64_t chunk_timestamp = payload[0];
+        int64_t chunk_entries = payload[1];
+        if (((2 + chunk_entries) * sizeof(int64_t)) > self->payload.length) {
+            JLS_LOGE("invalid payload length");
+            return JLS_ERROR_PARAMETER_INVALID;
+        }
+
+        int64_t idx = (sample_id - chunk_timestamp) / step_size;
+
+        JLS_LOGI("index level=%d, entries=%d, 0:%" PRIi64 ", 1:%" PRIi64 ", end:%" PRIi64,
+                 (int) lvl, (int) chunk_entries, payload[2], payload[3], payload[2 + payload[1] - 1]);
+        offset = payload[2 + idx];
+    }
+
+    ROE(jls_raw_chunk_seek(self->raw, offset));
+    return 0;
+}
+
+
 int32_t jls_rd_fsr_length(struct jls_rd_s * self, uint16_t signal_id, int64_t * samples) {
     if (!is_signal_defined(self, signal_id)) {
         return JLS_ERROR_NOT_FOUND;
     }
-    if (self->signal_def[signal_id].signal_type != JLS_SIGNAL_TYPE_FSR) {
-        JLS_LOGW("fsr_length not support for signal type %d", (int) self->signal_def[signal_id].signal_type);
+    struct jls_signal_def_s * signal_def = &self->signal_def[signal_id];
+    if (signal_def->signal_type != JLS_SIGNAL_TYPE_FSR) {
+        JLS_LOGW("fsr_length not support for signal type %d", (int) signal_def->signal_type);
         return JLS_ERROR_NOT_SUPPORTED;
     }
     struct signal_s * s = &self->signals[signal_id];
@@ -606,6 +659,30 @@ int32_t jls_rd_fsr_length(struct jls_rd_s * self, uint16_t signal_id, int64_t * 
     int64_t * payload = (int64_t *) self->payload.start;
     JLS_LOGI("samples: %" PRIi64 ", %" PRIi64, payload[0], payload[1]);
     *samples = payload[0] + payload[1];
+    return 0;
+}
+
+int32_t jls_rd_fsr_f32(struct jls_rd_s * self, uint16_t signal_id, int64_t start_sample_id,
+                       float * data, int64_t data_length) {
+    ROE(seek(self, signal_id, 0, start_sample_id));
+    while (data_length > 0) {
+        ROE(rd(self));
+        int64_t * i64 = ((int64_t*) self->payload.start);
+        int64_t chunk_sample_id = i64[0];
+        int64_t chunk_sample_count = i64[1];
+        int64_t idx_start = 0;
+        if (start_sample_id > chunk_sample_id) {
+            idx_start = start_sample_id - chunk_sample_id;
+        }
+        chunk_sample_count -= idx_start;
+        if (data_length < chunk_sample_count) {
+            chunk_sample_count = data_length;
+        }
+        float * f32 = (float *) &i64[2];
+        memcpy(data, f32 + idx_start, (size_t) chunk_sample_count * sizeof(float));
+        data += chunk_sample_count;
+        data_length -= chunk_sample_count;
+    }
     return 0;
 }
 
