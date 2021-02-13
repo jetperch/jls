@@ -187,7 +187,7 @@ static int32_t wr_data(struct jls_wf_f32_s * self) {
     }
     uint32_t payload_length = (uint32_t) (2 * sizeof(uint64_t) + b->offset * sizeof(float));
     int64_t pos = jls_wr_tell_prv(self->wr);
-    ROE(jls_wr_data_prv(self->wr, self->def.signal_id, 0, (uint8_t *) &b->timestamp, payload_length));
+    ROE(jls_wr_data_prv(self->wr, self->def.signal_id, (uint8_t *) &b->timestamp, payload_length));
     ROE(summary1(self, pos));
     b->timestamp += self->def.samples_per_data;
     b->offset = 0;
@@ -206,6 +206,10 @@ static int32_t wr_index(struct jls_wf_f32_s * self, uint8_t level) {
     if (idx->offset > idx->length) {
         JLS_LOGE("internal memory error");
     }
+    JLS_LOGI("wr_index level=%d, entries=%d, 0:%" PRIi64 ", end:%" PRIi64 " %p",
+             (int) level, (int) idx->offset, idx->data[0], idx->data[idx->offset - 1],
+             idx->data);
+
     uint32_t len = (uint32_t) ((2 + idx->offset) * sizeof(int64_t));
     return jls_wr_index_prv(self->wr, self->def.signal_id, level, (uint8_t *) &idx->timestamp, len);
 }
@@ -223,7 +227,7 @@ static int32_t wr_summary(struct jls_wf_f32_s * self, uint8_t level) {
     uint32_t payload_len = (uint32_t) (2 * sizeof(int64_t) + dst->offset * 4 * sizeof(float));
     ROE(wr_index(self, level));
 
-    ROE(jls_wr_data_prv(self->wr, self->def.signal_id, level, (uint8_t *) &dst->timestamp, payload_len));
+    ROE(jls_wr_summary_prv(self->wr, self->def.signal_id, level, (uint8_t *) &dst->timestamp, payload_len));
     ROE(summaryN(self, level + 1, pos_next));
 
     // compute new timestamp for that level
@@ -341,6 +345,7 @@ static int32_t summary1(struct jls_wf_f32_s * self, int64_t pos) {
 
     const double mean_scale = 1.0 / self->def.sample_decimate_factor;
     const double var_scale = 1.0 / (self->def.sample_decimate_factor - 1);
+    JLS_LOGI("1 add %" PRIi64 " @ %" PRIi64 " %p", pos, dst->index->offset, &dst->index->data[dst->index->offset]);
     dst->index->data[dst->index->offset++] = pos;
 
     uint32_t summaries_per = (uint32_t) (self->sample_buffer->offset / self->def.sample_decimate_factor);
@@ -406,7 +411,6 @@ int32_t jls_wf_f32_data(struct jls_wf_f32_s * self, int64_t sample_id, const flo
         data_length -= length;
         if (b->offset >= b->length) {
             ROE(wr_data(self));
-            b->timestamp += self->sample_buffer->length;
         }
     }
     return 0;

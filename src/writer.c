@@ -555,48 +555,55 @@ int64_t jls_wr_tell_prv(struct jls_wr_s * self) {
     return jls_raw_chunk_tell(self->raw);
 }
 
-int32_t jls_wr_data_prv(struct jls_wr_s * self, uint16_t signal_id, uint8_t level,
+int32_t jls_wr_data_prv(struct jls_wr_s * self, uint16_t signal_id,
                         const uint8_t * payload, uint32_t payload_length) {
     ROE(signal_validate(self, signal_id));
     struct signal_info_s * info = &self->signal_info[signal_id];
     struct track_info_s * track = &info->tracks[info->data_track_type];
     struct chunk_s chunk;
 
-    if (!level) {  // data chunk
-        chunk.hdr.item_next = 0;  // update later
-        chunk.hdr.item_prev = track->data.offset;
-        chunk.hdr.tag = info->data_tag;
-        chunk.hdr.rsv0_u8 = 0;
-        chunk.hdr.chunk_meta = signal_id | (0 << 12);
-        chunk.hdr.payload_length = payload_length;
-        chunk.hdr.payload_prev_length = self->payload_prev_length;
-        chunk.offset = jls_raw_chunk_tell(self->raw);
+    chunk.hdr.item_next = 0;  // update later
+    chunk.hdr.item_prev = track->data.offset;
+    chunk.hdr.tag = info->data_tag;
+    chunk.hdr.rsv0_u8 = 0;
+    chunk.hdr.chunk_meta = signal_id | (0 << 12);
+    chunk.hdr.payload_length = payload_length;
+    chunk.hdr.payload_prev_length = self->payload_prev_length;
+    chunk.offset = jls_raw_chunk_tell(self->raw);
 
-        // write
-        ROE(jls_raw_wr(self->raw, &chunk.hdr, payload));
-        self->payload_prev_length = chunk.hdr.payload_length;
-        ROE(update_mra(self, &track->data, &chunk));
-    } else {  // summary chunk
-        chunk.hdr.item_next = 0;  // update later
-        chunk.hdr.item_prev = track->summary[level].offset;
-        chunk.hdr.tag = info->summary_tag;
-        chunk.hdr.rsv0_u8 = 0;
-        chunk.hdr.chunk_meta = signal_id | (((uint16_t) level) << 12);
-        chunk.hdr.payload_length = payload_length;
-        chunk.hdr.payload_prev_length = self->payload_prev_length;
-        chunk.offset = jls_raw_chunk_tell(self->raw);
+    // write
+    ROE(jls_raw_wr(self->raw, &chunk.hdr, payload));
+    self->payload_prev_length = chunk.hdr.payload_length;
+    ROE(update_mra(self, &track->data, &chunk));
 
-        // write
-        ROE(jls_raw_wr(self->raw, &chunk.hdr, payload));
-        self->payload_prev_length = chunk.hdr.payload_length;
-        ROE(update_mra(self, &track->summary[level], &chunk));
-    }
-
-    if (!track->head_offsets[level]) {
-        track->head_offsets[level] = chunk.offset;
+    if (!track->head_offsets[0]) {
+        track->head_offsets[0] = chunk.offset;
         ROE(track_wr_head(self, track));
     }
 
+    return 0;
+}
+
+int32_t jls_wr_summary_prv(struct jls_wr_s * self, uint16_t signal_id, uint8_t level,
+                           const uint8_t * payload, uint32_t payload_length) {
+    ROE(signal_validate(self, signal_id));
+    struct signal_info_s * info = &self->signal_info[signal_id];
+    struct track_info_s * track = &info->tracks[info->data_track_type];
+    struct chunk_s chunk;
+
+    chunk.hdr.item_next = 0;  // update later
+    chunk.hdr.item_prev = track->summary[level].offset;
+    chunk.hdr.tag = info->summary_tag;
+    chunk.hdr.rsv0_u8 = 0;
+    chunk.hdr.chunk_meta = signal_id | (((uint16_t) level) << 12);
+    chunk.hdr.payload_length = payload_length;
+    chunk.hdr.payload_prev_length = self->payload_prev_length;
+    chunk.offset = jls_raw_chunk_tell(self->raw);
+
+    // write
+    ROE(jls_raw_wr(self->raw, &chunk.hdr, payload));
+    self->payload_prev_length = chunk.hdr.payload_length;
+    ROE(update_mra(self, &track->summary[level], &chunk));
     return 0;
 }
 
@@ -617,9 +624,17 @@ int32_t jls_wr_index_prv(struct jls_wr_s * self, uint16_t signal_id, uint8_t lev
     chunk.offset = jls_raw_chunk_tell(self->raw);
 
     // write
+    JLS_LOGI("wr_index(signal_id=%d, level=%d, offset=%d)",
+             (int) signal_id, (int) level, jls_raw_chunk_tell(self->raw));
     ROE(jls_raw_wr(self->raw, &chunk.hdr, payload));
     self->payload_prev_length = chunk.hdr.payload_length;
     ROE(update_mra(self, &track->index[level], &chunk));
+
+    if (!track->head_offsets[level]) {
+        track->head_offsets[level] = chunk.offset;
+        ROE(track_wr_head(self, track));
+    }
+
     return 0;
 }
 

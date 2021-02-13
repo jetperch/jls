@@ -313,7 +313,7 @@ static void test_data(void **state) {
     assert_int_equal(5, signals[1].signal_id);
     int64_t samples = 0;
     assert_int_equal(0, jls_rd_fsr_length(rd, 5, &samples));
-    assert_int_equal(WINDOW_SIZE * 1000, samples);
+    assert_int_equal(sample_id, samples);
     jls_rd_close(rd);
 }
 

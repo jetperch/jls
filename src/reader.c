@@ -587,7 +587,7 @@ int32_t jls_rd_fsr_length(struct jls_rd_s * self, uint16_t signal_id, int64_t * 
     }
 
     for (int lvl = level; lvl > 0; --lvl) {
-        JLS_LOGI("signal %d, level %d, index=%" PRIi64, (int) signal_id, lvl, offset);
+        JLS_LOGI("signal %d, level %d, index=%" PRIi64, (int) signal_id, (int) lvl, offset);
         ROE(jls_raw_chunk_seek(self->raw, offset));
         ROE(rd(self));
 
@@ -596,13 +596,15 @@ int32_t jls_rd_fsr_length(struct jls_rd_s * self, uint16_t signal_id, int64_t * 
             JLS_LOGE("invalid payload length");
             return JLS_ERROR_PARAMETER_INVALID;
         }
-        JLS_LOGI("idx0 = %" PRIi64, payload[2]);
+        JLS_LOGI("index level=%d, entries=%d, 0:%" PRIi64 ", 1:%" PRIi64 ", end:%" PRIi64,
+                 (int) lvl, (int) payload[1], payload[2], payload[3], payload[2 + payload[1] - 1]);
         offset = payload[2 + payload[1] - 1];
     }
 
     ROE(jls_raw_chunk_seek(self->raw, offset));
     ROE(rd(self));
     int64_t * payload = (int64_t *) self->payload.start;
+    JLS_LOGI("samples: %" PRIi64 ", %" PRIi64, payload[0], payload[1]);
     *samples = payload[0] + payload[1];
     return 0;
 }
