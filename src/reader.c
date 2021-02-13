@@ -263,7 +263,7 @@ static int32_t rd(struct jls_rd_s * self) {
 }
 
 static int32_t scan_sources(struct jls_rd_s * self) {
-    JLS_LOGI("scan_sources");
+    JLS_LOGD1("scan_sources");
     ROE(jls_raw_chunk_seek(self->raw, self->source_head.offset));
     while (1) {
         ROE(rd(self));
@@ -279,7 +279,7 @@ static int32_t scan_sources(struct jls_rd_s * self) {
             ROE(payload_parse_str(self, (char **) &src->version));
             ROE(payload_parse_str(self, (char **) &src->serial_number));
             src->source_id = source_id;  // indicate that this source is valid!
-            JLS_LOGI("Found source %d : %s", (int) source_id, src->name);
+            JLS_LOGD1("Found source %d : %s", (int) source_id, src->name);
         }
         if (!self->chunk_cur.hdr.item_next) {
             break;
@@ -333,7 +333,7 @@ static int32_t handle_signal_def(struct jls_rd_s * self) {
     ROE(payload_parse_str(self, (char **) &s->si_units));
     if (0 == signal_validate(self, signal_id, s)) {  // validate passed
         s->signal_id = signal_id;  // indicate that this signal is valid
-        JLS_LOGI("Found signal %d : %s", (int) signal_id, s->name);
+        JLS_LOGD1("Found signal %d : %s", (int) signal_id, s->name);
     }  // else skip
     return 0;
 }
@@ -414,7 +414,7 @@ static int32_t handle_track_head(struct jls_rd_s * self, int64_t pos) {
 }
 
 static int32_t scan_signals(struct jls_rd_s * self) {
-    JLS_LOGI("scan_signals");
+    JLS_LOGD1("scan_signals");
     ROE(jls_raw_chunk_seek(self->raw, self->signal_head.offset));
     while (1) {
         ROE(rd(self));
@@ -451,8 +451,7 @@ static int32_t scan(struct jls_rd_s * self) {
             return rc;
         }
 
-        JLS_LOGI("tag %d : %s", self->chunk_cur.hdr.tag, jls_tag_to_name(self->chunk_cur.hdr.tag));
-
+        JLS_LOGD1("scan tag %d : %s", self->chunk_cur.hdr.tag, jls_tag_to_name(self->chunk_cur.hdr.tag));
         switch (self->chunk_cur.hdr.tag) {
             case JLS_TAG_USER_DATA:
                 found |= 1;
@@ -480,7 +479,7 @@ static int32_t scan(struct jls_rd_s * self) {
                 break;  // skip
         }
     }
-    JLS_LOGI("found initial tags");
+    JLS_LOGD1("found initial tags");
     ROE(scan_sources(self));
     ROE(scan_signals(self));
     return 0;
@@ -587,7 +586,7 @@ int32_t seek(struct jls_rd_s * self, uint16_t signal_id, uint8_t level, int64_t 
     }
 
     for (int lvl = initial_level; lvl > level; --lvl) {
-        JLS_LOGI("signal %d, level %d, index=%" PRIi64, (int) signal_id, (int) lvl, offset);
+        JLS_LOGD3("signal %d, level %d, index=%" PRIi64, (int) signal_id, (int) lvl, offset);
 
         // compute the step size in samples between each index entry.
         int64_t step_size = signal_def->samples_per_data;  // each data chunk
@@ -610,8 +609,8 @@ int32_t seek(struct jls_rd_s * self, uint16_t signal_id, uint8_t level, int64_t 
 
         int64_t idx = (sample_id - chunk_timestamp) / step_size;
 
-        JLS_LOGI("index level=%d, entries=%d, 0:%" PRIi64 ", 1:%" PRIi64 ", end:%" PRIi64,
-                 (int) lvl, (int) chunk_entries, payload[2], payload[3], payload[2 + payload[1] - 1]);
+        JLS_LOGD3("index level=%d, entries=%d, 0:%" PRIi64 ", 1:%" PRIi64 ", end:%" PRIi64,
+                  (int) lvl, (int) chunk_entries, payload[2], payload[3], payload[2 + payload[1] - 1]);
         offset = payload[2 + idx];
     }
 
@@ -645,7 +644,7 @@ int32_t jls_rd_fsr_length(struct jls_rd_s * self, uint16_t signal_id, int64_t * 
     }
 
     for (int lvl = level; lvl > 0; --lvl) {
-        JLS_LOGI("signal %d, level %d, index=%" PRIi64, (int) signal_id, (int) lvl, offset);
+        JLS_LOGD3("signal %d, level %d, index=%" PRIi64, (int) signal_id, (int) lvl, offset);
         ROE(jls_raw_chunk_seek(self->raw, offset));
         ROE(rd(self));
 
@@ -654,15 +653,15 @@ int32_t jls_rd_fsr_length(struct jls_rd_s * self, uint16_t signal_id, int64_t * 
             JLS_LOGE("invalid payload length");
             return JLS_ERROR_PARAMETER_INVALID;
         }
-        JLS_LOGI("index level=%d, entries=%d, 0:%" PRIi64 ", 1:%" PRIi64 ", end:%" PRIi64,
-                 (int) lvl, (int) payload[1], payload[2], payload[3], payload[2 + payload[1] - 1]);
+        JLS_LOGD3("index level=%d, entries=%d, 0:%" PRIi64 ", 1:%" PRIi64 ", end:%" PRIi64,
+                  (int) lvl, (int) payload[1], payload[2], payload[3], payload[2 + payload[1] - 1]);
         offset = payload[2 + payload[1] - 1];
     }
 
     ROE(jls_raw_chunk_seek(self->raw, offset));
     ROE(rd(self));
     int64_t * payload = (int64_t *) self->payload.start;
-    JLS_LOGI("samples: %" PRIi64 ", %" PRIi64, payload[0], payload[1]);
+    JLS_LOGD1("fsr_length = %" PRIi64 " = %" PRIi64 " + %" PRIi64 "", payload[0] + payload[1], payload[0], payload[1]);
     *samples = payload[0] + payload[1];
     return 0;
 }

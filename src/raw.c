@@ -344,7 +344,7 @@ int32_t jls_raw_wr_payload(struct jls_raw_s * self, uint32_t payload_length, con
 
 int32_t jls_raw_rd(struct jls_raw_s * self, struct jls_chunk_header_s * hdr, uint32_t payload_length_max, uint8_t * payload) {
     RLE(jls_raw_rd_header(self, hdr));
-    JLS_LOGI("rd %" PRId64 " : %d %s", self->offset, (int) hdr->tag, jls_tag_to_name(hdr->tag));
+    JLS_LOGD1("rd %" PRId64 " : %d %s", self->offset, (int) hdr->tag, jls_tag_to_name(hdr->tag));
     RLE(jls_raw_rd_payload(self, payload_length_max, payload));
     invalidate_current_chunk(self);
     self->offset = self->fpos;

@@ -336,13 +336,13 @@ static int32_t track_wr_head(struct jls_wr_s * self, struct track_info_s * track
         chunk->hdr.payload_length = sizeof(track_info->head_offsets);
         chunk->hdr.payload_prev_length = self->payload_prev_length;
         chunk->offset = jls_raw_chunk_tell(self->raw);
-        JLS_LOGI("track_wr_head %d 0x%02x new %" PRIi64, (int) chunk->hdr.chunk_meta, chunk->hdr.tag, chunk->offset);
+        JLS_LOGD1("track_wr_head %d 0x%02x new %" PRIi64, (int) chunk->hdr.chunk_meta, chunk->hdr.tag, chunk->offset);
         ROE(jls_raw_wr(self->raw, &chunk->hdr, (uint8_t *) track_info->head_offsets));
         self->payload_prev_length = sizeof(track_info->head_offsets);
         track_info->head = *chunk;
         return update_mra(self, &self->signal_mra, chunk);
     } else {
-        JLS_LOGI("track_wr_head %d 0x%02x update %" PRIi64, (int) chunk->hdr.chunk_meta, chunk->hdr.tag, chunk->offset);
+        JLS_LOGD1("track_wr_head %d 0x%02x update %" PRIi64, (int) chunk->hdr.chunk_meta, chunk->hdr.tag, chunk->offset);
         int64_t pos = jls_raw_chunk_tell(self->raw);
         ROE(jls_raw_chunk_seek(self->raw, chunk->offset));
         ROE(jls_raw_wr_payload(self->raw, sizeof(track_info->head_offsets), (uint8_t *) track_info->head_offsets));
@@ -572,11 +572,13 @@ int32_t jls_wr_data_prv(struct jls_wr_s * self, uint16_t signal_id,
     chunk.offset = jls_raw_chunk_tell(self->raw);
 
     // write
-    int64_t * u64 = (int64_t *) payload;
-    JLS_LOGI("wr_data(signal_id=%d, timestamp=%" PRIi64 ", entries=%" PRIi64 ") => offset=%" PRIi64,
-             (int) signal_id,
-             u64[0], u64[1],
-             jls_raw_chunk_tell(self->raw));
+    if (JLS_LOG_CHECK_STATIC(JLS_LOG_LEVEL_DEBUG3)) {
+        int64_t * u64 = (int64_t *) payload;
+        JLS_LOGD3("wr_data(signal_id=%d, timestamp=%" PRIi64 ", entries=%" PRIi64 ") => offset=%" PRIi64,
+                  (int) signal_id,
+                  u64[0], u64[1],
+                  jls_raw_chunk_tell(self->raw));
+    }
 
     ROE(jls_raw_wr(self->raw, &chunk.hdr, payload));
     self->payload_prev_length = chunk.hdr.payload_length;
@@ -630,12 +632,14 @@ int32_t jls_wr_index_prv(struct jls_wr_s * self, uint16_t signal_id, uint8_t lev
     chunk.offset = jls_raw_chunk_tell(self->raw);
 
     // write
-    int64_t * u64 = (int64_t *) payload;
-    JLS_LOGI("wr_index(signal_id=%d, level=%d, timestamp=%" PRIi64 ", entries=%" PRIi64
-             ", [0]=%" PRIi64 ", [%d]=%" PRIi64 ") => offset=%" PRIi64,
-             (int) signal_id, (int) level,
-             u64[0], u64[1], u64[2], (int) u64[1] - 1, u64[2 + u64[1] - 1],
-             jls_raw_chunk_tell(self->raw));
+    if (JLS_LOG_CHECK_STATIC(JLS_LOG_LEVEL_DEBUG3)) {
+        int64_t *u64 = (int64_t *) payload;
+        JLS_LOGD3("wr_index(signal_id=%d, level=%d, timestamp=%" PRIi64 ", entries=%" PRIi64
+                  ", [0]=%" PRIi64 ", [%d]=%" PRIi64 ") => offset=%" PRIi64,
+                  (int) signal_id, (int) level,
+                  u64[0], u64[1], u64[2], (int) u64[1] - 1, u64[2 + u64[1] - 1],
+                  jls_raw_chunk_tell(self->raw));
+    }
     ROE(jls_raw_wr(self->raw, &chunk.hdr, payload));
     self->payload_prev_length = chunk.hdr.payload_length;
     ROE(update_mra(self, &track->index[level], &chunk));
