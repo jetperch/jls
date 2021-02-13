@@ -569,7 +569,7 @@ int32_t seek(struct jls_rd_s * self, uint16_t signal_id, uint8_t level, int64_t 
     }
     struct jls_signal_def_s * signal_def = &self->signal_def[signal_id];
     if (signal_def->signal_type != JLS_SIGNAL_TYPE_FSR) {
-                JLS_LOGW("fsr_length not support for signal type %d", (int) signal_def->signal_type);
+        JLS_LOGW("fsr_length not support for signal type %d", (int) signal_def->signal_type);
         return JLS_ERROR_NOT_SUPPORTED;
     }
     struct signal_s * s = &self->signals[signal_id];
@@ -588,9 +588,14 @@ int32_t seek(struct jls_rd_s * self, uint16_t signal_id, uint8_t level, int64_t 
 
     for (int lvl = initial_level; lvl > level; --lvl) {
         JLS_LOGI("signal %d, level %d, index=%" PRIi64, (int) signal_id, (int) lvl, offset);
-        int64_t step_size = signal_def->samples_per_data;
-        for (int k = 1; k < lvl; ++k) {
-            step_size *= signal_def->entries_per_summary;
+
+        // compute the step size in samples between each index entry.
+        int64_t step_size = signal_def->samples_per_data;  // each data chunk
+        if (lvl > 1) {
+            step_size = signal_def->entries_per_summary * signal_def->summary_decimate_factor;
+            for (int k = 2; k < lvl; ++k) {
+                step_size *= signal_def->entries_per_summary;
+            }
         }
         ROE(jls_raw_chunk_seek(self->raw, offset));
         ROE(rd(self));

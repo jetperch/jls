@@ -206,10 +206,6 @@ static int32_t wr_index(struct jls_wf_f32_s * self, uint8_t level) {
     if (idx->offset > idx->length) {
         JLS_LOGE("internal memory error");
     }
-    JLS_LOGI("wr_index level=%d, entries=%d, 0:%" PRIi64 ", end:%" PRIi64 " %p",
-             (int) level, (int) idx->offset, idx->data[0], idx->data[idx->offset - 1],
-             idx->data);
-
     uint32_t len = (uint32_t) ((2 + idx->offset) * sizeof(int64_t));
     return jls_wr_index_prv(self->wr, self->def.signal_id, level, (uint8_t *) &idx->timestamp, len);
 }
@@ -231,9 +227,9 @@ static int32_t wr_summary(struct jls_wf_f32_s * self, uint8_t level) {
     ROE(summaryN(self, level + 1, pos_next));
 
     // compute new timestamp for that level
-    int64_t skip = (self->def.samples_per_data / self->def.sample_decimate_factor) * self->def.entries_per_summary;
-    for (uint8_t lvl = level; lvl > 1; --lvl) {
-        skip *= (level - 1) * (self->def.entries_per_summary * self->def.summary_decimate_factor);
+    int64_t skip = self->def.entries_per_summary * self->def.sample_decimate_factor;
+    if (level > 1) {
+        skip *= self->def.summary_decimate_factor;
     }
     dst->index->timestamp += skip;
     dst->timestamp += skip;
@@ -345,7 +341,7 @@ static int32_t summary1(struct jls_wf_f32_s * self, int64_t pos) {
 
     const double mean_scale = 1.0 / self->def.sample_decimate_factor;
     const double var_scale = 1.0 / (self->def.sample_decimate_factor - 1);
-    JLS_LOGI("1 add %" PRIi64 " @ %" PRIi64 " %p", pos, dst->index->offset, &dst->index->data[dst->index->offset]);
+    // JLS_LOGI("1 add %" PRIi64 " @ %" PRIi64 " %p", pos, dst->index->offset, &dst->index->data[dst->index->offset]);
     dst->index->data[dst->index->offset++] = pos;
 
     uint32_t summaries_per = (uint32_t) (self->sample_buffer->offset / self->def.sample_decimate_factor);

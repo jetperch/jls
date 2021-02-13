@@ -322,6 +322,10 @@ static void test_data(void **state) {
     assert_int_equal(0, jls_rd_fsr_f32(rd, 5, 1999, data, 1002));
     assert_memory_equal(signal + 1999, data, 1002 * sizeof(float));
 
+    // get last few samples
+    assert_int_equal(0, jls_rd_fsr_f32(rd, 5, sample_count - 5, data, 5));
+    assert_memory_equal(signal + sample_count - 5, data, 5 * sizeof(float));
+
     jls_rd_close(rd);
     free(signal);
 }
