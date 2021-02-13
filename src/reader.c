@@ -20,15 +20,17 @@
 #include "jls/ec.h"
 #include "jls/log.h"
 #include "crc32.h"
+#include <inttypes.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
-#include <inttypes.h>
 
 #define PAYLOAD_BUFFER_SIZE_DEFAULT (1 << 25)   // 32 MB
 #define STRING_BUFFER_SIZE_DEFAULT (1 << 23)    // 8 MB
 #define ANNOTATIONS_SIZE_DEFAULT (1 << 20)      // 1 MB
+#define F32_BUF_LENGTH_MIN (1 << 16)
 #define SIGNAL_MASK  (0x0fff)
 
 
@@ -87,6 +89,12 @@ struct strings_s {
     char * end;
 };
 
+struct f32_buf_s {
+    float * start;
+    float * end;
+    size_t alloc_length;  // in float
+};
+
 struct signal_s {
     int64_t timestamp_start;
     int64_t timestamp_end;
@@ -108,6 +116,7 @@ struct jls_rd_s {
     struct payload_s payload;
     struct strings_s * strings_tail;
     struct strings_s * strings_head;
+    struct f32_buf_s * f32_buf;
 
     struct chunk_s source_head;  // source_def
     struct chunk_s signal_head;  // signal_det, track_*_def, track_*_head
@@ -142,6 +151,32 @@ static void strings_free(struct jls_rd_s * self) {
         free(s);
         s = n;
     }
+}
+
+static void f32_buf_free(struct jls_rd_s * self) {
+    if (self->f32_buf) {
+        free(self->f32_buf);
+        self->f32_buf = NULL;
+    }
+}
+
+static int32_t f32_buf_alloc(struct jls_rd_s * self, size_t length) {
+    if ((self->f32_buf) && (self->f32_buf->alloc_length >= length)) {
+        return 0;
+    }
+    f32_buf_free(self);
+    if (length < F32_BUF_LENGTH_MIN) {
+        length = F32_BUF_LENGTH_MIN;
+    }
+    struct f32_buf_s * b = malloc(sizeof(struct f32_buf_s) + length * sizeof(float));
+    if (!b) {
+        return JLS_ERROR_NOT_ENOUGH_MEMORY;
+    }
+    b->start = (float *) &b[1];
+    b->end = b->start + length;
+    b->alloc_length = length;
+    self->f32_buf = b;
+    return 0;
 }
 
 static int32_t payload_skip(struct jls_rd_s * self, size_t count) {
@@ -668,6 +703,9 @@ int32_t jls_rd_fsr_length(struct jls_rd_s * self, uint16_t signal_id, int64_t * 
 
 int32_t jls_rd_fsr_f32(struct jls_rd_s * self, uint16_t signal_id, int64_t start_sample_id,
                        float * data, int64_t data_length) {
+    if (data_length <= 0) {
+        return 0;
+    }
     ROE(seek(self, signal_id, 0, start_sample_id));
     while (data_length > 0) {
         ROE(rd(self));
@@ -686,6 +724,80 @@ int32_t jls_rd_fsr_f32(struct jls_rd_s * self, uint16_t signal_id, int64_t start
         memcpy(data, f32 + idx_start, (size_t) chunk_sample_count * sizeof(float));
         data += chunk_sample_count;
         data_length -= chunk_sample_count;
+    }
+    return 0;
+}
+
+int32_t jls_rd_fsr_f32_summary(struct jls_rd_s * self, uint16_t signal_id,
+                               int64_t start_sample_id, int64_t increment,
+                               float * data, int64_t data_length) {
+    if (data_length <= 0) {
+        return 0;
+    }
+    if (increment <= 0) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
+    ROE(f32_buf_alloc(self, (size_t) increment));
+    struct f32_buf_s * b = self->f32_buf;
+    int64_t buf_offset = 0;
+
+    ROE(seek(self, signal_id, 0, start_sample_id));
+    ROE(rd(self));
+    int64_t * i64 = ((int64_t*) self->payload.start);
+    int64_t chunk_sample_id = i64[0];
+    float * src = (float *) &i64[2];
+    float * src_end = src + i64[1];
+    if (start_sample_id > chunk_sample_id) {
+        src += start_sample_id - chunk_sample_id;
+    }
+    double v_mean = 0.0;
+    float v_min = INFINITY;
+    float v_max = -INFINITY;
+    double v_var = 0.0;
+    double mean_scale = 1.0 / increment;
+    double var_scale = 1.0 / (increment - 1.0);
+    float v;
+
+    while (data_length > 0) {
+        if (src >= src_end) {
+            ROE(rd(self));
+            i64 = ((int64_t*) self->payload.start);
+            chunk_sample_id = i64[0];
+            src = (float *) &i64[2];
+            src_end = src + i64[1];
+        }
+        v = *src++;
+        v_mean += v;
+        if (v < v_min) {
+            v_min = v;
+        }
+        if (v > v_max) {
+            v_max = v;
+        }
+        b->start[buf_offset++] = v;
+
+        if (buf_offset >= increment) {
+            v_mean *= mean_scale;
+            v_var = 0.0;
+            for (int64_t i = 0; i < increment; ++i) {
+                double v_diff = b->start[i] - v_mean;
+                v_var += v_diff * v_diff;
+            }
+            v_var *= var_scale;
+
+            data[0] = (float) v_mean;
+            data[1] = v_min;
+            data[2] = v_max;
+            data[3] = (float) sqrt(v_var);
+            data += 4;
+
+            buf_offset = 0;
+            v_mean = 0.0;
+            v_min = INFINITY;
+            v_max = -INFINITY;
+            v_var = 0.0;
+            --data_length;
+        }
     }
     return 0;
 }

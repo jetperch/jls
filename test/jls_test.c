@@ -23,12 +23,13 @@
 #include "jls/format.h"
 #include "jls/time.h"
 #include "jls/ec.h"
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 
-#define SKIP_BASIC 1
+#define SKIP_BASIC 0
 
 const char * filename = "tmp.jls";
 const uint8_t USER_DATA_1[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
@@ -283,7 +284,6 @@ float * gen_triangle(uint32_t period_samples, int64_t length_samples) {
     return y;
 }
 
-
 static void test_data(void **state) {
     (void) state;
     struct jls_wr_s * wr = NULL;
@@ -330,6 +330,65 @@ static void test_data(void **state) {
     free(signal);
 }
 
+static void compare_stats(float * data, float * src, size_t src_length) {
+    double v_mean = 0.0f;
+    float v_min = INFINITY;
+    float v_max = -INFINITY;
+    double v_var = 0.0f;
+    for (size_t i = 0; i < src_length; ++i) {
+        float v = src[i];
+        v_mean += v;
+        if (v < v_min) {
+            v_min = v;
+        }
+        if (v > v_max) {
+            v_max = v;
+        }
+    }
+    v_mean /= src_length;
+    for (int i = 0; i < src_length; ++i) {
+        double v_diff = src[i] - v_mean;
+        v_var += v_diff * v_diff;
+    }
+    v_var /= src_length - 1;
+    float v_std = (float) sqrt(v_var);
+    assert_float_equal(v_mean, data[0], 1e-7);
+    assert_float_equal(v_min, data[1], 1e-7);
+    assert_float_equal(v_max, data[2], 1e-7);
+    assert_float_equal(v_std, data[3], 1e-7);
+}
+
+static void test_incr_data_data(void **state) {
+    (void) state;
+    struct jls_wr_s * wr = NULL;
+    const int64_t sample_count = WINDOW_SIZE * 1000;
+    float * signal = gen_triangle(1000, sample_count);
+    assert_non_null(signal);
+
+    assert_int_equal(0, jls_wr_open(&wr, filename));
+    assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_3));
+    assert_int_equal(0, jls_wr_signal_def(wr, &SIGNAL_5));
+    assert_true(sample_count <= UINT32_MAX);
+    assert_int_equal(0, jls_wr_fsr_f32(wr, 5, 0, signal, (uint32_t) sample_count));
+    assert_int_equal(0, jls_wr_close(wr));
+
+    struct jls_rd_s * rd = NULL;
+    assert_int_equal(0, jls_rd_open(&rd, filename));
+
+    float data[2000][4];
+    // within a single data chunk
+    assert_int_equal(0, jls_rd_fsr_f32_summary(rd, 5, 0, 10, data[0], 100));
+    compare_stats(data[0], signal, 10);
+    compare_stats(data[1], signal + 10, 10);
+
+    // todo: aligned across data chunks
+    // todo: unaligned across data chunks
+    // todo: larger than a single data chunk
+
+    jls_rd_close(rd);
+    free(signal);
+}
+
 int main(void) {
     const struct CMUnitTest tests[] = {
 #if !SKIP_BASIC
@@ -342,6 +401,7 @@ int main(void) {
             cmocka_unit_test(test_wr_signal_duplicate),
 #endif
             cmocka_unit_test(test_data),
+            cmocka_unit_test(test_incr_data_data),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
