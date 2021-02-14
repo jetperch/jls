@@ -20,6 +20,7 @@
 #include "jls/ec.h"
 #include "jls/log.h"
 #include "crc32.h"
+#include "running_statistics.h"
 #include <inttypes.h>
 #include <math.h>
 #include <stdio.h>
@@ -32,6 +33,7 @@
 #define ANNOTATIONS_SIZE_DEFAULT (1 << 20)      // 1 MB
 #define F32_BUF_LENGTH_MIN (1 << 16)
 #define SIGNAL_MASK  (0x0fff)
+#define DECIMATE_PER_DURATION (25)
 
 
 #define ROE(x)  do {                        \
@@ -386,6 +388,13 @@ static bool is_signal_defined(struct jls_rd_s * self, uint16_t signal_id) {
     return true;
 }
 
+static bool is_signal_defined_type(struct jls_rd_s * self, uint16_t signal_id, enum jls_signal_type_e type) {
+    if (!is_signal_defined(self, signal_id)) {
+        return false;
+    }
+    return self->signal_def[signal_id].signal_type == type;
+}
+
 static inline uint8_t tag_parse_track_type(uint8_t tag) {
     return (tag >> 3) & 3;
 }
@@ -655,13 +664,8 @@ int32_t seek(struct jls_rd_s * self, uint16_t signal_id, uint8_t level, int64_t 
 
 
 int32_t jls_rd_fsr_length(struct jls_rd_s * self, uint16_t signal_id, int64_t * samples) {
-    if (!is_signal_defined(self, signal_id)) {
-        return JLS_ERROR_NOT_FOUND;
-    }
-    struct jls_signal_def_s * signal_def = &self->signal_def[signal_id];
-    if (signal_def->signal_type != JLS_SIGNAL_TYPE_FSR) {
-        JLS_LOGW("fsr_length not support for signal type %d", (int) signal_def->signal_type);
-        return JLS_ERROR_NOT_SUPPORTED;
+    if (!is_signal_defined_type(self, signal_id, JLS_SIGNAL_TYPE_FSR)) {
+        return JLS_ERROR_PARAMETER_INVALID;
     }
     struct signal_s * s = &self->signals[signal_id];
     int64_t offset = 0;
@@ -703,6 +707,9 @@ int32_t jls_rd_fsr_length(struct jls_rd_s * self, uint16_t signal_id, int64_t * 
 
 int32_t jls_rd_fsr_f32(struct jls_rd_s * self, uint16_t signal_id, int64_t start_sample_id,
                        float * data, int64_t data_length) {
+    if (!is_signal_defined_type(self, signal_id, JLS_SIGNAL_TYPE_FSR)) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
     if (data_length <= 0) {
         return 0;
     }
@@ -728,17 +735,158 @@ int32_t jls_rd_fsr_f32(struct jls_rd_s * self, uint16_t signal_id, int64_t start
     return 0;
 }
 
+static int64_t round_up_to_multiple_i64(int64_t x, int64_t m) {
+    return ((x + m - 1) / m) * m;
+}
+
+static inline void floats_to_stats(struct statistics_s * stats, float * data, int64_t count) {
+    stats->k = count;
+    stats->m = data[0];
+    stats->min = data[1];
+    stats->max = data[2];
+    if (count > 1) {
+        stats->s = ((double) data[3]) * data[3] * (count - 1);
+    } else {
+        stats->s = 0.0;
+    }
+}
+
+static inline void stats_to_float(float * data, struct statistics_s * stats) {
+    data[0] = (float) stats->m;
+    data[1] = (float) stats->min;
+    data[2] = (float) stats->max;
+    data[3] = (float) sqrt(statistics_var(stats));
+}
+
+static int32_t rd_stats_chunk(struct jls_rd_s * self, uint16_t signal_id, uint8_t level) {
+    ROE(rd(self));
+    if (JLS_TAG_TRACK_FSR_SUMMARY != self->chunk_cur.hdr.tag){
+        JLS_LOGW("unexpected chunk tag %d", (int) self->chunk_cur.hdr.tag);
+        return JLS_ERROR_IO;
+    }
+    uint16_t metadata = (signal_id & SIGNAL_MASK) | (((uint16_t) level) << 12);
+    if (metadata != self->chunk_cur.hdr.chunk_meta) {
+        JLS_LOGW("unexpected chunk meta 0x%04x", (unsigned int) self->chunk_cur.hdr.chunk_meta);
+        return JLS_ERROR_IO;
+    }
+
+    /*
+    // display stats chunk data
+    int64_t *i64 = (int64_t *) self->payload.start;
+    JLS_LOGI("stats chunk: sample_id=%" PRIi64 ", entries=%" PRIi64, i64[0], i64[1]);
+    float * d = (float *) &i64[2];
+    for (int64_t i = 0; i < i64[1] * 4; i += 4) {
+        JLS_LOGI("stats: %f %f %f %f", d[i + 0], d[i + 1], d[i + 2], d[i + 3]);
+    }
+    */
+    return 0;
+}
+
+static int32_t fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
+                                  int64_t start_sample_id, int64_t increment, uint8_t level,
+                                  float * data, int64_t data_length) {
+    struct jls_signal_def_s * signal_def = &self->signal_def[signal_id];
+    int64_t step_size = signal_def->sample_decimate_factor;
+    for (uint8_t lvl = 2; lvl <= level; ++lvl) {
+        step_size *= signal_def->summary_decimate_factor;
+    }
+    float f32_tmp4[4];
+    ROE(seek(self, signal_id, level, start_sample_id)); // returns the index
+    ROE(jls_raw_chunk_next(self->raw));  // statistics
+    int64_t pos = jls_raw_chunk_tell(self->raw);
+    ROE(rd_stats_chunk(self, signal_id, level));
+
+    int64_t * i64 = ((int64_t *) self->payload.start);
+    int64_t chunk_sample_id = i64[0];
+    float * src = (float *) &i64[2];
+    float * src_end = src + i64[1] * 4;
+    int64_t entry_offset = ((start_sample_id - chunk_sample_id + step_size - 1) / step_size);
+    int64_t entry_sample_id = entry_offset * step_size + chunk_sample_id;
+
+    struct statistics_s stats_accum;
+    statistics_reset(&stats_accum);
+    struct statistics_s stats_next;
+
+    int64_t incr_remaining = increment;
+
+    if (entry_sample_id != start_sample_id) {
+        int64_t incr = entry_sample_id - start_sample_id;
+        // invalidates stats, need to reload
+        ROE(jls_rd_fsr_f32_statistics(self, signal_id, start_sample_id, incr, f32_tmp4, 1));
+        ROE(jls_raw_chunk_seek(self->raw, pos));
+        ROE(rd_stats_chunk(self, signal_id, level));
+        floats_to_stats(&stats_accum, f32_tmp4, incr);
+        incr_remaining -= incr;
+        start_sample_id += incr;
+    }
+
+    while (data_length) {
+        if (src >= src_end) {
+            ROE(jls_raw_chunk_seek(self->raw, self->chunk_cur.hdr.item_next));
+            ROE(rd_stats_chunk(self, signal_id, level));
+            i64 = ((int64_t*) self->payload.start);
+            // chunk_sample_id = i64[0];
+            src = (float *) &i64[2];
+            src_end = src + i64[1] * 4;
+        }
+
+        if (incr_remaining <= step_size) {
+            if (data_length == 1) {
+                ROE(jls_rd_fsr_f32_statistics(self, signal_id, start_sample_id, incr_remaining, f32_tmp4, 1));
+                floats_to_stats(&stats_next, f32_tmp4, incr_remaining);
+            } else {
+                floats_to_stats(&stats_next, src, incr_remaining);
+            }
+            statistics_combine(&stats_accum, &stats_accum, &stats_next);
+            stats_to_float(data, &stats_accum);
+            data += 4;
+            --data_length;
+            int64_t incr = step_size - incr_remaining;
+            incr_remaining = increment - incr;
+            if (incr) {
+                floats_to_stats(&stats_accum, src, incr);
+                incr_remaining -= incr;
+            } else {
+                statistics_reset(&stats_accum);
+            }
+        } else {
+            floats_to_stats(&stats_next, src, step_size);
+            statistics_combine(&stats_accum, &stats_accum, &stats_next);
+            incr_remaining -= step_size;
+        }
+        start_sample_id += step_size;
+        src += 4;
+    }
+    return 0;
+}
+
 int32_t jls_rd_fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
                                   int64_t start_sample_id, int64_t increment,
                                   float * data, int64_t data_length) {
-    if (data_length <= 0) {
-        return 0;
+    if (!is_signal_defined_type(self, signal_id, JLS_SIGNAL_TYPE_FSR)) {
+        return JLS_ERROR_PARAMETER_INVALID;
     }
     if (increment <= 0) {
         return JLS_ERROR_PARAMETER_INVALID;
     }
+    if (data_length <= 0) {
+        return 0;
+    }
+    struct jls_signal_def_s * signal_def = &self->signal_def[signal_id];
+    uint8_t level = 0;
+    int64_t sample_multiple = 1;
+    int64_t sample_multiple_next = signal_def->sample_decimate_factor;
+    int64_t duration = increment * data_length;
+    while ((increment >= sample_multiple_next)
+            && (duration >= (DECIMATE_PER_DURATION * sample_multiple_next))) {
+        ++level;
+        sample_multiple = sample_multiple_next;
+        sample_multiple_next *= signal_def->summary_decimate_factor;
+    }
 
-    // todo: use summaries when possible
+    if (level) {  // use summaries
+        return fsr_f32_statistics(self, signal_id, start_sample_id, increment, level, data, data_length);
+    }  // else, use sample data
 
     ROE(f32_buf_alloc(self, (size_t) increment));
     struct f32_buf_s * b = self->f32_buf;
@@ -758,7 +906,10 @@ int32_t jls_rd_fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
     float v_max = -INFINITY;
     double v_var = 0.0;
     double mean_scale = 1.0 / increment;
-    double var_scale = 1.0 / (increment - 1.0);
+    double var_scale = 1.0;
+    if (increment > 1) {
+        var_scale = 1.0 / (increment - 1.0);
+    }
     float v;
 
     while (data_length > 0) {
