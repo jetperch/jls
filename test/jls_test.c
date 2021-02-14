@@ -346,7 +346,7 @@ static void compare_stats(float * data, float * src, size_t src_length) {
         }
     }
     v_mean /= src_length;
-    for (int i = 0; i < src_length; ++i) {
+    for (size_t i = 0; i < src_length; ++i) {
         double v_diff = src[i] - v_mean;
         v_var += v_diff * v_diff;
     }
@@ -358,7 +358,7 @@ static void compare_stats(float * data, float * src, size_t src_length) {
     assert_float_equal(v_std, data[3], 1e-7);
 }
 
-static void test_incr_data_data(void **state) {
+static void test_statistics(void **state) {
     (void) state;
     struct jls_wr_s * wr = NULL;
     const int64_t sample_count = WINDOW_SIZE * 1000;
@@ -377,13 +377,23 @@ static void test_incr_data_data(void **state) {
 
     float data[2000][4];
     // within a single data chunk
-    assert_int_equal(0, jls_rd_fsr_f32_summary(rd, 5, 0, 10, data[0], 100));
+    assert_int_equal(0, jls_rd_fsr_f32_statistics(rd, 5, 0, 10, data[0], 100));
     compare_stats(data[0], signal, 10);
     compare_stats(data[1], signal + 10, 10);
 
-    // todo: aligned across data chunks
-    // todo: unaligned across data chunks
-    // todo: larger than a single data chunk
+    // offset from start of chunk
+    assert_int_equal(0, jls_rd_fsr_f32_statistics(rd, 5, 15, 10, data[0], 1));
+    compare_stats(data[0], signal + 15, 10);
+
+    // span chunk 2 to 3
+    assert_int_equal(0, jls_rd_fsr_f32_statistics(rd, 5, 1999, 2, data[0], 2));
+    compare_stats(data[0], signal + 1999, 2);
+    compare_stats(data[1], signal + 2001, 2);
+
+    // Span chunk 2 through 4
+    assert_int_equal(0, jls_rd_fsr_f32_statistics(rd, 5, 1999, 1002, data[0], 2));
+    compare_stats(data[0], signal + 1999, 1002);
+    compare_stats(data[1], signal + 3001, 1002);
 
     jls_rd_close(rd);
     free(signal);
@@ -401,7 +411,7 @@ int main(void) {
             cmocka_unit_test(test_wr_signal_duplicate),
 #endif
             cmocka_unit_test(test_data),
-            cmocka_unit_test(test_incr_data_data),
+            cmocka_unit_test(test_statistics),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);

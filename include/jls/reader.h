@@ -93,22 +93,24 @@ int32_t jls_rd_fsr_f32(struct jls_rd_s * self, uint16_t signal_id, int64_t start
                        float * data, int64_t data_length);
 
 /**
- * @brief Read float32 summary data.
+ * @brief Read float32 and provide statistics data.
  *
  * @param self The reader instance.
  * @param signal_id The signal
  * @param start_sample_id The starting sample id to read.
  * @param increment The number of samples that form a single output summary.
- * @param data[out] The summary information, in the shape of
+ * @param data[out] The statistics information, in the shape of
  *      data[data_length][4].  The 4 elements are 0:mean, 1:min, 2:max,
  *      3:standard deviation.
- * @param data_length The number of summary points to populate.  data
+ * @param data_length The number of statistics points to populate.  data
  *      is at least 4 * data_length elements (16 * data_length bytes).
+ *      This argument allows efficient computation over many consecutive
+ *      windows, as is common for displaying waveforms.
  * @return 0 or error code.
  */
-int32_t jls_rd_fsr_f32_summary(struct jls_rd_s * self, uint16_t signal_id,
-                               int64_t start_sample_id, int64_t increment,
-                               float * data, int64_t data_length);
+int32_t jls_rd_fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
+                                  int64_t start_sample_id, int64_t increment,
+                                  float * data, int64_t data_length);
 
 
 int32_t jls_rd_annotations(struct jls_rd_s * self, uint16_t signal_id,

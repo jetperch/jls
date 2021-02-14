@@ -728,15 +728,18 @@ int32_t jls_rd_fsr_f32(struct jls_rd_s * self, uint16_t signal_id, int64_t start
     return 0;
 }
 
-int32_t jls_rd_fsr_f32_summary(struct jls_rd_s * self, uint16_t signal_id,
-                               int64_t start_sample_id, int64_t increment,
-                               float * data, int64_t data_length) {
+int32_t jls_rd_fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
+                                  int64_t start_sample_id, int64_t increment,
+                                  float * data, int64_t data_length) {
     if (data_length <= 0) {
         return 0;
     }
     if (increment <= 0) {
         return JLS_ERROR_PARAMETER_INVALID;
     }
+
+    // todo: use summaries when possible
+
     ROE(f32_buf_alloc(self, (size_t) increment));
     struct f32_buf_s * b = self->f32_buf;
     int64_t buf_offset = 0;
