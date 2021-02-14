@@ -20,7 +20,7 @@
 #include "jls/ec.h"
 #include "jls/log.h"
 #include "crc32.h"
-#include "running_statistics.h"
+#include "jls/statistics.h"
 #include <inttypes.h>
 #include <math.h>
 #include <stdio.h>
@@ -739,9 +739,9 @@ static int64_t round_up_to_multiple_i64(int64_t x, int64_t m) {
     return ((x + m - 1) / m) * m;
 }
 
-static inline void floats_to_stats(struct statistics_s * stats, float * data, int64_t count) {
+static inline void floats_to_stats(struct jls_statistics_s * stats, float * data, int64_t count) {
     stats->k = count;
-    stats->m = data[0];
+    stats->mean = data[0];
     stats->min = data[1];
     stats->max = data[2];
     if (count > 1) {
@@ -751,11 +751,11 @@ static inline void floats_to_stats(struct statistics_s * stats, float * data, in
     }
 }
 
-static inline void stats_to_float(float * data, struct statistics_s * stats) {
-    data[0] = (float) stats->m;
+static inline void stats_to_float(float * data, struct jls_statistics_s * stats) {
+    data[0] = (float) stats->mean;
     data[1] = (float) stats->min;
     data[2] = (float) stats->max;
-    data[3] = (float) sqrt(statistics_var(stats));
+    data[3] = (float) sqrt(jls_statistics_var(stats));
 }
 
 static int32_t rd_stats_chunk(struct jls_rd_s * self, uint16_t signal_id, uint8_t level) {
@@ -803,9 +803,9 @@ static int32_t fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
     int64_t entry_offset = ((start_sample_id - chunk_sample_id + step_size - 1) / step_size);
     int64_t entry_sample_id = entry_offset * step_size + chunk_sample_id;
 
-    struct statistics_s stats_accum;
-    statistics_reset(&stats_accum);
-    struct statistics_s stats_next;
+    struct jls_statistics_s stats_accum;
+    jls_statistics_reset(&stats_accum);
+    struct jls_statistics_s stats_next;
 
     int64_t incr_remaining = increment;
 
@@ -837,7 +837,7 @@ static int32_t fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
             } else {
                 floats_to_stats(&stats_next, src, incr_remaining);
             }
-            statistics_combine(&stats_accum, &stats_accum, &stats_next);
+            jls_statistics_combine(&stats_accum, &stats_accum, &stats_next);
             stats_to_float(data, &stats_accum);
             data += 4;
             --data_length;
@@ -847,11 +847,11 @@ static int32_t fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
                 floats_to_stats(&stats_accum, src, incr);
                 incr_remaining -= incr;
             } else {
-                statistics_reset(&stats_accum);
+                jls_statistics_reset(&stats_accum);
             }
         } else {
             floats_to_stats(&stats_next, src, step_size);
-            statistics_combine(&stats_accum, &stats_accum, &stats_next);
+            jls_statistics_combine(&stats_accum, &stats_accum, &stats_next);
             incr_remaining -= step_size;
         }
         start_sample_id += step_size;

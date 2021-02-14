@@ -107,6 +107,13 @@ int32_t jls_rd_fsr_f32(struct jls_rd_s * self, uint16_t signal_id, int64_t start
  *      This argument allows efficient computation over many consecutive
  *      windows, as is common for displaying waveforms.
  * @return 0 or error code.
+ *
+ * For data_length 1, the statistics are sample-accurate.  For
+ * larger data_lengths, the external boundaries for start and end
+ * are computed exactly.  The internal boundaries are approximated,
+ * perfect for waveform display, but perhaps not suitable for other use
+ * cases.  If you need sample accurate statistics over multiple
+ * increments, all this function repeatedly with data_length 1.
  */
 int32_t jls_rd_fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
                                   int64_t start_sample_id, int64_t increment,

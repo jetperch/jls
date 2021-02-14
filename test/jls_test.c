@@ -21,6 +21,7 @@
 #include "jls/reader.h"
 #include "jls/writer.h"
 #include "jls/format.h"
+#include "jls/statistics.h"
 #include "jls/time.h"
 #include "jls/ec.h"
 #include <math.h>
@@ -331,30 +332,13 @@ static void test_data(void **state) {
 }
 
 static void compare_stats(float * data, float * src, size_t src_length) {
-    double v_mean = 0.0f;
-    float v_min = INFINITY;
-    float v_max = -INFINITY;
-    double v_var = 0.0f;
-    for (size_t i = 0; i < src_length; ++i) {
-        float v = src[i];
-        v_mean += v;
-        if (v < v_min) {
-            v_min = v;
-        }
-        if (v > v_max) {
-            v_max = v;
-        }
-    }
-    v_mean /= src_length;
-    for (size_t i = 0; i < src_length; ++i) {
-        double v_diff = src[i] - v_mean;
-        v_var += v_diff * v_diff;
-    }
-    v_var /= src_length - 1;
-    float v_std = (float) sqrt(v_var);
-    assert_float_equal(v_mean, data[0], 1e-7);
-    assert_float_equal(v_min, data[1], 1e-7);
-    assert_float_equal(v_max, data[2], 1e-7);
+    struct jls_statistics_s s1;
+    jls_statistics_reset(&s1);
+    jls_statistics_compute_f32(&s1, src, src_length);
+    assert_float_equal(s1.mean, data[0], 1e-7);
+    assert_float_equal(s1.min, data[1], 1e-7);
+    assert_float_equal(s1.max, data[2], 1e-7);
+    float v_std = (float) sqrt(jls_statistics_var(&s1));
     assert_float_equal(v_std, data[3], 1e-7);
 }
 
@@ -382,8 +366,9 @@ static void test_statistics(void **state) {
     compare_stats(data[1], signal + 10, 10);
 
     // offset from start of chunk
-    assert_int_equal(0, jls_rd_fsr_f32_statistics(rd, 5, 15, 10, data[0], 1));
+    assert_int_equal(0, jls_rd_fsr_f32_statistics(rd, 5, 15, 10, data[0], 2));
     compare_stats(data[0], signal + 15, 10);
+    compare_stats(data[1], signal + 25, 10);
 
     // span chunk 2 to 3
     assert_int_equal(0, jls_rd_fsr_f32_statistics(rd, 5, 1999, 2, data[0], 2));
@@ -394,6 +379,10 @@ static void test_statistics(void **state) {
     assert_int_equal(0, jls_rd_fsr_f32_statistics(rd, 5, 1999, 1002, data[0], 2));
     compare_stats(data[0], signal + 1999, 1002);
     compare_stats(data[1], signal + 3001, 1002);
+
+    // Span chunk 2 through 12
+    assert_int_equal(0, jls_rd_fsr_f32_statistics(rd, 5, 1999, 10002, data[0], 1));
+    compare_stats(data[0], signal + 1999, 10002);
 
     jls_rd_close(rd);
     free(signal);

@@ -32,3 +32,4 @@ endfunction (ADD_CMOCKA_TEST)
 
 ADD_CMOCKA_TEST(raw_test)
 ADD_CMOCKA_TEST(jls_test)
+ADD_CMOCKA_TEST(statistics_test)

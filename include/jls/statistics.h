@@ -1,5 +1,5 @@
 /*
- * Copyright 2020 Jetperch LLC
+ * Copyright 2020-2021 Jetperch LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef RUNNING_STATISTICS_H
-#define RUNNING_STATISTICS_H
+#ifndef JLS_STATISTICS_H
+#define JLS_STATISTICS_H
 
 #include <stdint.h>
 
@@ -32,12 +32,12 @@
  * @see https://www.johndcook.com/blog/standard_deviation/
  * @see https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
  */
-struct statistics_s {
-    uint64_t k; // number of samples
-    double m;   // mean
-    double s;   // scaled running variance
-    double min; // minimum value
-    double max; // maximum value
+struct jls_statistics_s {
+    uint64_t k;    // number of samples
+    double mean;   // mean
+    double s;      // scaled running variance
+    double min;    // minimum value
+    double max;    // maximum value
 };
 
 /**
@@ -45,7 +45,7 @@ struct statistics_s {
  *
  * @param s The statistics instance.
  */
-void statistics_reset(struct statistics_s * s);
+void jls_statistics_reset(struct jls_statistics_s * s);
 
 /**
  * @brief Mark the statistics as invalid.
@@ -53,7 +53,25 @@ void statistics_reset(struct statistics_s * s);
  * @param s The statistics instance which will have all statistics marked
  *      as NaN.
  */
-void statistics_invalid(struct statistics_s * s);
+void jls_statistics_invalid(struct jls_statistics_s * s);
+
+/**
+ * @brief Compute the statistics over an array.
+ *
+ * @param s The statistics instance.
+ * @param x The value array.
+ * @param length The number of elements in x.
+ */
+void jls_statistics_compute_f32(struct jls_statistics_s * s, const float * x, uint64_t length);
+
+/**
+ * @brief Compute the statistics over an array.
+ *
+ * @param s The statistics instance.
+ * @param x The value array.
+ * @param length The number of elements in x.
+ */
+void jls_statistics_compute_f64(struct jls_statistics_s * s, const double * x, uint64_t length);
 
 /**
  * @brief Add a new sample into the statistics.
@@ -61,7 +79,7 @@ void statistics_invalid(struct statistics_s * s);
  * @param s The statistics instance.
  * @param x The new value.
  */
-void statistics_add(struct statistics_s * s, double x);
+void jls_statistics_add(struct jls_statistics_s * s, double x);
 
 /**
  * @brief Get the sample variance.
@@ -69,7 +87,7 @@ void statistics_add(struct statistics_s * s, double x);
  * @param s The statistics instance.
  * @return The sample variance.
  */
-double statistics_var(struct statistics_s * s);
+double jls_statistics_var(struct jls_statistics_s * s);
 
 /**
  * @brief Copy one statistics instance to another.
@@ -77,7 +95,7 @@ double statistics_var(struct statistics_s * s);
  * @param tgt The target statistics instance.
  * @param src The source statistics instance.
  */
-void statistics_copy(struct statistics_s * tgt, struct statistics_s const * src);
+void jls_statistics_copy(struct jls_statistics_s * tgt, struct jls_statistics_s const * src);
 
 /**
  * @brief Compute the combined statistics over two statistics instances.
@@ -86,9 +104,9 @@ void statistics_copy(struct statistics_s * tgt, struct statistics_s const * src)
  * @param a The first statistics instance to combine.
  * @param b The first statistics instance to combine.
  */
-void statistics_combine(struct statistics_s * tgt, 
-                        struct statistics_s const * a, 
-                        struct statistics_s const * b);
+void jls_statistics_combine(struct jls_statistics_s * tgt,
+                            struct jls_statistics_s const * a,
+                            struct jls_statistics_s const * b);
 
 
-#endif
+#endif  // JLS_STATISTICS_H

@@ -22,7 +22,7 @@ set(SOURCES
         log.c
         raw.c
         reader.c
-        running_statistics.c
+        statistics.c
         writer.c
         wf_f32.c
 )
