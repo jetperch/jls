@@ -27,6 +27,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <float.h>
 
 #define PAYLOAD_BUFFER_SIZE_DEFAULT (1 << 25)   // 32 MB
 #define STRING_BUFFER_SIZE_DEFAULT (1 << 23)    // 8 MB
@@ -902,8 +903,8 @@ int32_t jls_rd_fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
         src += start_sample_id - chunk_sample_id;
     }
     double v_mean = 0.0;
-    float v_min = INFINITY;
-    float v_max = -INFINITY;
+    float v_min = FLT_MAX;
+    float v_max = -FLT_MAX;
     double v_var = 0.0;
     double mean_scale = 1.0 / increment;
     double var_scale = 1.0;
@@ -947,8 +948,8 @@ int32_t jls_rd_fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
 
             buf_offset = 0;
             v_mean = 0.0;
-            v_min = INFINITY;
-            v_max = -INFINITY;
+            v_min = FLT_MAX;
+            v_max = -FLT_MAX;
             v_var = 0.0;
             --data_length;
         }

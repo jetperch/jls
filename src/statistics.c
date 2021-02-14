@@ -150,8 +150,8 @@ void jls_statistics_combine(struct jls_statistics_s *tgt,
         tgt->mean = f1 * a->mean + (1.0 - f1) * b->mean;
         m1_diff = a->mean - tgt->mean;
         m2_diff = b->mean - tgt->mean;
-        tgt->s = ((a->s + a->k * m1_diff * m1_diff) +
-                  (b->s + b->k * m2_diff * m2_diff));
+        tgt->s = (a->s + a->k * m1_diff * m1_diff) +
+                 (b->s + b->k * m2_diff * m2_diff);
         tgt->min = (a->min < b->min) ? a->min : b->min;
         tgt->max = (a->max > b->max) ? a->max : b->max;
         tgt->k = kt;
