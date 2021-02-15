@@ -352,6 +352,50 @@ static inline int64_t JLS_TIME_ABS(int64_t t) {
  */
 int64_t jls_now();
 
+/**
+ * @brief The platform counter structure.
+ */
+struct jls_time_counter_s {
+    /// The counter value.
+    uint64_t value;
+    /// The approximate counter frequency.
+    uint64_t frequency;
+};
+
+/**
+ * @brief Get the monotonic platform counter.
+ *
+ * @return The monotonic platform counter.
+ *
+ * The platform implementation may select an appropriate source and
+ * frequency.  The JLS library assumes a nominal frequency of
+ * at least 1000 Hz, but we frequencies in the 1 MHz to 100 MHz
+ * range to enable profiling.  The frequency should not exceed 10 GHz
+ * to prevent rollover.
+ *
+ * The counter must be monotonic.  If the underlying hardware is less
+ * than the full 64 bits, then the platform must unwrap and extend
+ * the hardware value to 64-bit.
+ *
+ * The JLS authors recommend this counter starts at 0 when the
+ * system powers up.
+ */
+struct jls_time_counter_s jls_time_counter();
+
+/**
+ * @brief Get the monotonic platform time as a 34Q30 fixed point number.
+ *
+ * @return The monotonic platform time based upon the embc_counter().
+ *      The platform time has no guaranteed relationship with
+ *      UTC or wall-clock calendar time.  This time has both
+ *      offset and scale errors relative to UTC.
+ */
+static inline int64_t jls_time_rel() {
+    struct jls_time_counter_s counter = jls_time_counter();
+    return JLS_COUNTER_TO_TIME(counter.value, counter.frequency);
+}
+
+
 #ifdef __cplusplus
 }
 #endif

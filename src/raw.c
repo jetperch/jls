@@ -424,6 +424,10 @@ int32_t jls_raw_rd_payload(struct jls_raw_s * self, uint32_t payload_length_max,
 
 int32_t jls_raw_chunk_seek(struct jls_raw_s * self, int64_t offset) {
     invalidate_current_chunk(self);
+    if (offset == 0) {
+        JLS_LOGW("seek to 0");
+        return JLS_ERROR_IO;
+    }
     if (f_seek(self, offset, SEEK_SET)) {
         return JLS_ERROR_IO;
     }
@@ -549,4 +553,26 @@ int64_t jls_now() {
     uint64_t t = ((uint64_t) filetime.dwLowDateTime) | (((uint64_t) filetime.dwHighDateTime) << 32);
     t -= offset_s;
     return JLS_COUNTER_TO_TIME(t, frequency);
+}
+
+struct jls_time_counter_s jls_time_counter() {
+    struct jls_time_counter_s counter;
+    static int first = 1;
+    static uint64_t offset = 0;     // in 34Q30 time
+    static LARGE_INTEGER perf_frequency = {.QuadPart = 0};
+
+    // https://docs.microsoft.com/en-us/windows/win32/sysinfo/acquiring-high-resolution-time-stamps
+    LARGE_INTEGER perf_counter;
+
+    QueryPerformanceCounter(&perf_counter);
+
+    if (first) {
+        QueryPerformanceFrequency(&perf_frequency);
+        offset = perf_counter.QuadPart;
+        first = 0;
+    }
+
+    counter.value = perf_counter.QuadPart - offset;
+    counter.frequency = perf_frequency.QuadPart;
+    return counter;
 }
