@@ -55,6 +55,7 @@ set(JLS_INCLUDE
 include_directories(${JLS_INCLUDE})
 
 add_subdirectory(src)
+add_subdirectory(example)
 
 if(JLS_UNIT_TEST AND JLS_TOPLEVEL AND NOT CMAKE_CROSSCOMPILING)
     add_subdirectory(third-party)
