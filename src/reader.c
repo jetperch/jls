@@ -843,7 +843,6 @@ static int32_t fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
             data += 4;
             --data_length;
             int64_t incr = step_size - incr_remaining;
-            incr_remaining = increment - incr;
             if (incr) {
                 floats_to_stats(&stats_accum, src, incr);
                 incr_remaining -= incr;

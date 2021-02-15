@@ -192,7 +192,7 @@ static int32_t profile_fsr_signal(struct jls_rd_s * rd, uint16_t signal_id) {
     printf("Sample seek time: %g seconds\n", t_duration / step_count);
     fflush(stdout);
 
-    int64_t increment = 19683;
+    int64_t increment = 19683;  // 1;
     while (increment < length) {
         int64_t samples = 1111;
         int64_t count = length / increment - samples;
