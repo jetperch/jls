@@ -16,6 +16,7 @@
 
 #include "jls/writer.h"
 #include "jls/reader.h"
+#include "jls/raw.h"
 #include "jls/time.h"
 #include <inttypes.h>
 #include <stdlib.h>
@@ -41,6 +42,11 @@ static const char usage_str[] =
 "Profile JLS read performance.\n"
 "  profile <filename>\n"
 "    <filename>                     The input file path.\n"
+"\n"
+"Print the JLS tag structure.\n"
+"  print <filename> [--<opt1> <value> ...]\n"
+"    <filename>                     The input file path.\n"
+"    --level                        Skip values below level.\n"
 "\n"
 "Copyright 2021 Jetperch LLC, Apache 2.0 license\n"
 "\n";
@@ -247,10 +253,46 @@ static int32_t profile(const char * filename) {
     return 0;
 }
 
+static int32_t print(const char * filename, uint32_t level) {
+    struct jls_raw_s * raw = NULL;
+    struct jls_chunk_header_s hdr;
+    RPE(jls_raw_open(&raw, filename, "r"));
+    uint8_t hdr_level = 0;
+    printf("print(%s, %d)\n", filename, (int) level);
+    while (1) {
+        if (jls_raw_rd_header(raw, &hdr)) {
+            break;
+        }
+        hdr_level = hdr.chunk_meta >> 12;
+        if (hdr.tag & 0x20) {
+            if (hdr_level >= level) {
+                printf("%" PRIi64 " %s (lvl=%d, prev=%" PRIi64 ", next=%" PRIi64 ")\n",
+                       jls_raw_chunk_tell(raw), jls_tag_to_name(hdr.tag),
+                       (int) hdr_level, hdr.item_prev, hdr.item_next);
+                fflush(stdout);
+            }
+        } else {
+            printf("%" PRIi64 " %s (prev=%" PRIi64 ", next=%" PRIi64 ")\n",
+                   jls_raw_chunk_tell(raw), jls_tag_to_name(hdr.tag),
+                   hdr.item_prev, hdr.item_next);
+            fflush(stdout);
+        }
+        if (jls_raw_chunk_next(raw)) {
+            break;
+        }
+    }
+    jls_raw_close(raw);
+    return 0;
+}
+
 static int usage() {
     printf("%s", usage_str);
     return 1;
 }
+
+#define UNSUPPORTED() \
+    printf("Unsupported argument: %s\n", argv[0]); \
+    return usage();
 
 #define SKIP_ARGS(N) do {               \
     int n = (N);                        \
@@ -276,6 +318,11 @@ static int usage() {
     }                                   \
 } while(0)
 
+#define REQUIRE_FILENAME() \
+    if (!filename) { \
+        printf("Must specify filename\n"); \
+        return usage(); \
+    }
 
 int main(int argc, char * argv[]) {
     SKIP_ARGS(1); // skip our name
@@ -283,7 +330,6 @@ int main(int argc, char * argv[]) {
     struct jls_signal_def_s signal_def = SIGNAL_1;
 
     char * filename = 0;
-    int64_t length = 1000000;
 
     if (!argc) {
         return usage();
@@ -291,6 +337,7 @@ int main(int argc, char * argv[]) {
     REQUIRE_ARGS(1);
 
     if (strcmp(argv[0], "generate") == 0) {
+        int64_t length = 1000000;
         SKIP_REQUIRED();
         while (argc) {
             if (argv[0][0] != '-') {
@@ -320,14 +367,12 @@ int main(int argc, char * argv[]) {
             } else if (0 == strcmp("--summary_decimate_factor", argv[0])) {
                 REQUIRE_ARGS(2);
                 RPE(cstr_to_u32(argv[1], &signal_def.summary_decimate_factor));
+            } else {
+                UNSUPPORTED();
             }
             SKIP_REQUIRED();
         }
-        if (!filename) {
-            printf("Must specify filename\n");
-            return usage();
-        }
-
+        REQUIRE_FILENAME();
         int64_t t_start = jls_time_rel();
         if (generate_jls(filename, &signal_def, length)) {
             printf("Failed to generate file.\n");
@@ -349,14 +394,39 @@ int main(int argc, char * argv[]) {
             } else if (0 == strcmp("--filename", argv[0])) {
                 REQUIRE_ARGS(2);
                 filename = argv[1];
+            } else {
+                UNSUPPORTED();
             }
             SKIP_REQUIRED();
         }
-        if (!filename) {
-            printf("Must specify filename\n");
-            return usage();
-        }
+        REQUIRE_FILENAME();
         if (profile(filename)) {
+            printf("Failed to complete profile\n");
+            return 1;
+        }
+    } else if (strcmp(argv[0], "print") == 0) {
+        uint32_t level = 0;
+        SKIP_REQUIRED();
+        while (argc) {
+            if (argv[0][0] != '-') {
+                REQUIRE_ARGS(1);
+                if (filename) {
+                    return usage();
+                }
+                filename = argv[0];
+            } else if (0 == strcmp("--filename", argv[0])) {
+                REQUIRE_ARGS(2);
+                filename = argv[1];
+            } else if (0 == strcmp("--level", argv[0])) {
+                REQUIRE_ARGS(2);
+                RPE(cstr_to_u32(argv[1], &level));
+            } else {
+                UNSUPPORTED();
+            }
+            SKIP_REQUIRED();
+        }
+        REQUIRE_FILENAME();
+        if (print(filename, level)) {
             printf("Failed to complete profile\n");
             return 1;
         }

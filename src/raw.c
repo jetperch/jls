@@ -65,6 +65,9 @@ static inline void invalidate_current_chunk(struct jls_raw_s * self) {
 }
 
 static inline uint32_t payload_size_on_disk(uint32_t payload_size) {
+    if (!payload_size) {
+        return 0;
+    }
     uint8_t pad = (uint8_t) ((payload_size + 4) & 7);
     if (pad != 0) {
         pad = 8 - pad;
