@@ -361,6 +361,7 @@ int32_t jls_raw_rd_header(struct jls_raw_s * self, struct jls_chunk_header_s * h
     }
     if (self->hdr.tag == JLS_TAG_INVALID) {
         if (self->fpos >= self->fend) {
+            JLS_LOGE("fpos %" PRIi64 " > end %" PRIi64, self->fpos, self->fend);
             invalidate_current_chunk(self);
             return JLS_ERROR_EMPTY;
         }

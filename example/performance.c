@@ -352,9 +352,9 @@ static int32_t print(const char * filename, uint32_t level) {
         hdr_level = hdr.chunk_meta >> 12;
         if (hdr.tag & 0x20) {
             if (hdr_level >= level) {
-                printf("%" PRIi64 " %s (lvl=%d, prev=%" PRIi64 ", next=%" PRIi64 ")\n",
+                printf("%" PRIi64 " %s (lvl=%d, prev=%" PRIi64 ", next=%" PRIi64 ") %" PRIu32 "\n",
                        jls_raw_chunk_tell(raw), jls_tag_to_name(hdr.tag),
-                       (int) hdr_level, hdr.item_prev, hdr.item_next);
+                       (int) hdr_level, hdr.item_prev, hdr.item_next, hdr.payload_length);
                 fflush(stdout);
             }
         } else {

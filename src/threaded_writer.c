@@ -204,7 +204,6 @@ int32_t jls_twr_open(struct jls_twr_s ** instance, const char * path) {
         return JLS_ERROR_NOT_ENOUGH_MEMORY;
     }
 
-    JLS_LOGI("instance %p", self);
     self->thread = CreateThread(
             NULL,                   // default security attributes
             0,                      // use default stack size

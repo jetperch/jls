@@ -206,6 +206,10 @@ static int32_t wr_index(struct jls_wf_f32_s * self, uint8_t level) {
     if (idx->offset > idx->length) {
         JLS_LOGE("internal memory error");
     }
+    if (idx->offset < idx->length) {
+        JLS_LOGI("wr_index fill level %d", (int) level);
+        memset(&idx->data[idx->offset], 0, sizeof(int64_t) * (size_t) (idx->length - idx->offset));
+    }
     uint32_t len = (uint32_t) ((2 + idx->offset) * sizeof(int64_t));
     return jls_wr_index_prv(self->wr, self->def.signal_id, level, (uint8_t *) &idx->timestamp, len);
 }
@@ -291,6 +295,7 @@ static int32_t summaryN(struct jls_wf_f32_s * self, uint8_t level, int64_t pos) 
 
     const double mean_scale = 1.0 / self->def.summary_decimate_factor;
     const double var_scale = mean_scale;
+    JLS_LOGD2("summaryN %d: %" PRIi64 " %" PRIi64, (int) level, dst->index->offset, pos);
     dst->index->data[dst->index->offset++] = pos;
 
     uint32_t summaries_per = (uint32_t) (src->offset / self->def.summary_decimate_factor);

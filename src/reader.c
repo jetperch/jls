@@ -646,13 +646,17 @@ int32_t seek(struct jls_rd_s * self, uint16_t signal_id, uint8_t level, int64_t 
         // compute the step size in samples between each index entry.
         int64_t step_size = signal_def->samples_per_data;  // each data chunk
         if (lvl > 1) {
-            step_size = signal_def->entries_per_summary * signal_def->summary_decimate_factor;
-            for (int k = 2; k < lvl; ++k) {
-                step_size *= signal_def->entries_per_summary;
-            }
+            step_size *= signal_def->entries_per_summary /
+                    (signal_def->samples_per_data / signal_def->sample_decimate_factor);
+        }
+        for (int k = 3; k <= lvl; ++k) {
+            step_size *= signal_def->summary_decimate_factor;
         }
         ROE(jls_raw_chunk_seek(self->raw, offset));
         ROE(rd(self));
+        if (self->chunk_cur.hdr.tag != JLS_TAG_TRACK_FSR_INDEX) {
+            JLS_LOGW("seek tag mismatch: %d", (int) self->chunk_cur.hdr.tag);
+        }
 
         int64_t * payload = (int64_t *) self->payload.start;
         int64_t chunk_timestamp = payload[0];
@@ -663,6 +667,9 @@ int32_t seek(struct jls_rd_s * self, uint16_t signal_id, uint8_t level, int64_t 
         }
 
         int64_t idx = (sample_id - chunk_timestamp) / step_size;
+        if (idx >= chunk_entries) {
+            JLS_LOGE("invalid index: %" PRIi64 " >= %" PRIi64, idx, chunk_entries);
+        }
 
         JLS_LOGD3("index level=%d, entries=%d, 0:%" PRIi64 ", 1:%" PRIi64 ", end:%" PRIi64,
                   (int) lvl, (int) chunk_entries, payload[2], payload[3], payload[2 + payload[1] - 1]);
@@ -724,6 +731,7 @@ int32_t jls_rd_fsr_f32(struct jls_rd_s * self, uint16_t signal_id, int64_t start
     if (data_length <= 0) {
         return 0;
     }
+    //JLS_LOGD3("jls_rd_fsr_f32(%d, %" PRIi64 ")", (int) signal_id, start_sample_id);
     ROE(seek(self, signal_id, 0, start_sample_id));
     self->chunk_cur.hdr.item_next = jls_raw_chunk_tell(self->raw);
     while (data_length > 0) {
