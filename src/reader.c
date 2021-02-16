@@ -823,12 +823,24 @@ static int32_t fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
 
     while (data_length) {
         if (src >= src_end) {
-            ROE(jls_raw_chunk_seek(self->raw, self->chunk_cur.hdr.item_next));
-            ROE(rd_stats_chunk(self, signal_id, level));
-            i64 = ((int64_t*) self->payload.start);
-            // chunk_sample_id = i64[0];
-            src = (float *) &i64[2];
-            src_end = src + i64[1] * 4;
+            if (self->chunk_cur.hdr.item_next) {
+                ROE(jls_raw_chunk_seek(self->raw, self->chunk_cur.hdr.item_next));
+                ROE(rd_stats_chunk(self, signal_id, level));
+                i64 = ((int64_t*) self->payload.start);
+                // chunk_sample_id = i64[0];
+                src = (float *) &i64[2];
+                src_end = src + i64[1] * 4;
+            } else {
+                if ((incr_remaining <= step_size) && (data_length == 1)) {
+                    // not a problem, will fetch from lower statistics
+                } else {
+                    JLS_LOGW("cannot get final %" PRIi64 " samples", data_length);
+                    for (int64_t idx = 0; idx < (4 * data_length); ++idx) {
+                        data[idx] = NAN;
+                    }
+                    return JLS_ERROR_PARAMETER_INVALID;
+                }
+            }
         }
 
         if (incr_remaining <= step_size) {
@@ -845,9 +857,10 @@ static int32_t fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
             int64_t incr = step_size - incr_remaining;
             if (incr) {
                 floats_to_stats(&stats_accum, src, incr);
-                incr_remaining -= incr;
+                incr_remaining = increment - incr;
             } else {
                 jls_statistics_reset(&stats_accum);
+                incr_remaining = increment;
             }
         } else {
             floats_to_stats(&stats_next, src, step_size);
