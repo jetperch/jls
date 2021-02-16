@@ -141,6 +141,24 @@ int32_t jls_wr_open(struct jls_wr_s ** instance, const char * path) {
     return 0;
 }
 
+static int32_t wr_end(struct jls_wr_s * self) {
+    // construct header
+    struct chunk_s chunk;
+    chunk.hdr.item_next = 0;
+    chunk.hdr.item_prev = 0;
+    chunk.hdr.tag = JLS_TAG_END;
+    chunk.hdr.rsv0_u8 = 0;
+    chunk.hdr.chunk_meta = 0;
+    chunk.hdr.payload_length = 0;
+    chunk.hdr.payload_prev_length = self->payload_prev_length;
+    chunk.offset = jls_raw_chunk_tell(self->raw);
+
+    // write
+    ROE(jls_raw_wr(self->raw, &chunk.hdr, NULL));
+    self->payload_prev_length = 0;
+    return 0;
+}
+
 int32_t jls_wr_close(struct jls_wr_s * self) {
     if (self) {
         for (size_t i = 0; i < JLS_SIGNAL_COUNT; ++i) {
@@ -148,6 +166,7 @@ int32_t jls_wr_close(struct jls_wr_s * self) {
                 jls_wf_f32_close(self->signal_info[i].signal_writer);
             }
         }
+        wr_end(self);
         int32_t rc = jls_raw_close(self->raw);
         free(self);
         return rc;

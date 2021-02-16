@@ -89,7 +89,7 @@ int32_t jls_raw_wr(struct jls_raw_s * self, struct jls_chunk_header_s * hdr, con
 int32_t jls_raw_wr_header(struct jls_raw_s * self, struct jls_chunk_header_s * hdr);
 
 /**
- * @brief Write a chunk payload the the file at the current location.
+ * @brief Write a chunk payload to the file at the current location.
  *
  * @param self The JLS raw instance.
  * @param payload_length The length of payload, in bytes, which must match the chunk header.
@@ -184,6 +184,15 @@ int32_t jls_raw_item_next(struct jls_raw_s * self);
  * @return 0, JLS_ERROR_EMPTY at beginning, or error code.
  */
 int32_t jls_raw_item_prev(struct jls_raw_s * self);
+
+/**
+ * @brief Get the end chunk offset.
+ *
+ * @param self The JLS raw instance.
+ * @return The chunk offset or 0 if not present.
+ * @see jls_raw_chunk_tell
+ */
+int64_t jls_raw_chunk_tell_end(struct jls_raw_s * self);
 
 /**
  * @brief Convert the JLS tag into a user-meaningful string.

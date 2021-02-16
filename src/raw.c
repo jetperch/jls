@@ -515,6 +515,27 @@ int32_t jls_raw_item_prev(struct jls_raw_s * self) {
     return 0;
 }
 
+int64_t jls_raw_chunk_tell_end(struct jls_raw_s * self) {
+    int64_t starting_pos = jls_raw_chunk_tell(self);
+    int64_t end_pos = self->fend - sizeof(struct jls_chunk_header_s);
+    if (end_pos < sizeof(struct jls_file_header_s)) {
+        return 0;
+    }
+    if (jls_raw_chunk_seek(self, end_pos)) {
+        JLS_LOGW("seek to end failed");
+        return 0;
+    }
+    if (jls_raw_rd_header(self, NULL)) {
+        JLS_LOGW("end chunk not found");
+        return 0;
+    }
+    if (self->hdr.tag != JLS_TAG_END) {
+        end_pos = 0;
+    }
+    jls_raw_chunk_seek(self, starting_pos);
+    return end_pos;
+}
+
 const char * jls_tag_to_name(uint8_t tag) {
     switch (tag) {
         case JLS_TAG_INVALID:                   return "invalid";
@@ -541,6 +562,7 @@ const char * jls_tag_to_name(uint8_t tag) {
         case JLS_TAG_TRACK_UTC_DATA:            return "track_utc_data";
         case JLS_TAG_TRACK_UTC_SUMMARY:         return "track_utc_summary";
         case JLS_TAG_USER_DATA:                 return "user_data";
+        case JLS_TAG_END:                       return "end";
         default:                                return "unknown";
     }
 }

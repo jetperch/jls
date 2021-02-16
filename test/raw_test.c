@@ -226,7 +226,22 @@ static void test_items_nav(void **state) {
 
 static void test_tag_to_name(void **state) {
     (void) state;
+    assert_string_equal("end", jls_tag_to_name(JLS_TAG_END));
     assert_string_equal("invalid", jls_tag_to_name(JLS_TAG_INVALID));
+}
+
+static void test_end(void **state) {
+    (void) state;
+    struct jls_raw_s * j = NULL;
+    struct jls_chunk_header_s hdr;
+    assert_int_equal(0, jls_raw_open(&j, filename, "w"));
+    hdr_set(&hdr, JLS_TAG_END, 0, 0);
+    assert_int_equal(0, jls_raw_wr(j, &hdr, NULL));
+    assert_int_equal(0, jls_raw_close(j));
+
+    assert_int_equal(0, jls_raw_open(&j, filename, "r"));
+    int64_t pos_end = jls_raw_chunk_tell_end(j);
+    assert_int_equal(32, pos_end);
 }
 
 int main(void) {
@@ -239,6 +254,7 @@ int main(void) {
             cmocka_unit_test(test_seek),
             cmocka_unit_test(test_items_nav),
             cmocka_unit_test(test_tag_to_name),
+            cmocka_unit_test(test_end),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);

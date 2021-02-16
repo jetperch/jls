@@ -242,6 +242,7 @@ enum jls_tag_e {
 
     // other tags
     JLS_TAG_USER_DATA                   = 0x40, // own doubly-linked list
+    JLS_TAG_END                         = 0xFF, // present if file closed properly
 };
 
 #define JLS_DATATYPE_BASETYPE_INT        (0x01)

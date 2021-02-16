@@ -557,6 +557,13 @@ int32_t jls_rd_open(struct jls_rd_s ** instance, const char * path) {
         return rc;
     }
 
+    int64_t end_pos = jls_raw_chunk_tell_end(self->raw);
+    if (!end_pos) {
+        // Not properly closed.  Indices & summary may be incomplete.
+        // for most applications, will want to launch file reconstruction tool
+        return JLS_ERROR_MESSAGE_INTEGRITY;
+    }
+
     ROE(scan(self));
     *instance = self;
     return rc;
