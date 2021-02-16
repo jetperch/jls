@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+include_directories(../include_prv)
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/version.h.in
         ${PROJECT_SOURCE_DIR}/include/jls/version.h)

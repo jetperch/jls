@@ -17,12 +17,12 @@
 #include "jls/writer.h"
 #include "jls/raw.h"
 #include "jls/format.h"
-#include "wr_prv.h"
-#include "wf_f32.h"
-#include "cdef.h"
+#include "jls/wr_prv.h"
+#include "jls/wf_f32.h"
+#include "jls/cdef.h"
 #include "jls/ec.h"
 #include "jls/log.h"
-#include "crc32.h"
+#include "jls/crc32.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

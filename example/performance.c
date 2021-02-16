@@ -18,10 +18,14 @@
 #include "jls/reader.h"
 #include "jls/raw.h"
 #include "jls/time.h"
+
 #include <inttypes.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+
+
+#define ARRAY_SIZE(x) ( sizeof(x) / sizeof((x)[0]) )
 
 
 static const char usage_str[] =
@@ -174,81 +178,154 @@ static int32_t generate_jls(const char * filename, const struct jls_signal_def_s
     return 0;
 }
 
-static int32_t profile_fsr_signal(struct jls_rd_s * rd, uint16_t signal_id) {
+static int32_t json_signal_def(struct jls_rd_s * rd, uint16_t signal_id, FILE * json) {
     int64_t length = 0;
-    static float data[10000];
-
-    RPE(jls_rd_fsr_length(rd, signal_id, &length));
-    printf("Length = %" PRIi64 " samples (%.0e)\n", length, (double) length);
-
-    int64_t step_count = 100;
-    int64_t step_sz = (length - 1) / step_count;
-    int64_t t_start = jls_time_rel();
-    for (int64_t sample = 0; sample < length; sample += step_sz) {
-        RPE(jls_rd_fsr_f32(rd, signal_id, sample, data, 1));
+    struct jls_signal_def_s signal_def;
+    RPE(jls_rd_signal(rd, signal_id, &signal_def));
+    if (signal_def.signal_type == JLS_SIGNAL_TYPE_FSR) {
+        RPE(jls_rd_fsr_length(rd, signal_id, &length));
+        printf("Length = %" PRIi64 " samples (%.0e)\n", length, (double) length);
+    } else {
+        // todo get VSR length
     }
-    int64_t t_end = jls_time_rel();
-    double t_duration = JLS_TIME_TO_F64(t_end - t_start);
-    printf("Sample seek time: %g seconds\n", t_duration / step_count);
-    fflush(stdout);
-
-    int64_t increment = 1;
-    while (increment < length) {
-        int64_t samples = 1111;
-        int64_t count = length / increment - samples;
-        if (count <= 0) {
-            count = 1;
-        }
-        if (count > 100) {
-            count = 100;
-        }
-        int64_t iter_count = 0;
-        int64_t t_start = jls_time_rel();
-        int64_t offset_sz = (length - increment - 1) / count;
-        for (int64_t sample = 0; sample < (length - increment); sample += offset_sz) {
-            int64_t max_len = (length - sample) / increment;
-            int64_t data_length = (max_len < samples) ? max_len : samples;
-            RPE(jls_rd_fsr_f32_statistics(rd, signal_id, sample, increment, data, data_length));
-            ++iter_count;
-        }
-        int64_t t_end = jls_time_rel();
-        double t_duration = JLS_TIME_TO_F64(t_end - t_start);
-        printf("Read time (incr=%" PRIi64 ", length=%" PRIi64 ") => %g seconds\n",
-               increment, samples, t_duration / iter_count);
-        fflush(stdout);
-        increment *= 3;
-    }
-
+    fprintf(json, "\n  \"info\": {");
+    fprintf(json, "\n    \"signal_id\": %d,", (int) signal_def.signal_id);
+    fprintf(json, "\n    \"source_id\": %d,", (int) signal_def.source_id);
+    fprintf(json, "\n    \"signal_type\": %d,", (int) signal_def.signal_type);
+    fprintf(json, "\n    \"signal_type_str\": \"%s\",", (signal_def.signal_type == JLS_SIGNAL_TYPE_FSR) ? "FSR" : "VSR");
+    fprintf(json, "\n    \"data_type\": %d,", (int) signal_def.data_type);
+    fprintf(json, "\n    \"sample_rate\": %" PRIu32 ",", signal_def.sample_rate);
+    fprintf(json, "\n    \"samples_per_data\": %" PRIu32 ",", signal_def.samples_per_data);
+    fprintf(json, "\n    \"sample_decimate_factor\": %" PRIu32 ",", signal_def.sample_decimate_factor);
+    fprintf(json, "\n    \"entries_per_summary\": %" PRIu32 ",", signal_def.entries_per_summary);
+    fprintf(json, "\n    \"summary_decimate_factor\": %" PRIu32 ",", signal_def.summary_decimate_factor);
+    fprintf(json, "\n    \"utc_rate_auto\": %" PRIu32 ",", signal_def.utc_rate_auto);
+    fprintf(json, "\n    \"name\": \"%s\",", signal_def.name);
+    fprintf(json, "\n    \"si_units\": \"%s\",", signal_def.si_units);
+    fprintf(json, "\n    \"length\": %" PRIi64, length);
+    fprintf(json, "\n  }");
+    fflush(json);
     return 0;
 }
 
-static int32_t profile_vsr_signal(struct jls_rd_s * rd, uint16_t signal_id) {
+static int32_t profile_fsr_signal(struct jls_rd_s * rd, uint16_t signal_id, FILE * json) {
+    int64_t length = 0;
+    static float data[100000];
+    const int64_t read_lengths[] = {1, 100, 1000, 10000, 100000};
+    RPE(jls_rd_fsr_length(rd, signal_id, &length));
+    fprintf(json, "\n{");
+    json_signal_def(rd, signal_id, json);
+
+    fprintf(json, ",\n  \"read_samples\": [");
+    for (uint8_t read_idx = 0; read_idx < ARRAY_SIZE(read_lengths); ++read_idx) {
+        int64_t sample_count = read_lengths[read_idx];
+        int64_t step_count = 100;
+        int64_t step_sz = (length - 1 - sample_count) / step_count;
+        int64_t t_start = jls_time_rel();
+        for (int64_t sample = 0; sample < length; sample += step_sz) {
+            RPE(jls_rd_fsr_f32(rd, signal_id, sample, data, sample_count));
+        }
+        int64_t t_end = jls_time_rel();
+        double t_duration = JLS_TIME_TO_F64(t_end - t_start);
+        printf("Read %" PRIi64 " samples: %g seconds\n", sample_count, t_duration / step_count);
+        fflush(stdout);
+        if (read_idx) {
+            fprintf(json, ",");
+        }
+        fprintf(json, "\n    [%" PRIi64 ", %g]", sample_count, t_duration / step_count);
+    }
+    fprintf(json, "\n  ]");
+
+    fprintf(json, ",\n  \"read_summary\": [");
+    int summary_counter = 0;
+    const int64_t summary_lengths[] = {1, 11, 479, 1117, 11939};
+    int64_t increment = 1;
+    printf("#signal,increment,length,time\n");
+    while (increment < length) {
+        for (uint8_t summary_idx = 0; summary_idx < ARRAY_SIZE(summary_lengths); ++summary_idx) {
+            int64_t samples = summary_lengths[summary_idx];
+            int64_t count = length / increment - samples;
+            if (count <= 0) {
+                count = 1;
+            }
+            if (count > 100) {
+                count = 100;
+            }
+            int64_t iter_count = 0;
+            int64_t t_start = jls_time_rel();
+            int64_t offset_sz = (length - increment - 1) / count;
+            for (int64_t sample = 0; sample < (length - increment); sample += offset_sz) {
+                int64_t max_len = (length - sample) / increment;
+                int64_t data_length = (max_len < samples) ? max_len : samples;
+                RPE(jls_rd_fsr_f32_statistics(rd, signal_id, sample, increment, data, data_length));
+                ++iter_count;
+            }
+            int64_t t_end = jls_time_rel();
+            double t_duration = JLS_TIME_TO_F64(t_end - t_start);
+            printf("%d,%d,%d,%g\n", (int) signal_id, (int) increment,
+                   (int) samples, t_duration / iter_count);
+            fflush(stdout);
+            if (summary_counter) {
+                fprintf(json, ",");
+            }
+            fprintf(json, "\n    [%d, %d, %d, %g]", (int) signal_id, (int) increment,
+                    (int) samples, t_duration / iter_count);
+            ++summary_counter;
+        }
+        increment *= 3;
+    }
+    fprintf(json, "\n  ]");
+
+    fprintf(json, "\n}");
+    return 0;
+}
+
+static int32_t profile_vsr_signal(struct jls_rd_s * rd, uint16_t signal_id, FILE * json) {
     printf("Not yet implemented, skip\n");
+    fprintf(json, "\n{");
+    json_signal_def(rd, signal_id, json);
+    fprintf(json, "\n}");
     return 0;
 }
 
 static int32_t profile(const char * filename) {
     struct jls_rd_s * rd = NULL;
     struct jls_signal_def_s * signals;
+    char json_filename[1024];
+    snprintf(json_filename, sizeof(json_filename), "%s.json", filename);
+    FILE * json = fopen(json_filename, "wt");
+    if (!json) {
+        printf("Could not open JSON output file: %s\n", json_filename);
+        return 1;
+    }
     uint16_t signals_count = 0;
     RPE(jls_rd_open(&rd, filename));
+    fprintf(json, "{");
+
     RPE(jls_rd_signals(rd, &signals, &signals_count));
+    fprintf(json, "\n\"signals\": [");
     for (uint16_t signal_idx = 0; signal_idx < signals_count; ++signal_idx) {
         struct jls_signal_def_s * s = signals + signal_idx;
+        if (signal_idx) {
+            fprintf(json, ",");
+        }
         switch (s->signal_type) {
             case JLS_SIGNAL_TYPE_FSR:
                 printf("\nProfile FSR signal %d: %d\n", (int) signal_idx, (int) s->signal_id);
-                RPE(profile_fsr_signal(rd, s->signal_id));
+                RPE(profile_fsr_signal(rd, s->signal_id, json));
                 break;
             case JLS_SIGNAL_TYPE_VSR:
                 printf("\nProfile VSR signal %d: %d\n", (int) signal_idx, (int) s->signal_id);
-                RPE(profile_vsr_signal(rd, s->signal_id));
+                RPE(profile_vsr_signal(rd, s->signal_id, json));
                 break;
             default:
                 printf("\nProfile signal %d: %d\n", (int) signal_idx, (int) s->signal_id);
                 break;
         }
     }
+    fprintf(json, "\n]");
+
+    fprintf(json, "\n}\n");
     jls_rd_close(rd);
     return 0;
 }

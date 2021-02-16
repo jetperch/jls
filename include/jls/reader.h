@@ -76,6 +76,16 @@ int32_t jls_rd_sources(struct jls_rd_s * self, struct jls_source_def_s ** source
  */
 int32_t jls_rd_signals(struct jls_rd_s * self, struct jls_signal_def_s ** signals, uint16_t * count);
 
+/**
+ * @brief Get the signal by signal_id.
+ *
+ * @param self The reader instance.
+ * @param signal_id The signal id to get.
+ * @param signal[out] The signal definition.
+ * @return 0 or error code.
+ */
+int32_t jls_rd_signal(struct jls_rd_s * self, uint16_t signal_id, struct jls_signal_def_s * signal);
+
 int32_t jls_rd_fsr_length(struct jls_rd_s * self, uint16_t signal_id, int64_t * samples);
 
 /**

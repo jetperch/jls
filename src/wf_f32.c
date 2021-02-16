@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-#include "wf_f32.h"
-#include "cdef.h"
-#include "wr_prv.h"
+#include "jls/wf_f32.h"
+#include "jls/cdef.h"
+#include "jls/wr_prv.h"
 #include "jls/ec.h"
 #include "jls/log.h"
 #include <inttypes.h>

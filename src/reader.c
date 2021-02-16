@@ -19,7 +19,7 @@
 #include "jls/format.h"
 #include "jls/ec.h"
 #include "jls/log.h"
-#include "crc32.h"
+#include "jls/crc32.h"
 #include "jls/statistics.h"
 #include <inttypes.h>
 #include <math.h>
@@ -607,6 +607,16 @@ int32_t jls_rd_signals(struct jls_rd_s * self, struct jls_signal_def_s ** signal
     return 0;
 }
 
+int32_t jls_rd_signal(struct jls_rd_s * self, uint16_t signal_id, struct jls_signal_def_s * signal) {
+    if (!is_signal_defined(self, signal_id)) {
+        return JLS_ERROR_NOT_FOUND;
+    }
+    if (signal) {
+        *signal = self->signal_def[signal_id];
+    }
+    return 0;
+}
+
 int32_t seek(struct jls_rd_s * self, uint16_t signal_id, uint8_t level, int64_t sample_id) {
     if (!is_signal_defined(self, signal_id)) {
         return JLS_ERROR_NOT_FOUND;
@@ -715,7 +725,9 @@ int32_t jls_rd_fsr_f32(struct jls_rd_s * self, uint16_t signal_id, int64_t start
         return 0;
     }
     ROE(seek(self, signal_id, 0, start_sample_id));
+    self->chunk_cur.hdr.item_next = jls_raw_chunk_tell(self->raw);
     while (data_length > 0) {
+        ROE(jls_raw_chunk_seek(self->raw, self->chunk_cur.hdr.item_next));
         ROE(rd(self));
         int64_t * i64 = ((int64_t*) self->payload.start);
         int64_t chunk_sample_id = i64[0];

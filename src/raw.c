@@ -19,7 +19,7 @@
 #include "jls/time.h"
 #include "jls/ec.h"
 #include "jls/log.h"
-#include "crc32.h"
+#include "jls/crc32.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
