@@ -14,7 +14,8 @@
  * limitations under the License.
  */
 
-#include "jls/writer.h"
+#include "jls/threaded_writer.h"
+#include "jls/ec.h"
 #include "jls/reader.h"
 #include "jls/raw.h"
 #include "jls/time.h"
@@ -23,6 +24,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <windows.h>
 
 
 #define ARRAY_SIZE(x) ( sizeof(x) / sizeof((x)[0]) )
@@ -159,22 +161,29 @@ static void gen_triangle(uint32_t period, float * data, int64_t data_length) {
 static int32_t generate_jls(const char * filename, const struct jls_signal_def_s * signal, int64_t duration) {
     int64_t data_length = 1000000;
     float * data = malloc((size_t) data_length * sizeof(float));
-    struct jls_wr_s * wr = NULL;
+    struct jls_twr_s * wr = NULL;
     gen_triangle(1000, data, data_length);
-    RPE(jls_wr_open(&wr, filename));
-    RPE(jls_wr_source_def(wr, &SOURCE_1));
-    RPE(jls_wr_signal_def(wr, signal));
+    RPE(jls_twr_open(&wr, filename));
+    RPE(jls_twr_source_def(wr, &SOURCE_1));
+    RPE(jls_twr_signal_def(wr, signal));
     int64_t sample_id = 0;
+    int32_t rc = 0;
 
     while (duration > 0) {
         if (data_length > duration) {
             data_length = duration;
         }
-        RPE(jls_wr_fsr_f32(wr, 1, sample_id, data, (uint32_t) data_length));
+        while (1) {
+            rc = jls_twr_fsr_f32(wr, signal->signal_id, sample_id, data, (uint32_t) data_length);
+            if (rc != JLS_ERROR_NOT_ENOUGH_MEMORY) {
+                break;
+            }
+            Sleep(1);
+        }
         sample_id += data_length;
         duration -= data_length;
     }
-    RPE(jls_wr_close(wr));
+    RPE(jls_twr_close(wr));
     return 0;
 }
 

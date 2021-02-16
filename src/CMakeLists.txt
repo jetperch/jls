@@ -21,11 +21,13 @@ set(SOURCES
         crc32.c
         ec.c
         log.c
+        msg_ring_buffer.c
         raw.c
         reader.c
         statistics.c
-        writer.c
+        threaded_writer.c
         wf_f32.c
+        writer.c
 )
 
 foreach(f IN LISTS SOURCES)
