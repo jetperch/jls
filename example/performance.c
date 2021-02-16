@@ -98,7 +98,7 @@ static int _isspace(char c) {
 }
 
 static int cstr_to_i64(const char * src, int64_t * value) {
-    uint32_t v = 0;
+    int64_t v = 0;
     if ((NULL == src) || (NULL == value)) {
         return 1;
     }
@@ -168,6 +168,7 @@ static int32_t generate_jls(const char * filename, const struct jls_signal_def_s
     RPE(jls_twr_signal_def(wr, signal));
     int64_t sample_id = 0;
     int32_t rc = 0;
+    printf("Generate %" PRIi64 " = %.1e\n", duration, (double) duration);
 
     while (duration > 0) {
         if (data_length > duration) {
@@ -271,14 +272,14 @@ static int32_t profile_fsr_signal(struct jls_rd_s * rd, uint16_t signal_id, FILE
             }
             int64_t t_end = jls_time_rel();
             double t_duration = JLS_TIME_TO_F64(t_end - t_start);
-            printf("%d,%d,%d,%g\n", (int) signal_id, (int) increment,
-                   (int) samples, t_duration / iter_count);
+            printf("%d,%" PRIi64 ",%" PRIi64",%g\n", (int) signal_id, increment,
+                   samples, t_duration / iter_count);
             fflush(stdout);
             if (summary_counter) {
                 fprintf(json, ",");
             }
-            fprintf(json, "\n    [%d, %d, %d, %g]", (int) signal_id, (int) increment,
-                    (int) samples, t_duration / iter_count);
+            fprintf(json, "\n    [%d, %" PRIi64 ", %" PRIi64", %g]", (int) signal_id,
+                    increment, samples, t_duration / iter_count);
             ++summary_counter;
         }
         increment *= 3;
