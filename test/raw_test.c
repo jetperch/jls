@@ -95,7 +95,7 @@ static void construct_n_chunks() {
     assert_int_equal(0, jls_raw_open(&j, filename, "w"));
     for (size_t i = 0; i < sizeof(PAYLOAD1); ++i) {
         // printf("chunk %d: %d\n", i, (int32_t) jls_raw_chunk_tell(j));
-        payload_length = sizeof(PAYLOAD1) - i;
+        payload_length = (uint32_t) (sizeof(PAYLOAD1) - i);
         hdr_set(&hdr, JLS_TAG_USER_DATA, 0, payload_length);
         hdr.payload_prev_length = payload_prev_length;
         assert_int_equal(0, jls_raw_wr(j, &hdr, PAYLOAD1 + i));

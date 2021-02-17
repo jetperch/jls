@@ -30,6 +30,7 @@ function (ADD_CMOCKA_TEST _testName)
     add_test(${_testName} ${CMAKE_CURRENT_BINARY_DIR}/${_testName})
 endfunction (ADD_CMOCKA_TEST)
 
+ADD_CMOCKA_TEST(crc32c_test)
 ADD_CMOCKA_TEST(raw_test)
 ADD_CMOCKA_TEST(jls_test)
 ADD_CMOCKA_TEST(statistics_test)

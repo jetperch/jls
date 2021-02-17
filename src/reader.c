@@ -19,7 +19,7 @@
 #include "jls/format.h"
 #include "jls/ec.h"
 #include "jls/log.h"
-#include "jls/crc32.h"
+#include "jls/crc32c.h"
 #include "jls/statistics.h"
 #include <inttypes.h>
 #include <math.h>
@@ -274,7 +274,7 @@ static int32_t payload_parse_str(struct jls_rd_s * self, char ** value) {
 static int32_t rd(struct jls_rd_s * self) {
     while (1) {
         self->chunk_cur.offset = jls_raw_chunk_tell(self->raw);
-        int32_t rc = jls_raw_rd(self->raw, &self->chunk_cur.hdr, self->payload.alloc_size, self->payload.start);
+        int32_t rc = jls_raw_rd(self->raw, &self->chunk_cur.hdr, (uint32_t) self->payload.alloc_size, self->payload.start);
         if (rc == JLS_ERROR_TOO_BIG) {
             size_t sz_new = self->payload.alloc_size;
             while (sz_new < self->chunk_cur.hdr.payload_length) {

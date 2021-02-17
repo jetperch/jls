@@ -19,7 +19,7 @@
 #include "jls/time.h"
 #include "jls/ec.h"
 #include "jls/log.h"
-#include "jls/crc32.h"
+#include "jls/crc32c.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -175,7 +175,7 @@ static int32_t wr_file_header(struct jls_raw_s * self) {
             .version = {.u32 = JLS_FORMAT_VERSION_U32},
             .crc32 = 0,
     };
-    hdr.crc32 = jls_crc32(0, (uint8_t *) &hdr, sizeof(hdr) - 4);
+    hdr.crc32 = jls_crc32c((uint8_t *) &hdr, sizeof(hdr) - 4);
     RLE(f_write(self, &hdr, sizeof(hdr)));
     if (pos != 0) {
         f_seek(self, pos, SEEK_SET);
@@ -190,7 +190,7 @@ static int32_t rd_file_header(struct jls_raw_s * self, struct jls_file_header_s 
         JLS_LOGE("could not read file header");
         return JLS_ERROR_UNSUPPORTED_FILE;
     }
-    uint32_t crc32 = jls_crc32(0, (uint8_t *) hdr, sizeof(*hdr) - 4);
+    uint32_t crc32 = jls_crc32c((uint8_t *) hdr, sizeof(*hdr) - 4);
     if (crc32 != hdr->crc32) {
         JLS_LOGE("file header crc mismatch: 0x%08x != 0x%08x", crc32, hdr->crc32);
         return JLS_ERROR_UNSUPPORTED_FILE;
@@ -303,7 +303,7 @@ int32_t jls_raw_wr(struct jls_raw_s * self, struct jls_chunk_header_s * hdr, con
 }
 
 int32_t jls_raw_wr_header(struct jls_raw_s * self, struct jls_chunk_header_s * hdr) {
-    hdr->crc32 = jls_crc32(0, (uint8_t *) hdr, sizeof(*hdr) - 4);
+    hdr->crc32 = jls_crc32c_hdr(hdr);
     if (self->offset != self->fpos) {
         invalidate_current_chunk(self);
         RLE(f_seek(self, self->offset, SEEK_SET));
@@ -335,7 +335,7 @@ int32_t jls_raw_wr_payload(struct jls_raw_s * self, uint32_t payload_length, con
     if (pad != 0) {
         pad = 8 - pad;
     }
-    uint32_t crc32 = jls_crc32(0, payload, hdr->payload_length);
+    uint32_t crc32 = jls_crc32c(payload, hdr->payload_length);
     footer[pad + 0] = crc32 & 0xff;
     footer[pad + 1] = (crc32 >> 8) & 0xff;
     footer[pad + 2] = (crc32 >> 16) & 0xff;
@@ -377,7 +377,7 @@ int32_t jls_raw_rd_header(struct jls_raw_s * self, struct jls_chunk_header_s * h
             invalidate_current_chunk(self);
             return JLS_ERROR_EMPTY;
         }
-        uint32_t crc32 = jls_crc32(0, (uint8_t *) h, sizeof(*h) - 4);
+        uint32_t crc32 = jls_crc32c_hdr(h);
         if (crc32 != h->crc32) {
             JLS_LOGE("chunk header crc error: %u != %u", crc32, h->crc32);
             invalidate_current_chunk(self);
@@ -414,11 +414,11 @@ int32_t jls_raw_rd_payload(struct jls_raw_s * self, uint32_t payload_length_max,
     }
 
     RLE(f_read(self, (uint8_t *) payload, rd_size));
-    crc32_calc = jls_crc32(0, payload, hdr->payload_length);
-    crc32_file = ((uint32_t) payload[rd_size - 4])
-                 | (((uint32_t) payload[rd_size - 3]) << 8)
-                 | (((uint32_t) payload[rd_size - 2]) << 16)
-                 | (((uint32_t) payload[rd_size - 1]) << 24);
+    crc32_calc = jls_crc32c(payload, hdr->payload_length);
+    crc32_file = ((uint32_t)payload[rd_size - 4])
+        | (((uint32_t)payload[rd_size - 3]) << 8)
+        | (((uint32_t)payload[rd_size - 2]) << 16)
+        | (((uint32_t)payload[rd_size - 1]) << 24);
     if (crc32_calc != crc32_file) {
         JLS_LOGE("crc32 mismatch: 0x%08x != 0x%08x", crc32_file, crc32_calc);
         return JLS_ERROR_MESSAGE_INTEGRITY;

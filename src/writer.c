@@ -22,7 +22,7 @@
 #include "jls/cdef.h"
 #include "jls/ec.h"
 #include "jls/log.h"
-#include "jls/crc32.h"
+#include "jls/crc32c.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -220,7 +220,7 @@ static int32_t buf_add_bin(struct jls_wr_s * self, const uint8_t * data, uint32_
 }
 
 static uint32_t buf_size(struct jls_wr_s * self) {
-    return (self->buf.cur - self->buf.start);
+    return (uint32_t) (self->buf.cur - self->buf.start);
 }
 
 static int32_t buf_wr_u8(struct jls_wr_s * self, uint8_t value) {
@@ -521,7 +521,7 @@ int32_t jls_wr_user_data(struct jls_wr_s * self, uint16_t chunk_meta,
             break;
         case JLS_STORAGE_TYPE_STRING:  // intentional fall-through
         case JLS_STORAGE_TYPE_JSON:
-            data_size = strlen((const char *) data) + 1;
+            data_size = (uint32_t) strlen((const char *) data) + 1;
             break;
         default:
             return JLS_ERROR_PARAMETER_INVALID;

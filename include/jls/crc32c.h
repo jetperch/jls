@@ -20,8 +20,8 @@
  * @brief Cyclic Redundancy Codes (CRC)
  */
 
-#ifndef JLS_CRC32_H__
-#define JLS_CRC32_H__
+#ifndef JLS_CRC32C_H__
+#define JLS_CRC32C_H__
 
 #include <stdint.h>
 
@@ -31,7 +31,7 @@ extern "C" {
 
 /**
  * @ingroup jls
- * @defgroup jls_crc CRC32
+ * @defgroup jls_crc32c CRC32C
  *
  * @brief Cyclic Redundancy Codes (CRC).
  *
@@ -39,18 +39,23 @@ extern "C" {
  */
 
 /**
- * @brief Compute the CRC-32
+ * @brief Compute the CRC-32C over a chunk header.
  *
- * @param crc The existing value for the crc which is used for continued block
- *      computations.  Pass 0 for the first block.
+ * @param hdr The chunk header for the CRC computation which MUST
+ *      be aligned on a 64-bit (8 byte) boundary.
+ * @return The computed CRC-32C.
+ */
+uint32_t jls_crc32c_hdr(const struct jls_chunk_header_s * hdr);
+
+
+/**
+ * @brief Compute the CRC-32C
+ *
  * @param data The data for the CRC computation.
  * @param length The number of total_bytes in data.
- * @return The computed CRC-32.
- *
- * @see http://create.stephan-brumme.com/crc32/
- * @see https://pycrc.org
+ * @return The computed CRC-32C.
  */
-uint32_t jls_crc32(uint32_t crc, uint8_t const *data, uint32_t length);
+uint32_t jls_crc32c(uint8_t const *data, uint32_t length);
 
 #ifdef __cplusplus
 }
@@ -58,4 +63,4 @@ uint32_t jls_crc32(uint32_t crc, uint8_t const *data, uint32_t length);
 
 /** @} */
 
-#endif /* JLS_CRC32_H__ */
+#endif /* JLS_CRC32C_H__ */
