@@ -339,7 +339,7 @@ static void compare_stats(float * data, float * src, size_t src_length) {
     assert_float_equal(s1.min, data[1], 1e-7);
     assert_float_equal(s1.max, data[2], 1e-7);
     float v_std = (float) sqrt(jls_statistics_var(&s1));
-    assert_float_equal(v_std, data[3], 1e-7);
+    assert_float_equal(v_std, data[3], 1e-7 + 0.0005 * v_std);
 }
 
 static void test_statistics(void **state) {

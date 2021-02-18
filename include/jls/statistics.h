@@ -61,6 +61,9 @@ void jls_statistics_invalid(struct jls_statistics_s * s);
  * @param s The statistics instance.
  * @param x The value array.
  * @param length The number of elements in x.
+ *
+ * Use the "traditional" two pass method.  Compute mean in first pass,
+ * then variance in second pass.
  */
 void jls_statistics_compute_f32(struct jls_statistics_s * s, const float * x, uint64_t length);
 
@@ -85,7 +88,12 @@ void jls_statistics_add(struct jls_statistics_s * s, double x);
  * @brief Get the sample variance.
  *
  * @param s The statistics instance.
- * @return The sample variance.
+ * @return The sample variance
+ *
+ * Sample variance uses k-1 denominator, also called the Bessel correction,
+ * which is what you want for estimating variance from samples.
+ * "Standard" population variance uses k as the denominator which tends to
+ * underestimate true variance.
  */
 double jls_statistics_var(struct jls_statistics_s * s);
 

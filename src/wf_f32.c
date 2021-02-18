@@ -293,8 +293,7 @@ static int32_t summaryN(struct jls_wf_f32_s * self, uint8_t level, int64_t pos) 
         dst = self->summary[level];
     }
 
-    const double mean_scale = 1.0 / self->def.summary_decimate_factor;
-    const double var_scale = mean_scale;
+    const double scale = 1.0 / self->def.summary_decimate_factor;
     JLS_LOGD2("summaryN %d: %" PRIi64 " %" PRIi64, (int) level, dst->index->offset, pos);
     dst->index->data[dst->index->offset++] = pos;
 
@@ -315,7 +314,7 @@ static int32_t summaryN(struct jls_wf_f32_s * self, uint8_t level, int64_t pos) 
             }
             ++sample_idx;
         }
-        v_mean *= mean_scale;
+        v_mean *= scale;
         sample_idx = idx * self->def.summary_decimate_factor;
         for (uint32_t sample = 0; sample < self->def.summary_decimate_factor; ++sample) {
             double v = src->data[sample_idx] - v_mean;
@@ -326,7 +325,7 @@ static int32_t summaryN(struct jls_wf_f32_s * self, uint8_t level, int64_t pos) 
         dst->data[dst->offset + 0] = (float) (v_mean);
         dst->data[dst->offset + 1] = v_min;
         dst->data[dst->offset + 2] = v_max;
-        dst->data[dst->offset + 3] = (float) (sqrt(v_var * var_scale));
+        dst->data[dst->offset + 3] = (float) (sqrt(v_var * scale));
         dst->offset += 4;
     }
 
@@ -345,8 +344,7 @@ static int32_t summary1(struct jls_wf_f32_s * self, int64_t pos) {
         dst = self->summary[1];
     }
 
-    const double mean_scale = 1.0 / self->def.sample_decimate_factor;
-    const double var_scale = 1.0 / (self->def.sample_decimate_factor - 1);
+    const double scale = 1.0 / self->def.sample_decimate_factor;
     // JLS_LOGI("1 add %" PRIi64 " @ %" PRIi64 " %p", pos, dst->index->offset, &dst->index->data[dst->index->offset]);
     dst->index->data[dst->index->offset++] = pos;
 
@@ -368,7 +366,7 @@ static int32_t summary1(struct jls_wf_f32_s * self, int64_t pos) {
             }
             ++sample_idx;
         }
-        v_mean *= mean_scale;
+        v_mean *= scale;
         sample_idx = idx * self->def.sample_decimate_factor;
         for (uint32_t sample = 0; sample < self->def.sample_decimate_factor; ++sample) {
             double v = data[sample_idx] - v_mean;
@@ -378,7 +376,7 @@ static int32_t summary1(struct jls_wf_f32_s * self, int64_t pos) {
         dst->data[dst->offset + 0] = (float) (v_mean);
         dst->data[dst->offset + 1] = v_min;
         dst->data[dst->offset + 2] = v_max;
-        dst->data[dst->offset + 3] = (float) (sqrt(v_var * var_scale));
+        dst->data[dst->offset + 3] = (float) (sqrt(v_var * scale));
         dst->offset += 4;
     }
 
