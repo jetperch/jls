@@ -50,8 +50,6 @@ signals. This repository contains:
   * Automatic load by summary level
   * Fast seek, next, previous access
 * Wall-clock time (UTC) to sample id
-  * Automatic with the host computer clock
-  * Optional manual timestamping
 * Annotations
   * Global (UTC time)
   * Attached to signals

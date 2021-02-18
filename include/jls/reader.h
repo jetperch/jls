@@ -41,7 +41,7 @@ extern "C" {
  */
 
 
-// opaque object
+/// The opaque JLS reader object.
 struct jls_rd_s;
 
 /**

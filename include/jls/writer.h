@@ -41,14 +41,47 @@ extern "C" {
  */
 
 
-// opaque object
+/// Opaque JLS writer object.
 struct jls_wr_s;
 
-
+/**
+ * @brief Open a JLS file for writing.
+ *
+ * @param instance[out] The JLS writer instance.
+ * @param path The JLS file path.
+ * @return 0 or error code.
+ *
+ * Call jls_wr_close() when done.
+ */
 int32_t jls_wr_open(struct jls_wr_s ** instance, const char * path);
+
+/**
+ * @brief Close a JLS file.
+ *
+ * @param self The JLS writer instance from jls_wr_open().
+ * @return 0 or error code.
+ */
 int32_t jls_wr_close(struct jls_wr_s * self);
 
+/**
+ * @brief Define a new source.
+ *
+ * @param self The JLS writer instance.
+ * @param source The source definition.
+ * @return 0 or error code.
+ *
+ * This JLS file format supports multiple sources, which are usually different
+ * instruments.  Each source can provide multiple signals.
+ */
 int32_t jls_wr_source_def(struct jls_wr_s * self, const struct jls_source_def_s * source);
+
+/**
+ * @brief Define a new signal.
+ *
+ * @param self The JLS writer instance.
+ * @param signal The signal definition.
+ * @return 0 or error code.
+ */
 int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signal_def_s * signal);
 
 /**
@@ -66,6 +99,16 @@ int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signal_def_s 
 int32_t jls_wr_user_data(struct jls_wr_s * self, uint16_t chunk_meta,
         enum jls_storage_type_e storage_type, const uint8_t * data, uint32_t data_size);
 
+/**
+ * @brief Write sample data to a float32 FSR signal.
+ *
+ * @param self The JLS writer instance.
+ * @param signal_id The signal id.
+ * @param sample_id The sample id for data[0].
+ * @param data The sample data array.
+ * @param data_length The length of data in floats (bytes / 4).
+ * @return 0 or error code
+ */
 int32_t jls_wr_fsr_f32(struct jls_wr_s * self, uint16_t signal_id,
         int64_t sample_id, const float * data, uint32_t data_length);
 
