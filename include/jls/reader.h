@@ -44,16 +44,21 @@ extern "C" {
 // opaque object
 struct jls_rd_s;
 
-struct jls_rd_annotation_s {
-    int64_t timestamp;
-    uint8_t annotation_type;
-    uint8_t storage_type;
-    uint32_t data_size;
-    const uint8_t * data;
-};
-
-
+/**
+ * @brief Open a JLS file to read contents.
+ *
+ * @param instance[out] The new JLS read instance.
+ * @param path The JLS file path.
+ * @return 0 or error code.
+ *
+ * Call jls_rd_close() when done.
+ */
 int32_t jls_rd_open(struct jls_rd_s ** instance, const char * path);
+
+/**
+ * @brief Close a JLS file opened with jls_rd_open().
+ * @param self The JLS read instance.
+ */
 void jls_rd_close(struct jls_rd_s * self);
 
 /**
@@ -86,6 +91,14 @@ int32_t jls_rd_signals(struct jls_rd_s * self, struct jls_signal_def_s ** signal
  */
 int32_t jls_rd_signal(struct jls_rd_s * self, uint16_t signal_id, struct jls_signal_def_s * signal);
 
+/**
+ * @brief Get the number of samples in an FSR signal.
+ *
+ * @param self The reader instance.
+ * @param signal_id The signal id.
+ * @param samples[out] The number of samples in the signal.
+ * @return 0 or error code.
+ */
 int32_t jls_rd_fsr_length(struct jls_rd_s * self, uint16_t signal_id, int64_t * samples);
 
 /**
@@ -129,22 +142,58 @@ int32_t jls_rd_fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
                                   int64_t start_sample_id, int64_t increment,
                                   float * data, int64_t data_length);
 
+/**
+ * @brief The function called for each annotation.
+ *
+ * @param user_data The arbitrary user data.
+ * @param annotation The annotation which only remains valid for the duration
+ *      of the call.
+ * @return 0 to continue iteration or any other value to stop.
+ * @see jls_rd_annotations
+ */
+typedef int32_t (*jls_rd_annotation_cbk_fn)(void * user_data, const struct jls_annotation_s * annotation);
 
-int32_t jls_rd_annotations(struct jls_rd_s * self, uint16_t signal_id,
-                          struct jls_rd_annotation_s ** annotations, uint32_t * count);
-void jls_rd_annotations_free(struct jls_rd_s * self, struct jls_rd_annotation_s * annotations);
+/**
+ * @brief Iterate over the annotations for a signal.
+ *
+ * @param self The reader instance.
+ * @param signal_id The signal id.
+ * @param timestamp The starting timestamp.  Skip all prior annotations.
+ * @param cbk_fn The callback function that jls_rd_annotations() will
+ *      call once for each matching annotation.  Return 0 to continue
+ *      to the next annotation or a non-zero value to stop iteration.
+ * @param cbk_user_data The arbitrary data provided to cbk_fn.
+ * @return 0 or error code.
+ */
+int32_t jls_rd_annotations(struct jls_rd_s * self, uint16_t signal_id, int64_t timestamp,
+                           jls_rd_annotation_cbk_fn cbk_fn, void * cbk_user_data);
 
-struct jls_rd_user_data_s {
-    uint16_t chunk_meta;
-    enum jls_storage_type_e storage_type;
-    uint8_t * data;
-    uint32_t data_size;
-};
+/**
+ * @brief The function called for each user data entry.
+ *
+ * @param user_data The arbitrary user data.
+ * @param chunk_meta The chunk meta value.
+ * @param storage_type The data storage type.
+ * @param data The data.
+ * @param data_size The size of data in bytes.
+ * @return 0 to continue iteration or any other value to stop.
+ * @see jls_rd_user_data
+ */
+typedef int32_t (*jls_rd_user_data_cbk_fn)(void * user_data,
+        uint16_t chunk_meta, enum jls_storage_type_e storage_type,
+        uint8_t * data, uint32_t data_size);
 
-int32_t jls_rd_user_data_reset(struct jls_rd_s * self);
-int32_t jls_rd_user_data_next(struct jls_rd_s * self, struct jls_rd_user_data_s * user_data);
-int32_t jls_rd_user_data_prev(struct jls_rd_s * self, struct jls_rd_user_data_s * user_data);
-
+/**
+ * @brief Iterate over user data entries.
+ *
+ * @param self The reader instance.
+ * @param cbk_fn The callback function that jls_rd_user_data() will
+ *      call once for each user data entry.  Return 0 to continue
+ *      to the next user data entry or a non-zero value to stop iteration.
+ * @param cbk_user_data The arbitrary data provided to cbk_fn.
+ * @return 0 or error code.
+ */
+int32_t jls_rd_user_data(struct jls_rd_s * self, jls_rd_user_data_cbk_fn cbk_fn, void * cbk_user_data);
 
 /** @} */
 

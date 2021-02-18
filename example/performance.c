@@ -85,7 +85,8 @@ const struct jls_signal_def_s SIGNAL_1 = {
         .sample_decimate_factor = 100,
         .entries_per_summary = 20000,
         .summary_decimate_factor = 100,
-        .utc_rate_auto = 0,
+        .annotation_decimate_factor = 100,
+        .utc_decimate_factor = 100,
         .name = "performance_1",
         .si_units = "A",
 };
@@ -209,7 +210,8 @@ static int32_t json_signal_def(struct jls_rd_s * rd, uint16_t signal_id, FILE * 
     fprintf(json, "\n    \"sample_decimate_factor\": %" PRIu32 ",", signal_def.sample_decimate_factor);
     fprintf(json, "\n    \"entries_per_summary\": %" PRIu32 ",", signal_def.entries_per_summary);
     fprintf(json, "\n    \"summary_decimate_factor\": %" PRIu32 ",", signal_def.summary_decimate_factor);
-    fprintf(json, "\n    \"utc_rate_auto\": %" PRIu32 ",", signal_def.utc_rate_auto);
+    fprintf(json, "\n    \"annotation_decimate_factor\": %" PRIu32 ",", signal_def.annotation_decimate_factor);
+    fprintf(json, "\n    \"utc_decimate_factor\": %" PRIu32 ",", signal_def.utc_decimate_factor);
     fprintf(json, "\n    \"name\": \"%s\",", signal_def.name);
     fprintf(json, "\n    \"si_units\": \"%s\",", signal_def.si_units);
     fprintf(json, "\n    \"length\": %" PRIi64, length);

@@ -298,7 +298,8 @@ struct jls_signal_def_s {       // 0 reserved for VSR annotations
     uint32_t sample_decimate_factor;    // definite
     uint32_t entries_per_summary;       // suggestion, will be rounded
     uint32_t summary_decimate_factor;   // definite
-    uint32_t utc_rate_auto;             // 0=off, else samples per UTC entry.
+    uint32_t annotation_decimate_factor;
+    uint32_t utc_decimate_factor;
     // on disk: reserve 64 bytes as 0 for future use
     const char * name;
     const char * si_units;
@@ -447,6 +448,52 @@ struct jls_chunk_header_s {
     /// The CRC32 over the header, excluding this field.
     uint32_t crc32;
 };
+
+/// The index of FSR chunk offsets for tag JLS_TAG_TRACK_FSR_INDEX.
+struct jls_fsr_index_s {
+    int64_t timestamp;          ///< The sample_id for the first entry.
+    int64_t entry_count;        ///< The total number of entries
+    int64_t entries[];          ///< The chunk file offsets, spaced by fixed time intervals.
+};
+
+/// The (timestamp, offset) entries for jls_timestamped_index_s.
+struct jls_timestamped_index_entry_s {
+    int64_t timestamp;          ///< The timestamp.  sample_id for FSR, UTC for VSR.
+    int64_t offset;             ///< The chunk file offset.
+};
+
+/**
+ * @brief The index of (timestamp, offset) pairs.
+ *
+ * This structure is the index used by VSR, ANNOTATION, and UTC tracks.
+ * The tags are:
+ * - JLS_TAG_TRACK_VSR_INDEX
+ * - JLS_TAG_TRACK_ANNOTATION_INDEX
+ * - JLS_TAG_TRACK_UTC_INDEX
+ */
+struct jls_timestamped_index_s {
+    int64_t timestamp;          ///< The timestamp of the first entry.  sample_id for FSR, UTC for VSR.
+    int64_t entry_count;        ///< The total number of entries.
+    struct jls_timestamped_index_entry_s entries[];
+};
+
+/// Store a single annotation for JLS_TAG_TRACK_ANNOTATION_DATA.
+struct jls_annotation_s {
+    int64_t timestamp;          ///< The timestamp for this annotation.  sample_id for FSR, UTC for VSR.
+    uint8_t annotation_type;    ///< The jls_annotation_type_e.
+    uint8_t storage_type;       ///< The jls_storage_type_e.
+    uint8_t rsv8_0;             ///< Reserved, write to 0.
+    uint8_t rsv8_1;             ///< Reserved, write to 0.
+    uint32_t data_size;         ///< The size of data in bytes.
+    uint8_t data[];             ///< The annotation data.
+};
+
+/// Store mappings from (sample_id, utc) for JLS_TAG_TRACK_UTC_DATA.
+struct jls_utc_s {
+    uint64_t sample_id;         ///< The timestamp in sample ids.
+    uint64_t timestamp;         ///< The timestamp in UTC.
+};
+
 
 
 /** @} */

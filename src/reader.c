@@ -125,7 +125,6 @@ struct jls_rd_s {
     struct chunk_s signal_head;  // signal_det, track_*_def, track_*_head
 
     struct chunk_s user_data_head;  // user_data, ignore first
-    struct chunk_s user_data_cur;
 };
 
 static int32_t strings_alloc(struct jls_rd_s * self) {
@@ -365,8 +364,9 @@ static int32_t handle_signal_def(struct jls_rd_s * self) {
     ROE(payload_parse_u32(self, &s->sample_decimate_factor));
     ROE(payload_parse_u32(self, &s->entries_per_summary));
     ROE(payload_parse_u32(self, &s->summary_decimate_factor));
-    ROE(payload_parse_u32(self, &s->utc_rate_auto));
-    ROE(payload_skip(self, 64));
+    ROE(payload_parse_u32(self, &s->annotation_decimate_factor));
+    ROE(payload_parse_u32(self, &s->utc_decimate_factor));
+    ROE(payload_skip(self, 92));
     ROE(payload_parse_str(self, (char **) &s->name));
     ROE(payload_parse_str(self, (char **) &s->si_units));
     if (0 == signal_validate(self, signal_id, s)) {  // validate passed
@@ -503,7 +503,6 @@ static int32_t scan(struct jls_rd_s * self) {
                 if (!self->user_data_head.offset) {
                     self->user_data_head.offset = pos;
                     self->user_data_head.hdr = self->chunk_cur.hdr;
-                    self->user_data_cur = self->user_data_head;
                 }
                 break;
             case JLS_TAG_SOURCE_DEF:
@@ -996,71 +995,65 @@ int32_t jls_rd_fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
     return 0;
 }
 
-int32_t rd_user_data(struct jls_rd_s * self, struct jls_rd_user_data_s * user_data) {
-    ROE(rd(self));
-    if (self->chunk_cur.hdr.tag != JLS_TAG_USER_DATA) {
-        return JLS_ERROR_NOT_FOUND;
+int32_t jls_rd_annotations(struct jls_rd_s * self, uint16_t signal_id, int64_t timestamp,
+                           jls_rd_annotation_cbk_fn cbk_fn, void * cbk_user_data) {
+    struct jls_annotation_s * annotation;
+    if (!cbk_fn) {
+        return JLS_ERROR_PARAMETER_INVALID;
     }
-    uint8_t storage_type = (uint8_t) ((self->chunk_cur.hdr.chunk_meta >> 12) & 0x0f);
-    switch (storage_type) {
-        case JLS_STORAGE_TYPE_BINARY:  // intentional fall-through
-        case JLS_STORAGE_TYPE_STRING:  // intentional fall-through
-        case JLS_STORAGE_TYPE_JSON:
-            break;
-        default:
-            return JLS_ERROR_PARAMETER_INVALID;
-    }
-    user_data->chunk_meta = self->chunk_cur.hdr.chunk_meta & 0x0fff;
-    user_data->storage_type = storage_type;
-    user_data->data = self->payload.start;
-    user_data->data_size = self->chunk_cur.hdr.payload_length;
-    self->user_data_cur = self->chunk_cur;
-    return 0;
-}
-
-int32_t jls_rd_annotations(struct jls_rd_s * self, uint16_t signal_id,
-                           struct jls_rd_annotation_s ** annotations, uint32_t * count) {
     if (!is_signal_defined(self, signal_id)) {
         return JLS_ERROR_NOT_FOUND;
     }
-    if (!annotations || !count) {
+
+    // todo seek
+    (void) timestamp;
+
+    // iterate
+    int64_t pos = self->signals[signal_id].track_head_data[JLS_TRACK_TYPE_ANNOTATION][0];
+    while (pos) {
+        ROE(jls_raw_chunk_seek(self->raw, pos));
+        ROE(rd(self));
+        if (self->chunk_cur.hdr.tag != JLS_TAG_TRACK_ANNOTATION_DATA) {
+            return JLS_ERROR_NOT_FOUND;
+        }
+        annotation = (struct jls_annotation_s *) self->payload.start;
+        if (cbk_fn(cbk_user_data, annotation)) {
+            return 0;
+        }
+        pos = self->chunk_cur.hdr.item_next;
+    }
+    return 0;
+}
+
+int32_t jls_rd_user_data(struct jls_rd_s * self, jls_rd_user_data_cbk_fn cbk_fn, void * cbk_user_data) {
+    int32_t rv;
+    if (!cbk_fn) {
         return JLS_ERROR_PARAMETER_INVALID;
     }
-    uint8_t * p = malloc(ANNOTATIONS_SIZE_DEFAULT);
-    if (!p) {
-        return JLS_ERROR_NOT_ENOUGH_MEMORY;
+    int64_t pos = self->user_data_head.hdr.item_next;
+    uint16_t chunk_meta;
+    while (pos) {
+        ROE(jls_raw_chunk_seek(self->raw, pos));
+        ROE(rd(self));
+        if (self->chunk_cur.hdr.tag != JLS_TAG_USER_DATA) {
+            return JLS_ERROR_NOT_FOUND;
+        }
+        uint8_t storage_type = (uint8_t) ((self->chunk_cur.hdr.chunk_meta >> 12) & 0x0f);
+        switch (storage_type) {
+            case JLS_STORAGE_TYPE_BINARY:  // intentional fall-through
+            case JLS_STORAGE_TYPE_STRING:  // intentional fall-through
+            case JLS_STORAGE_TYPE_JSON:
+                break;
+            default:
+                return JLS_ERROR_PARAMETER_INVALID;
+        }
+        chunk_meta = self->chunk_cur.hdr.chunk_meta & 0x0fff;
+        rv = cbk_fn(cbk_user_data, chunk_meta, storage_type,
+                    self->payload.start, self->chunk_cur.hdr.payload_length);
+        if (rv) {  // iteration done
+            return 0;
+        }
+        pos = self->chunk_cur.hdr.item_next;
     }
-
-    // todo
-    *annotations = 0;
-    *count = 0;
-
     return 0;
-}
-
-void jls_rd_annotations_free(struct jls_rd_s * self, struct jls_rd_annotation_s * annotations);
-
-int32_t jls_rd_user_data_reset(struct jls_rd_s * self) {
-    self->user_data_cur = self->user_data_head;
-    return 0;
-}
-
-int32_t jls_rd_user_data_next(struct jls_rd_s * self, struct jls_rd_user_data_s * user_data) {
-    if (!self->user_data_cur.offset || !self->user_data_cur.hdr.item_next) {
-        return JLS_ERROR_EMPTY;
-    }
-    ROE(jls_raw_chunk_seek(self->raw, self->user_data_cur.hdr.item_next));
-    return rd_user_data(self, user_data);
-}
-
-int32_t jls_rd_user_data_prev(struct jls_rd_s * self, struct jls_rd_user_data_s * user_data) {
-    if ((self->user_data_cur.offset <= 0) || !self->user_data_cur.hdr.item_prev) {
-        return JLS_ERROR_EMPTY;
-    }
-    if (self->user_data_cur.hdr.item_prev == (uint64_t) self->user_data_head.offset) {
-        jls_rd_user_data_reset(self);
-        return JLS_ERROR_EMPTY;
-    }
-    ROE(jls_raw_chunk_seek(self->raw, self->user_data_cur.hdr.item_prev));
-    return rd_user_data(self, user_data);
 }

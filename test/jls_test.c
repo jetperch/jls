@@ -70,7 +70,8 @@ const struct jls_signal_def_s SIGNAL_5 = {
         .sample_decimate_factor = 100,
         .entries_per_summary = 200,
         .summary_decimate_factor = 100,
-        .utc_rate_auto = 0,
+        .annotation_decimate_factor = 100,
+        .utc_decimate_factor = 100,
         .name = "signal 5",
         .si_units = "A",
 };
@@ -85,7 +86,8 @@ const struct jls_signal_def_s SIGNAL_6 = {
         .sample_decimate_factor = 100,
         .entries_per_summary = 200,
         .summary_decimate_factor = 100,
-        .utc_rate_auto = 0,
+        .annotation_decimate_factor = 100,
+        .utc_decimate_factor = 100,
         .name = "signal 6",
         .si_units = "V",
 };
@@ -128,6 +130,29 @@ static void test_wr_source_duplicate(void **state) {
     assert_int_equal(0, jls_wr_close(wr));
 }
 
+static int32_t on_annotation(void * user_data, const struct jls_annotation_s * annotation) {
+    (void) user_data;
+    int64_t timestamp = annotation->timestamp;
+    uint8_t annotation_type = annotation->annotation_type;
+    uint8_t storage_type = annotation->storage_type;
+    uint32_t data_size = annotation->data_size;
+    const uint8_t * data = annotation->data;
+
+    check_expected(timestamp);
+    check_expected(annotation_type);
+    check_expected(storage_type);
+    check_expected(data_size);
+    check_expected_ptr(data);
+    return 0;
+}
+
+#define expect_annotation(timestamp_, annotation_type_, storage_type_, data_, data_size_) \
+    expect_value(on_annotation, timestamp, timestamp_);                                   \
+    expect_value(on_annotation, annotation_type, annotation_type_);                       \
+    expect_value(on_annotation, storage_type, storage_type_);                             \
+    expect_value(on_annotation, data_size, data_size_);                                   \
+    expect_memory(on_annotation, data, data_, data_size_)
+
 static void test_annotation(void **state) {
     (void) state;
     int64_t now = jls_now();
@@ -152,14 +177,44 @@ static void test_annotation(void **state) {
     assert_int_equal(0, jls_wr_close(wr));
 
     assert_int_equal(0, jls_rd_open(&rd, filename));
-    struct jls_rd_annotation_s * annotations;
-    uint32_t count = 0;
-    assert_int_equal(0, jls_rd_annotations(rd, 0, &annotations, &count));
-    // assert_int_equal(5, count); // todo
+
+    expect_annotation(now + 0 * JLS_TIME_MILLISECOND,
+                      JLS_ANNOTATION_TYPE_TEXT, JLS_STORAGE_TYPE_STRING,
+                      (const uint8_t *) STRING_1, sizeof(STRING_1));
+    expect_annotation(now + 1 * JLS_TIME_MILLISECOND,
+                      JLS_ANNOTATION_TYPE_MARKER, JLS_STORAGE_TYPE_STRING,
+                      (const uint8_t *) "1", 2);
+    expect_annotation(now + 2 * JLS_TIME_MILLISECOND,
+                      JLS_ANNOTATION_TYPE_USER, JLS_STORAGE_TYPE_BINARY,
+                      USER_DATA_1, sizeof(USER_DATA_1));
+    expect_annotation(now + 3 * JLS_TIME_MILLISECOND,
+                      JLS_ANNOTATION_TYPE_USER, JLS_STORAGE_TYPE_STRING,
+                      (const uint8_t *) STRING_1, sizeof(STRING_1));
+    expect_annotation(now + 4 * JLS_TIME_MILLISECOND,
+                      JLS_ANNOTATION_TYPE_USER, JLS_STORAGE_TYPE_JSON,
+                      (const uint8_t *) JSON_1, sizeof(JSON_1));
+    assert_int_equal(0, jls_rd_annotations(rd, 0, 0, on_annotation, NULL));
 
     // todo test
     jls_rd_close(rd);
 }
+
+static int32_t on_user_data(void * user_data,
+                            uint16_t chunk_meta, enum jls_storage_type_e storage_type,
+                            uint8_t * data, uint32_t data_size) {
+    (void) user_data;
+    check_expected(chunk_meta);
+    check_expected(storage_type);
+    check_expected(data_size);
+    check_expected_ptr(data);
+    return 0;
+}
+
+#define expect_user_data(chunk_meta_, storage_type_, data_, data_size_) \
+    expect_value(on_user_data, chunk_meta, chunk_meta_);               \
+    expect_value(on_user_data, storage_type, storage_type_);           \
+    expect_value(on_user_data, data_size, data_size_);                 \
+    expect_memory(on_user_data, data, data_, data_size_)
 
 static void test_user_data(void **state) {
     (void) state;
@@ -173,38 +228,10 @@ static void test_user_data(void **state) {
 
     assert_int_equal(0, jls_rd_open(&rd, filename));
 
-    struct jls_rd_user_data_s user_data;
-    assert_int_equal(0, jls_rd_user_data_next(rd, &user_data));
-    assert_int_equal(CHUNK_META_1, user_data.chunk_meta);
-    assert_int_equal(JLS_STORAGE_TYPE_BINARY, user_data.storage_type);
-    assert_int_equal(sizeof(USER_DATA_1), user_data.data_size);
-    assert_memory_equal(USER_DATA_1, user_data.data, sizeof(sizeof(USER_DATA_1)));
-
-    assert_int_equal(0, jls_rd_user_data_next(rd, &user_data));
-    assert_int_equal(CHUNK_META_2, user_data.chunk_meta);
-    assert_int_equal(JLS_STORAGE_TYPE_STRING, user_data.storage_type);
-    assert_int_equal(sizeof(STRING_1), user_data.data_size);
-    assert_memory_equal(STRING_1, user_data.data, sizeof(sizeof(STRING_1)));
-
-    assert_int_equal(0, jls_rd_user_data_next(rd, &user_data));
-    assert_int_equal(CHUNK_META_3, user_data.chunk_meta);
-    assert_int_equal(JLS_STORAGE_TYPE_JSON, user_data.storage_type);
-    assert_int_equal(sizeof(JSON_1), user_data.data_size);
-    assert_memory_equal(JSON_1, user_data.data, sizeof(sizeof(JSON_1)));
-
-    assert_int_equal(JLS_ERROR_EMPTY, jls_rd_user_data_next(rd, &user_data));
-
-    assert_int_equal(0, jls_rd_user_data_prev(rd, &user_data));
-    assert_int_equal(CHUNK_META_2, user_data.chunk_meta);
-    assert_int_equal(0, jls_rd_user_data_prev(rd, &user_data));
-    assert_int_equal(CHUNK_META_1, user_data.chunk_meta);
-    assert_int_equal(JLS_ERROR_EMPTY, jls_rd_user_data_prev(rd, &user_data));
-
-    assert_int_equal(0, jls_rd_user_data_next(rd, &user_data));
-    assert_int_equal(0, jls_rd_user_data_next(rd, &user_data));
-    assert_int_equal(0, jls_rd_user_data_reset(rd));
-    assert_int_equal(0, jls_rd_user_data_next(rd, &user_data));
-    assert_int_equal(CHUNK_META_1, user_data.chunk_meta);
+    expect_user_data(CHUNK_META_1, JLS_STORAGE_TYPE_BINARY, USER_DATA_1, sizeof(USER_DATA_1));
+    expect_user_data(CHUNK_META_2, JLS_STORAGE_TYPE_STRING, (const uint8_t *) STRING_1, sizeof(STRING_1));
+    expect_user_data(CHUNK_META_3, JLS_STORAGE_TYPE_JSON, (const uint8_t *) JSON_1, sizeof(JSON_1));
+    assert_int_equal(0, jls_rd_user_data(rd, on_user_data, NULL));
 
     jls_rd_close(rd);
 }
@@ -234,7 +261,8 @@ static void test_signal(void **state) {
     assert_int_equal(SIGNAL_5.samples_per_data, signals[1].samples_per_data);
     assert_int_equal(SIGNAL_5.sample_decimate_factor, signals[1].sample_decimate_factor);
     assert_int_equal(SIGNAL_5.entries_per_summary, signals[1].entries_per_summary);
-    assert_int_equal(SIGNAL_5.utc_rate_auto, signals[1].utc_rate_auto);
+    assert_int_equal(SIGNAL_5.annotation_decimate_factor, signals[1].annotation_decimate_factor);
+    assert_int_equal(SIGNAL_5.utc_decimate_factor, signals[1].utc_decimate_factor);
     assert_string_equal(SIGNAL_5.name, signals[1].name);
     assert_string_equal(SIGNAL_5.si_units, signals[1].si_units);
     assert_string_equal(SIGNAL_6.name, signals[2].name);
@@ -339,7 +367,7 @@ static void compare_stats(float * data, float * src, size_t src_length) {
     assert_float_equal(s1.min, data[1], 1e-7);
     assert_float_equal(s1.max, data[2], 1e-7);
     float v_std = (float) sqrt(jls_statistics_var(&s1));
-    assert_float_equal(v_std, data[3], 1e-7 + 0.0005 * v_std);
+    assert_float_equal(v_std, data[3], 1e-7f + 0.0005f * v_std);
 }
 
 static void test_statistics(void **state) {
