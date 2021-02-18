@@ -721,11 +721,11 @@ int32_t jls_wr_annotation(struct jls_wr_s * self, uint16_t signal_id, int64_t ti
             ROE(buf_add_bin(self, data, data_size));
             break;
         case JLS_STORAGE_TYPE_STRING:
-            ROE(buf_wr_u32(self, strlen(data) + 1));
+            ROE(buf_wr_u32(self, (uint32_t) (strlen(data) + 1)));
             ROE(buf_add_str(self, (const char *) data));
             break;
         case JLS_STORAGE_TYPE_JSON:
-            ROE(buf_wr_u32(self, strlen(data) + 1));
+            ROE(buf_wr_u32(self, (uint32_t) (strlen(data) + 1)));
             ROE(buf_add_str(self, (const char *) data));
             break;
         default:
