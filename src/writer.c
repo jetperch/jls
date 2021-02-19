@@ -100,11 +100,11 @@ struct jls_wr_s {
 
 struct jls_source_def_s SOURCE_0 = {
         .source_id = 0,
-        .name = "s", // "global_annotation_source",
-        .vendor = "None",
-        .model = "None",
+        .name = "global_annotation_source",
+        .vendor = "jls",
+        .model = "-",
         .version = "1.0.0",
-        .serial_number = "None"
+        .serial_number = "-"
 };
 
 struct jls_signal_def_s SIGNAL_0 = {       // 0 reserved for VSR annotations

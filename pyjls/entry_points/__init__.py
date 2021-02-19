@@ -1,4 +1,5 @@
-# Copyright 2021 Jetperch LLC
+#!/usr/bin/env python3
+# Copyright 2018-2021 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .binding import DataType, AnnotationType, Writer, Reader
-from .version import *
+from . import info
 
-__all__ = [Writer, Reader, __version__]
+__all__ = [info]
+"""This list of available command modules.  Each module must contain a 
+parser_config(subparser) function.  The function must return the callable(args)
+that will be executed for the command."""

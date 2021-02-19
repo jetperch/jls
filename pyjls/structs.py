@@ -1,4 +1,19 @@
+# Copyright 2021 Jetperch LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from dataclasses import dataclass
+
 
 @dataclass
 class SourceDef:
@@ -8,6 +23,13 @@ class SourceDef:
     model: str = None
     version: str = None
     serial_number: str = None
+
+    def info(self, verbose=None) -> str:
+        strs = [f'{self.source_id}: {self.name}']
+        if verbose:
+            for field in ['vendor', 'model', 'version', 'serial_number']:
+                strs.append(f'    {field}: {getattr(self, field)}')
+        return '\n'.join(strs)
 
 
 @dataclass
@@ -26,3 +48,14 @@ class SignalDef:
     name: str = None
     si_units: str = None
     length: int = 0
+
+    def info(self, verbose=None) -> str:
+        strs = [f'{self.signal_id}: {self.name}']
+        if verbose:
+            for field in ['source_id', 'signal_type', 'data_type', 'sample_rate',
+                          'samples_per_data', 'sample_decimate_factor',
+                          'entries_per_summary', 'summary_decimate_factor',
+                          'annotation_decimate_factor', 'utc_decimate_factor',
+                          'si_units', 'length']:
+                strs.append(f'    {field}: {getattr(self, field)}')
+        return '\n'.join(strs)

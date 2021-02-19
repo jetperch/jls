@@ -192,9 +192,9 @@ setuptools.setup(
     },   
 
     entry_points={
-        #'console_scripts': [
-        #    'jls_explore=jls.entry_points.runner:run',
-        #],
+        'console_scripts': [
+            'jls_cmd=jls.__main__:run',
+        ],
     },
     
     project_urls={
