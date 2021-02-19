@@ -1254,7 +1254,7 @@ typedef npy_clongdouble __pyx_t_5numpy_clongdouble_t;
  */
 typedef npy_cdouble __pyx_t_5numpy_complex_t;
 
-/* "pyjls/binding.pyx":84
+/* "pyjls/binding.pyx":95
  * 
  * 
  * cdef class Writer:             # <<<<<<<<<<<<<<
@@ -1267,7 +1267,7 @@ struct __pyx_obj_5pyjls_7binding_Writer {
 };
 
 
-/* "pyjls/binding.pyx":170
+/* "pyjls/binding.pyx":181
  * 
  * 
  * cdef class Reader:             # <<<<<<<<<<<<<<
@@ -1604,6 +1604,29 @@ static PyObject *__Pyx__GetModuleGlobalName(PyObject *name, PY_UINT64_T *dict_ve
 static CYTHON_INLINE PyObject *__Pyx__GetModuleGlobalName(PyObject *name);
 #endif
 
+/* IncludeStringH.proto */
+#include <string.h>
+
+/* decode_c_string_utf16.proto */
+static CYTHON_INLINE PyObject *__Pyx_PyUnicode_DecodeUTF16(const char *s, Py_ssize_t size, const char *errors) {
+    int byteorder = 0;
+    return PyUnicode_DecodeUTF16(s, size, errors, &byteorder);
+}
+static CYTHON_INLINE PyObject *__Pyx_PyUnicode_DecodeUTF16LE(const char *s, Py_ssize_t size, const char *errors) {
+    int byteorder = -1;
+    return PyUnicode_DecodeUTF16(s, size, errors, &byteorder);
+}
+static CYTHON_INLINE PyObject *__Pyx_PyUnicode_DecodeUTF16BE(const char *s, Py_ssize_t size, const char *errors) {
+    int byteorder = 1;
+    return PyUnicode_DecodeUTF16(s, size, errors, &byteorder);
+}
+
+/* decode_c_string.proto */
+static CYTHON_INLINE PyObject* __Pyx_decode_c_string(
+         const char* cstring, Py_ssize_t start, Py_ssize_t stop,
+         const char* encoding, const char* errors,
+         PyObject* (*decode_func)(const char *s, Py_ssize_t size, const char *errors));
+
 /* ArgTypeTest.proto */
 #define __Pyx_ArgTypeTest(obj, type, none_allowed, name, exact)\
     ((likely((Py_TYPE(obj) == type) | (none_allowed && (obj == Py_None)))) ? 1 :\
@@ -1748,29 +1771,6 @@ static CYTHON_INLINE PyObject *__Pyx_PyObject_GetItem(PyObject *obj, PyObject* k
 #define __Pyx_PyObject_GetItem(obj, key)  PyObject_GetItem(obj, key)
 #endif
 
-/* IncludeStringH.proto */
-#include <string.h>
-
-/* decode_c_string_utf16.proto */
-static CYTHON_INLINE PyObject *__Pyx_PyUnicode_DecodeUTF16(const char *s, Py_ssize_t size, const char *errors) {
-    int byteorder = 0;
-    return PyUnicode_DecodeUTF16(s, size, errors, &byteorder);
-}
-static CYTHON_INLINE PyObject *__Pyx_PyUnicode_DecodeUTF16LE(const char *s, Py_ssize_t size, const char *errors) {
-    int byteorder = -1;
-    return PyUnicode_DecodeUTF16(s, size, errors, &byteorder);
-}
-static CYTHON_INLINE PyObject *__Pyx_PyUnicode_DecodeUTF16BE(const char *s, Py_ssize_t size, const char *errors) {
-    int byteorder = 1;
-    return PyUnicode_DecodeUTF16(s, size, errors, &byteorder);
-}
-
-/* decode_c_string.proto */
-static CYTHON_INLINE PyObject* __Pyx_decode_c_string(
-         const char* cstring, Py_ssize_t start, Py_ssize_t stop,
-         const char* encoding, const char* errors,
-         PyObject* (*decode_func)(const char *s, Py_ssize_t size, const char *errors));
-
 /* SetItemInt.proto */
 #define __Pyx_SetItemInt(o, i, v, type, is_signed, to_py_func, is_list, wraparound, boundscheck)\
     (__Pyx_fits_Py_ssize_t(i, type, is_signed) ?\
@@ -1792,6 +1792,11 @@ static CYTHON_INLINE int __Pyx_PyObject_SetAttrStr(PyObject* obj, PyObject* attr
 #define __Pyx_PyObject_DelAttrStr(o,n)   PyObject_DelAttr(o,n)
 #define __Pyx_PyObject_SetAttrStr(o,n,v) PyObject_SetAttr(o,n,v)
 #endif
+
+/* WriteUnraisableException.proto */
+static void __Pyx_WriteUnraisable(const char *name, int clineno,
+                                  int lineno, const char *filename,
+                                  int full_traceback, int nogil);
 
 /* GetTopmostException.proto */
 #if CYTHON_USE_EXC_INFO_STACK
@@ -2322,6 +2327,9 @@ static PyObject *contiguous = 0;
 static PyObject *indirect_contiguous = 0;
 static int __pyx_memoryview_thread_locks_used;
 static PyThread_type_lock __pyx_memoryview_thread_locks[8];
+static PyObject *__pyx_f_5pyjls_7binding__storage_unpack(uint8_t, uint8_t const *, uint32_t); /*proto*/
+static int32_t __pyx_f_5pyjls_7binding__annotation_cbk_fn(void *, struct jls_annotation_s const *); /*proto*/
+static int32_t __pyx_f_5pyjls_7binding__user_data_cbk_fn(void *, uint16_t, enum jls_storage_type_e, uint8_t *, uint32_t); /*proto*/
 static struct __pyx_array_obj *__pyx_array_new(PyObject *, Py_ssize_t, char *, char *, char *); /*proto*/
 static void *__pyx_align_pointer(void *, size_t); /*proto*/
 static PyObject *__pyx_memoryview_new(PyObject *, int, int, __Pyx_TypeInfo *); /*proto*/
@@ -2414,6 +2422,7 @@ static const char __pyx_k_dumps[] = "dumps";
 static const char __pyx_k_empty[] = "empty";
 static const char __pyx_k_error[] = "error";
 static const char __pyx_k_flags[] = "flags";
+static const char __pyx_k_loads[] = "loads";
 static const char __pyx_k_lower[] = "lower";
 static const char __pyx_k_model[] = "model";
 static const char __pyx_k_numpy[] = "numpy";
@@ -2425,6 +2434,7 @@ static const char __pyx_k_value[] = "value";
 static const char __pyx_k_MARKER[] = "MARKER";
 static const char __pyx_k_Reader[] = "Reader";
 static const char __pyx_k_Writer[] = "Writer";
+static const char __pyx_k_cbk_fn[] = "cbk_fn";
 static const char __pyx_k_encode[] = "encode";
 static const char __pyx_k_format[] = "format";
 static const char __pyx_k_import[] = "__import__";
@@ -2510,6 +2520,7 @@ static const char __pyx_k_pyjls_binding_pyx[] = "pyjls\\binding.pyx";
 static const char __pyx_k_pyx_unpickle_Enum[] = "__pyx_unpickle_Enum";
 static const char __pyx_k_signal_def_failed[] = "signal_def failed ";
 static const char __pyx_k_source_def_failed[] = "source_def failed ";
+static const char __pyx_k_annotations_failed[] = "annotations failed ";
 static const char __pyx_k_cline_in_traceback[] = "cline_in_traceback";
 static const char __pyx_k_strided_and_direct[] = "<strided and direct>";
 static const char __pyx_k_entries_per_summary[] = "entries_per_summary";
@@ -2594,10 +2605,12 @@ static PyObject *__pyx_n_s_annotation_decimate_factor;
 static PyObject *__pyx_kp_u_annotation_failed;
 static PyObject *__pyx_n_s_annotation_map;
 static PyObject *__pyx_n_s_annotation_type;
+static PyObject *__pyx_kp_u_annotations_failed;
 static PyObject *__pyx_n_s_base;
 static PyObject *__pyx_n_s_basetype;
 static PyObject *__pyx_n_s_c;
 static PyObject *__pyx_n_u_c;
+static PyObject *__pyx_n_s_cbk_fn;
 static PyObject *__pyx_n_s_chunk_meta;
 static PyObject *__pyx_n_s_class;
 static PyObject *__pyx_n_s_cline_in_traceback;
@@ -2636,6 +2649,7 @@ static PyObject *__pyx_n_s_itemsize;
 static PyObject *__pyx_kp_s_itemsize_0_for_cython_array;
 static PyObject *__pyx_n_s_json;
 static PyObject *__pyx_n_s_length;
+static PyObject *__pyx_n_s_loads;
 static PyObject *__pyx_n_s_logging;
 static PyObject *__pyx_n_s_lower;
 static PyObject *__pyx_n_s_main;
@@ -2750,8 +2764,10 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Reader_7sources___get__(struct __pyx_
 static PyObject *__pyx_pf_5pyjls_7binding_6Reader_7signals___get__(struct __pyx_obj_5pyjls_7binding_Reader *__pyx_v_self); /* proto */
 static PyObject *__pyx_pf_5pyjls_7binding_6Reader_8fsr(struct __pyx_obj_5pyjls_7binding_Reader *__pyx_v_self, PyObject *__pyx_v_signal_id, PyObject *__pyx_v_start_sample_id, PyObject *__pyx_v_length); /* proto */
 static PyObject *__pyx_pf_5pyjls_7binding_6Reader_10fsr_statistics(struct __pyx_obj_5pyjls_7binding_Reader *__pyx_v_self, PyObject *__pyx_v_signal_id, PyObject *__pyx_v_start_sample_id, PyObject *__pyx_v_increment, PyObject *__pyx_v_length); /* proto */
-static PyObject *__pyx_pf_5pyjls_7binding_6Reader_12__reduce_cython__(CYTHON_UNUSED struct __pyx_obj_5pyjls_7binding_Reader *__pyx_v_self); /* proto */
-static PyObject *__pyx_pf_5pyjls_7binding_6Reader_14__setstate_cython__(CYTHON_UNUSED struct __pyx_obj_5pyjls_7binding_Reader *__pyx_v_self, CYTHON_UNUSED PyObject *__pyx_v___pyx_state); /* proto */
+static PyObject *__pyx_pf_5pyjls_7binding_6Reader_12annotations(struct __pyx_obj_5pyjls_7binding_Reader *__pyx_v_self, PyObject *__pyx_v_signal_id, PyObject *__pyx_v_timestamp, PyObject *__pyx_v_cbk_fn); /* proto */
+static PyObject *__pyx_pf_5pyjls_7binding_6Reader_14user_data(struct __pyx_obj_5pyjls_7binding_Reader *__pyx_v_self, PyObject *__pyx_v_cbk_fn); /* proto */
+static PyObject *__pyx_pf_5pyjls_7binding_6Reader_16__reduce_cython__(CYTHON_UNUSED struct __pyx_obj_5pyjls_7binding_Reader *__pyx_v_self); /* proto */
+static PyObject *__pyx_pf_5pyjls_7binding_6Reader_18__setstate_cython__(CYTHON_UNUSED struct __pyx_obj_5pyjls_7binding_Reader *__pyx_v_self, CYTHON_UNUSED PyObject *__pyx_v___pyx_state); /* proto */
 static int __pyx_array___pyx_pf_15View_dot_MemoryView_5array___cinit__(struct __pyx_array_obj *__pyx_v_self, PyObject *__pyx_v_shape, Py_ssize_t __pyx_v_itemsize, PyObject *__pyx_v_format, PyObject *__pyx_v_mode, int __pyx_v_allocate_buffer); /* proto */
 static int __pyx_array___pyx_pf_15View_dot_MemoryView_5array_2__getbuffer__(struct __pyx_array_obj *__pyx_v_self, Py_buffer *__pyx_v_info, int __pyx_v_flags); /* proto */
 static void __pyx_array___pyx_pf_15View_dot_MemoryView_5array_4__dealloc__(struct __pyx_array_obj *__pyx_v_self); /* proto */
@@ -3123,7 +3139,7 @@ static PyObject *__pyx_pf_5pyjls_7binding_2_encode_str(CYTHON_UNUSED PyObject *_
  * 
  * def _storage_pack(data):             # <<<<<<<<<<<<<<
  *     if isinstance(data, str):
- *         return c_jls.JLS_STORAGE_TYPE_STRING, _encode_str(data)
+ *         s = _encode_str(data)
  */
 
 /* Python wrapper */
@@ -3141,6 +3157,7 @@ static PyObject *__pyx_pw_5pyjls_7binding_5_storage_pack(PyObject *__pyx_self, P
 }
 
 static PyObject *__pyx_pf_5pyjls_7binding_4_storage_pack(CYTHON_UNUSED PyObject *__pyx_self, PyObject *__pyx_v_data) {
+  PyObject *__pyx_v_s = NULL;
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
   int __pyx_t_1;
@@ -3148,7 +3165,7 @@ static PyObject *__pyx_pf_5pyjls_7binding_4_storage_pack(CYTHON_UNUSED PyObject 
   PyObject *__pyx_t_3 = NULL;
   PyObject *__pyx_t_4 = NULL;
   PyObject *__pyx_t_5 = NULL;
-  PyObject *__pyx_t_6 = NULL;
+  Py_ssize_t __pyx_t_6;
   PyObject *__pyx_t_7 = NULL;
   PyObject *__pyx_t_8 = NULL;
   int __pyx_lineno = 0;
@@ -3160,8 +3177,8 @@ static PyObject *__pyx_pf_5pyjls_7binding_4_storage_pack(CYTHON_UNUSED PyObject 
  * 
  * def _storage_pack(data):
  *     if isinstance(data, str):             # <<<<<<<<<<<<<<
- *         return c_jls.JLS_STORAGE_TYPE_STRING, _encode_str(data)
- *     elif isinstance(data, bytes):
+ *         s = _encode_str(data)
+ *         return c_jls.JLS_STORAGE_TYPE_STRING, s, len(s) + 1
  */
   __pyx_t_1 = PyUnicode_Check(__pyx_v_data); 
   __pyx_t_2 = (__pyx_t_1 != 0);
@@ -3170,36 +3187,52 @@ static PyObject *__pyx_pf_5pyjls_7binding_4_storage_pack(CYTHON_UNUSED PyObject 
     /* "pyjls/binding.pyx":76
  * def _storage_pack(data):
  *     if isinstance(data, str):
- *         return c_jls.JLS_STORAGE_TYPE_STRING, _encode_str(data)             # <<<<<<<<<<<<<<
+ *         s = _encode_str(data)             # <<<<<<<<<<<<<<
+ *         return c_jls.JLS_STORAGE_TYPE_STRING, s, len(s) + 1
  *     elif isinstance(data, bytes):
- *         return c_jls.JLS_STORAGE_TYPE_BINARY, data
  */
-    __Pyx_XDECREF(__pyx_r);
-    __pyx_t_3 = __Pyx_PyInt_From_enum__jls_storage_type_e(JLS_STORAGE_TYPE_STRING); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 76, __pyx_L1_error)
-    __Pyx_GOTREF(__pyx_t_3);
-    __Pyx_GetModuleGlobalName(__pyx_t_5, __pyx_n_s_encode_str); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 76, __pyx_L1_error)
-    __Pyx_GOTREF(__pyx_t_5);
-    __pyx_t_6 = NULL;
-    if (CYTHON_UNPACK_METHODS && unlikely(PyMethod_Check(__pyx_t_5))) {
-      __pyx_t_6 = PyMethod_GET_SELF(__pyx_t_5);
-      if (likely(__pyx_t_6)) {
-        PyObject* function = PyMethod_GET_FUNCTION(__pyx_t_5);
-        __Pyx_INCREF(__pyx_t_6);
+    __Pyx_GetModuleGlobalName(__pyx_t_4, __pyx_n_s_encode_str); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 76, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_4);
+    __pyx_t_5 = NULL;
+    if (CYTHON_UNPACK_METHODS && unlikely(PyMethod_Check(__pyx_t_4))) {
+      __pyx_t_5 = PyMethod_GET_SELF(__pyx_t_4);
+      if (likely(__pyx_t_5)) {
+        PyObject* function = PyMethod_GET_FUNCTION(__pyx_t_4);
+        __Pyx_INCREF(__pyx_t_5);
         __Pyx_INCREF(function);
-        __Pyx_DECREF_SET(__pyx_t_5, function);
+        __Pyx_DECREF_SET(__pyx_t_4, function);
       }
     }
-    __pyx_t_4 = (__pyx_t_6) ? __Pyx_PyObject_Call2Args(__pyx_t_5, __pyx_t_6, __pyx_v_data) : __Pyx_PyObject_CallOneArg(__pyx_t_5, __pyx_v_data);
-    __Pyx_XDECREF(__pyx_t_6); __pyx_t_6 = 0;
-    if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 76, __pyx_L1_error)
+    __pyx_t_3 = (__pyx_t_5) ? __Pyx_PyObject_Call2Args(__pyx_t_4, __pyx_t_5, __pyx_v_data) : __Pyx_PyObject_CallOneArg(__pyx_t_4, __pyx_v_data);
+    __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
+    if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 76, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_3);
+    __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
+    __pyx_v_s = __pyx_t_3;
+    __pyx_t_3 = 0;
+
+    /* "pyjls/binding.pyx":77
+ *     if isinstance(data, str):
+ *         s = _encode_str(data)
+ *         return c_jls.JLS_STORAGE_TYPE_STRING, s, len(s) + 1             # <<<<<<<<<<<<<<
+ *     elif isinstance(data, bytes):
+ *         return c_jls.JLS_STORAGE_TYPE_BINARY, data, len(data)
+ */
+    __Pyx_XDECREF(__pyx_r);
+    __pyx_t_3 = __Pyx_PyInt_From_enum__jls_storage_type_e(JLS_STORAGE_TYPE_STRING); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 77, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_3);
+    __pyx_t_6 = PyObject_Length(__pyx_v_s); if (unlikely(__pyx_t_6 == ((Py_ssize_t)-1))) __PYX_ERR(0, 77, __pyx_L1_error)
+    __pyx_t_4 = PyInt_FromSsize_t((__pyx_t_6 + 1)); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 77, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_4);
-    __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-    __pyx_t_5 = PyTuple_New(2); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 76, __pyx_L1_error)
+    __pyx_t_5 = PyTuple_New(3); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 77, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
     __Pyx_GIVEREF(__pyx_t_3);
     PyTuple_SET_ITEM(__pyx_t_5, 0, __pyx_t_3);
+    __Pyx_INCREF(__pyx_v_s);
+    __Pyx_GIVEREF(__pyx_v_s);
+    PyTuple_SET_ITEM(__pyx_t_5, 1, __pyx_v_s);
     __Pyx_GIVEREF(__pyx_t_4);
-    PyTuple_SET_ITEM(__pyx_t_5, 1, __pyx_t_4);
+    PyTuple_SET_ITEM(__pyx_t_5, 2, __pyx_t_4);
     __pyx_t_3 = 0;
     __pyx_t_4 = 0;
     __pyx_r = __pyx_t_5;
@@ -3210,69 +3243,72 @@ static PyObject *__pyx_pf_5pyjls_7binding_4_storage_pack(CYTHON_UNUSED PyObject 
  * 
  * def _storage_pack(data):
  *     if isinstance(data, str):             # <<<<<<<<<<<<<<
- *         return c_jls.JLS_STORAGE_TYPE_STRING, _encode_str(data)
- *     elif isinstance(data, bytes):
+ *         s = _encode_str(data)
+ *         return c_jls.JLS_STORAGE_TYPE_STRING, s, len(s) + 1
  */
   }
 
-  /* "pyjls/binding.pyx":77
- *     if isinstance(data, str):
- *         return c_jls.JLS_STORAGE_TYPE_STRING, _encode_str(data)
+  /* "pyjls/binding.pyx":78
+ *         s = _encode_str(data)
+ *         return c_jls.JLS_STORAGE_TYPE_STRING, s, len(s) + 1
  *     elif isinstance(data, bytes):             # <<<<<<<<<<<<<<
- *         return c_jls.JLS_STORAGE_TYPE_BINARY, data
+ *         return c_jls.JLS_STORAGE_TYPE_BINARY, data, len(data)
  *     else:
  */
   __pyx_t_2 = PyBytes_Check(__pyx_v_data); 
   __pyx_t_1 = (__pyx_t_2 != 0);
   if (__pyx_t_1) {
 
-    /* "pyjls/binding.pyx":78
- *         return c_jls.JLS_STORAGE_TYPE_STRING, _encode_str(data)
+    /* "pyjls/binding.pyx":79
+ *         return c_jls.JLS_STORAGE_TYPE_STRING, s, len(s) + 1
  *     elif isinstance(data, bytes):
- *         return c_jls.JLS_STORAGE_TYPE_BINARY, data             # <<<<<<<<<<<<<<
+ *         return c_jls.JLS_STORAGE_TYPE_BINARY, data, len(data)             # <<<<<<<<<<<<<<
  *     else:
- *         return c_jls.JLS_STORAGE_TYPE_JSON, _encode_str(json.dumps(data))
+ *         s = _encode_str(json.dumps(data))
  */
     __Pyx_XDECREF(__pyx_r);
-    __pyx_t_5 = __Pyx_PyInt_From_enum__jls_storage_type_e(JLS_STORAGE_TYPE_BINARY); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 78, __pyx_L1_error)
+    __pyx_t_5 = __Pyx_PyInt_From_enum__jls_storage_type_e(JLS_STORAGE_TYPE_BINARY); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 79, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
-    __pyx_t_4 = PyTuple_New(2); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 78, __pyx_L1_error)
+    __pyx_t_6 = PyObject_Length(__pyx_v_data); if (unlikely(__pyx_t_6 == ((Py_ssize_t)-1))) __PYX_ERR(0, 79, __pyx_L1_error)
+    __pyx_t_4 = PyInt_FromSsize_t(__pyx_t_6); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 79, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_4);
+    __pyx_t_3 = PyTuple_New(3); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 79, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_3);
     __Pyx_GIVEREF(__pyx_t_5);
-    PyTuple_SET_ITEM(__pyx_t_4, 0, __pyx_t_5);
+    PyTuple_SET_ITEM(__pyx_t_3, 0, __pyx_t_5);
     __Pyx_INCREF(__pyx_v_data);
     __Pyx_GIVEREF(__pyx_v_data);
-    PyTuple_SET_ITEM(__pyx_t_4, 1, __pyx_v_data);
+    PyTuple_SET_ITEM(__pyx_t_3, 1, __pyx_v_data);
+    __Pyx_GIVEREF(__pyx_t_4);
+    PyTuple_SET_ITEM(__pyx_t_3, 2, __pyx_t_4);
     __pyx_t_5 = 0;
-    __pyx_r = __pyx_t_4;
     __pyx_t_4 = 0;
+    __pyx_r = __pyx_t_3;
+    __pyx_t_3 = 0;
     goto __pyx_L0;
 
-    /* "pyjls/binding.pyx":77
- *     if isinstance(data, str):
- *         return c_jls.JLS_STORAGE_TYPE_STRING, _encode_str(data)
+    /* "pyjls/binding.pyx":78
+ *         s = _encode_str(data)
+ *         return c_jls.JLS_STORAGE_TYPE_STRING, s, len(s) + 1
  *     elif isinstance(data, bytes):             # <<<<<<<<<<<<<<
- *         return c_jls.JLS_STORAGE_TYPE_BINARY, data
+ *         return c_jls.JLS_STORAGE_TYPE_BINARY, data, len(data)
  *     else:
  */
   }
 
-  /* "pyjls/binding.pyx":80
- *         return c_jls.JLS_STORAGE_TYPE_BINARY, data
+  /* "pyjls/binding.pyx":81
+ *         return c_jls.JLS_STORAGE_TYPE_BINARY, data, len(data)
  *     else:
- *         return c_jls.JLS_STORAGE_TYPE_JSON, _encode_str(json.dumps(data))             # <<<<<<<<<<<<<<
- * 
+ *         s = _encode_str(json.dumps(data))             # <<<<<<<<<<<<<<
+ *         return c_jls.JLS_STORAGE_TYPE_JSON, s, len(s) + 1
  * 
  */
   /*else*/ {
-    __Pyx_XDECREF(__pyx_r);
-    __pyx_t_4 = __Pyx_PyInt_From_enum__jls_storage_type_e(JLS_STORAGE_TYPE_JSON); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 80, __pyx_L1_error)
+    __Pyx_GetModuleGlobalName(__pyx_t_4, __pyx_n_s_encode_str); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 81, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_4);
-    __Pyx_GetModuleGlobalName(__pyx_t_3, __pyx_n_s_encode_str); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 80, __pyx_L1_error)
-    __Pyx_GOTREF(__pyx_t_3);
-    __Pyx_GetModuleGlobalName(__pyx_t_7, __pyx_n_s_json); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 80, __pyx_L1_error)
+    __Pyx_GetModuleGlobalName(__pyx_t_7, __pyx_n_s_json); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 81, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_7);
-    __pyx_t_8 = __Pyx_PyObject_GetAttrStr(__pyx_t_7, __pyx_n_s_dumps); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 80, __pyx_L1_error)
+    __pyx_t_8 = __Pyx_PyObject_GetAttrStr(__pyx_t_7, __pyx_n_s_dumps); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 81, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_8);
     __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
     __pyx_t_7 = NULL;
@@ -3285,37 +3321,56 @@ static PyObject *__pyx_pf_5pyjls_7binding_4_storage_pack(CYTHON_UNUSED PyObject 
         __Pyx_DECREF_SET(__pyx_t_8, function);
       }
     }
-    __pyx_t_6 = (__pyx_t_7) ? __Pyx_PyObject_Call2Args(__pyx_t_8, __pyx_t_7, __pyx_v_data) : __Pyx_PyObject_CallOneArg(__pyx_t_8, __pyx_v_data);
+    __pyx_t_5 = (__pyx_t_7) ? __Pyx_PyObject_Call2Args(__pyx_t_8, __pyx_t_7, __pyx_v_data) : __Pyx_PyObject_CallOneArg(__pyx_t_8, __pyx_v_data);
     __Pyx_XDECREF(__pyx_t_7); __pyx_t_7 = 0;
-    if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 80, __pyx_L1_error)
-    __Pyx_GOTREF(__pyx_t_6);
+    if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 81, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_5);
     __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
     __pyx_t_8 = NULL;
-    if (CYTHON_UNPACK_METHODS && unlikely(PyMethod_Check(__pyx_t_3))) {
-      __pyx_t_8 = PyMethod_GET_SELF(__pyx_t_3);
+    if (CYTHON_UNPACK_METHODS && unlikely(PyMethod_Check(__pyx_t_4))) {
+      __pyx_t_8 = PyMethod_GET_SELF(__pyx_t_4);
       if (likely(__pyx_t_8)) {
-        PyObject* function = PyMethod_GET_FUNCTION(__pyx_t_3);
+        PyObject* function = PyMethod_GET_FUNCTION(__pyx_t_4);
         __Pyx_INCREF(__pyx_t_8);
         __Pyx_INCREF(function);
-        __Pyx_DECREF_SET(__pyx_t_3, function);
+        __Pyx_DECREF_SET(__pyx_t_4, function);
       }
     }
-    __pyx_t_5 = (__pyx_t_8) ? __Pyx_PyObject_Call2Args(__pyx_t_3, __pyx_t_8, __pyx_t_6) : __Pyx_PyObject_CallOneArg(__pyx_t_3, __pyx_t_6);
+    __pyx_t_3 = (__pyx_t_8) ? __Pyx_PyObject_Call2Args(__pyx_t_4, __pyx_t_8, __pyx_t_5) : __Pyx_PyObject_CallOneArg(__pyx_t_4, __pyx_t_5);
     __Pyx_XDECREF(__pyx_t_8); __pyx_t_8 = 0;
-    __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
-    if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 80, __pyx_L1_error)
-    __Pyx_GOTREF(__pyx_t_5);
-    __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
-    __pyx_t_3 = PyTuple_New(2); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 80, __pyx_L1_error)
+    __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+    if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 81, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_3);
-    __Pyx_GIVEREF(__pyx_t_4);
-    PyTuple_SET_ITEM(__pyx_t_3, 0, __pyx_t_4);
-    __Pyx_GIVEREF(__pyx_t_5);
-    PyTuple_SET_ITEM(__pyx_t_3, 1, __pyx_t_5);
-    __pyx_t_4 = 0;
-    __pyx_t_5 = 0;
-    __pyx_r = __pyx_t_3;
+    __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
+    __pyx_v_s = __pyx_t_3;
     __pyx_t_3 = 0;
+
+    /* "pyjls/binding.pyx":82
+ *     else:
+ *         s = _encode_str(json.dumps(data))
+ *         return c_jls.JLS_STORAGE_TYPE_JSON, s, len(s) + 1             # <<<<<<<<<<<<<<
+ * 
+ * 
+ */
+    __Pyx_XDECREF(__pyx_r);
+    __pyx_t_3 = __Pyx_PyInt_From_enum__jls_storage_type_e(JLS_STORAGE_TYPE_JSON); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 82, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_3);
+    __pyx_t_6 = PyObject_Length(__pyx_v_s); if (unlikely(__pyx_t_6 == ((Py_ssize_t)-1))) __PYX_ERR(0, 82, __pyx_L1_error)
+    __pyx_t_4 = PyInt_FromSsize_t((__pyx_t_6 + 1)); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 82, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_4);
+    __pyx_t_5 = PyTuple_New(3); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 82, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_5);
+    __Pyx_GIVEREF(__pyx_t_3);
+    PyTuple_SET_ITEM(__pyx_t_5, 0, __pyx_t_3);
+    __Pyx_INCREF(__pyx_v_s);
+    __Pyx_GIVEREF(__pyx_v_s);
+    PyTuple_SET_ITEM(__pyx_t_5, 1, __pyx_v_s);
+    __Pyx_GIVEREF(__pyx_t_4);
+    PyTuple_SET_ITEM(__pyx_t_5, 2, __pyx_t_4);
+    __pyx_t_3 = 0;
+    __pyx_t_4 = 0;
+    __pyx_r = __pyx_t_5;
+    __pyx_t_5 = 0;
     goto __pyx_L0;
   }
 
@@ -3324,7 +3379,7 @@ static PyObject *__pyx_pf_5pyjls_7binding_4_storage_pack(CYTHON_UNUSED PyObject 
  * 
  * def _storage_pack(data):             # <<<<<<<<<<<<<<
  *     if isinstance(data, str):
- *         return c_jls.JLS_STORAGE_TYPE_STRING, _encode_str(data)
+ *         s = _encode_str(data)
  */
 
   /* function exit code */
@@ -3332,18 +3387,165 @@ static PyObject *__pyx_pf_5pyjls_7binding_4_storage_pack(CYTHON_UNUSED PyObject 
   __Pyx_XDECREF(__pyx_t_3);
   __Pyx_XDECREF(__pyx_t_4);
   __Pyx_XDECREF(__pyx_t_5);
-  __Pyx_XDECREF(__pyx_t_6);
   __Pyx_XDECREF(__pyx_t_7);
   __Pyx_XDECREF(__pyx_t_8);
   __Pyx_AddTraceback("pyjls.binding._storage_pack", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __pyx_r = NULL;
+  __pyx_L0:;
+  __Pyx_XDECREF(__pyx_v_s);
+  __Pyx_XGIVEREF(__pyx_r);
+  __Pyx_RefNannyFinishContext();
+  return __pyx_r;
+}
+
+/* "pyjls/binding.pyx":85
+ * 
+ * 
+ * cdef _storage_unpack(uint8_t storage_type, const uint8_t * data, uint32_t data_size):             # <<<<<<<<<<<<<<
+ *     cdef const char * str = <const char *> data
+ *     if storage_type == c_jls.JLS_STORAGE_TYPE_STRING:
+ */
+
+static PyObject *__pyx_f_5pyjls_7binding__storage_unpack(uint8_t __pyx_v_storage_type, uint8_t const *__pyx_v_data, uint32_t __pyx_v_data_size) {
+  char const *__pyx_v_str;
+  PyObject *__pyx_r = NULL;
+  __Pyx_RefNannyDeclarations
+  PyObject *__pyx_t_1 = NULL;
+  PyObject *__pyx_t_2 = NULL;
+  PyObject *__pyx_t_3 = NULL;
+  PyObject *__pyx_t_4 = NULL;
+  int __pyx_lineno = 0;
+  const char *__pyx_filename = NULL;
+  int __pyx_clineno = 0;
+  __Pyx_RefNannySetupContext("_storage_unpack", 0);
+
+  /* "pyjls/binding.pyx":86
+ * 
+ * cdef _storage_unpack(uint8_t storage_type, const uint8_t * data, uint32_t data_size):
+ *     cdef const char * str = <const char *> data             # <<<<<<<<<<<<<<
+ *     if storage_type == c_jls.JLS_STORAGE_TYPE_STRING:
+ *         return str[:data_size - 1].decode('utf-8')
+ */
+  __pyx_v_str = ((char const *)__pyx_v_data);
+
+  /* "pyjls/binding.pyx":87
+ * cdef _storage_unpack(uint8_t storage_type, const uint8_t * data, uint32_t data_size):
+ *     cdef const char * str = <const char *> data
+ *     if storage_type == c_jls.JLS_STORAGE_TYPE_STRING:             # <<<<<<<<<<<<<<
+ *         return str[:data_size - 1].decode('utf-8')
+ *     elif storage_type == c_jls.JLS_STORAGE_TYPE_BINARY:
+ */
+  switch (__pyx_v_storage_type) {
+    case JLS_STORAGE_TYPE_STRING:
+
+    /* "pyjls/binding.pyx":88
+ *     cdef const char * str = <const char *> data
+ *     if storage_type == c_jls.JLS_STORAGE_TYPE_STRING:
+ *         return str[:data_size - 1].decode('utf-8')             # <<<<<<<<<<<<<<
+ *     elif storage_type == c_jls.JLS_STORAGE_TYPE_BINARY:
+ *         return data[:data_size]
+ */
+    __Pyx_XDECREF(__pyx_r);
+    __pyx_t_1 = __Pyx_decode_c_string(__pyx_v_str, 0, (__pyx_v_data_size - 1), NULL, NULL, PyUnicode_DecodeUTF8); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 88, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_1);
+    __pyx_r = __pyx_t_1;
+    __pyx_t_1 = 0;
+    goto __pyx_L0;
+
+    /* "pyjls/binding.pyx":87
+ * cdef _storage_unpack(uint8_t storage_type, const uint8_t * data, uint32_t data_size):
+ *     cdef const char * str = <const char *> data
+ *     if storage_type == c_jls.JLS_STORAGE_TYPE_STRING:             # <<<<<<<<<<<<<<
+ *         return str[:data_size - 1].decode('utf-8')
+ *     elif storage_type == c_jls.JLS_STORAGE_TYPE_BINARY:
+ */
+    break;
+    case JLS_STORAGE_TYPE_BINARY:
+
+    /* "pyjls/binding.pyx":90
+ *         return str[:data_size - 1].decode('utf-8')
+ *     elif storage_type == c_jls.JLS_STORAGE_TYPE_BINARY:
+ *         return data[:data_size]             # <<<<<<<<<<<<<<
+ *     else:
+ *         return json.loads(str[:data_size - 1].decode('utf-8'))
+ */
+    __Pyx_XDECREF(__pyx_r);
+    __pyx_t_1 = __Pyx_PyBytes_FromStringAndSize(((const char*)__pyx_v_data) + 0, __pyx_v_data_size - 0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 90, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_1);
+    __pyx_r = __pyx_t_1;
+    __pyx_t_1 = 0;
+    goto __pyx_L0;
+
+    /* "pyjls/binding.pyx":89
+ *     if storage_type == c_jls.JLS_STORAGE_TYPE_STRING:
+ *         return str[:data_size - 1].decode('utf-8')
+ *     elif storage_type == c_jls.JLS_STORAGE_TYPE_BINARY:             # <<<<<<<<<<<<<<
+ *         return data[:data_size]
+ *     else:
+ */
+    break;
+    default:
+
+    /* "pyjls/binding.pyx":92
+ *         return data[:data_size]
+ *     else:
+ *         return json.loads(str[:data_size - 1].decode('utf-8'))             # <<<<<<<<<<<<<<
+ * 
+ * 
+ */
+    __Pyx_XDECREF(__pyx_r);
+    __Pyx_GetModuleGlobalName(__pyx_t_2, __pyx_n_s_json); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 92, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_2);
+    __pyx_t_3 = __Pyx_PyObject_GetAttrStr(__pyx_t_2, __pyx_n_s_loads); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 92, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_3);
+    __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+    __pyx_t_2 = __Pyx_decode_c_string(__pyx_v_str, 0, (__pyx_v_data_size - 1), NULL, NULL, PyUnicode_DecodeUTF8); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 92, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_2);
+    __pyx_t_4 = NULL;
+    if (CYTHON_UNPACK_METHODS && unlikely(PyMethod_Check(__pyx_t_3))) {
+      __pyx_t_4 = PyMethod_GET_SELF(__pyx_t_3);
+      if (likely(__pyx_t_4)) {
+        PyObject* function = PyMethod_GET_FUNCTION(__pyx_t_3);
+        __Pyx_INCREF(__pyx_t_4);
+        __Pyx_INCREF(function);
+        __Pyx_DECREF_SET(__pyx_t_3, function);
+      }
+    }
+    __pyx_t_1 = (__pyx_t_4) ? __Pyx_PyObject_Call2Args(__pyx_t_3, __pyx_t_4, __pyx_t_2) : __Pyx_PyObject_CallOneArg(__pyx_t_3, __pyx_t_2);
+    __Pyx_XDECREF(__pyx_t_4); __pyx_t_4 = 0;
+    __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+    if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 92, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_1);
+    __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
+    __pyx_r = __pyx_t_1;
+    __pyx_t_1 = 0;
+    goto __pyx_L0;
+    break;
+  }
+
+  /* "pyjls/binding.pyx":85
+ * 
+ * 
+ * cdef _storage_unpack(uint8_t storage_type, const uint8_t * data, uint32_t data_size):             # <<<<<<<<<<<<<<
+ *     cdef const char * str = <const char *> data
+ *     if storage_type == c_jls.JLS_STORAGE_TYPE_STRING:
+ */
+
+  /* function exit code */
+  __pyx_L1_error:;
+  __Pyx_XDECREF(__pyx_t_1);
+  __Pyx_XDECREF(__pyx_t_2);
+  __Pyx_XDECREF(__pyx_t_3);
+  __Pyx_XDECREF(__pyx_t_4);
+  __Pyx_AddTraceback("pyjls.binding._storage_unpack", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __pyx_r = 0;
   __pyx_L0:;
   __Pyx_XGIVEREF(__pyx_r);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
 
-/* "pyjls/binding.pyx":87
+/* "pyjls/binding.pyx":98
  *     cdef c_jls.jls_twr_s * _wr
  * 
  *     def __init__(self, path: str):             # <<<<<<<<<<<<<<
@@ -3380,7 +3582,7 @@ static int __pyx_pw_5pyjls_7binding_6Writer_1__init__(PyObject *__pyx_v_self, Py
         else goto __pyx_L5_argtuple_error;
       }
       if (unlikely(kw_args > 0)) {
-        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "__init__") < 0)) __PYX_ERR(0, 87, __pyx_L3_error)
+        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "__init__") < 0)) __PYX_ERR(0, 98, __pyx_L3_error)
       }
     } else if (PyTuple_GET_SIZE(__pyx_args) != 1) {
       goto __pyx_L5_argtuple_error;
@@ -3391,13 +3593,13 @@ static int __pyx_pw_5pyjls_7binding_6Writer_1__init__(PyObject *__pyx_v_self, Py
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("__init__", 1, 1, 1, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 87, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("__init__", 1, 1, 1, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 98, __pyx_L3_error)
   __pyx_L3_error:;
   __Pyx_AddTraceback("pyjls.binding.Writer.__init__", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __Pyx_RefNannyFinishContext();
   return -1;
   __pyx_L4_argument_unpacking_done:;
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_path), (&PyUnicode_Type), 1, "path", 1))) __PYX_ERR(0, 87, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_path), (&PyUnicode_Type), 1, "path", 1))) __PYX_ERR(0, 98, __pyx_L1_error)
   __pyx_r = __pyx_pf_5pyjls_7binding_6Writer___init__(((struct __pyx_obj_5pyjls_7binding_Writer *)__pyx_v_self), __pyx_v_path);
 
   /* function exit code */
@@ -3422,7 +3624,7 @@ static int __pyx_pf_5pyjls_7binding_6Writer___init__(struct __pyx_obj_5pyjls_7bi
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("__init__", 0);
 
-  /* "pyjls/binding.pyx":89
+  /* "pyjls/binding.pyx":100
  *     def __init__(self, path: str):
  *         cdef int32_t rc
  *         rc = c_jls.jls_twr_open(&self._wr, path.encode('utf-8'))             # <<<<<<<<<<<<<<
@@ -3431,15 +3633,15 @@ static int __pyx_pf_5pyjls_7binding_6Writer___init__(struct __pyx_obj_5pyjls_7bi
  */
   if (unlikely(__pyx_v_path == Py_None)) {
     PyErr_Format(PyExc_AttributeError, "'NoneType' object has no attribute '%.30s'", "encode");
-    __PYX_ERR(0, 89, __pyx_L1_error)
+    __PYX_ERR(0, 100, __pyx_L1_error)
   }
-  __pyx_t_1 = PyUnicode_AsUTF8String(__pyx_v_path); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 89, __pyx_L1_error)
+  __pyx_t_1 = PyUnicode_AsUTF8String(__pyx_v_path); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 100, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
-  __pyx_t_2 = __Pyx_PyBytes_AsString(__pyx_t_1); if (unlikely((!__pyx_t_2) && PyErr_Occurred())) __PYX_ERR(0, 89, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_PyBytes_AsString(__pyx_t_1); if (unlikely((!__pyx_t_2) && PyErr_Occurred())) __PYX_ERR(0, 100, __pyx_L1_error)
   __pyx_v_rc = jls_twr_open((&__pyx_v_self->_wr), __pyx_t_2);
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
-  /* "pyjls/binding.pyx":90
+  /* "pyjls/binding.pyx":101
  *         cdef int32_t rc
  *         rc = c_jls.jls_twr_open(&self._wr, path.encode('utf-8'))
  *         if rc:             # <<<<<<<<<<<<<<
@@ -3449,29 +3651,29 @@ static int __pyx_pf_5pyjls_7binding_6Writer___init__(struct __pyx_obj_5pyjls_7bi
   __pyx_t_3 = (__pyx_v_rc != 0);
   if (unlikely(__pyx_t_3)) {
 
-    /* "pyjls/binding.pyx":91
+    /* "pyjls/binding.pyx":102
  *         rc = c_jls.jls_twr_open(&self._wr, path.encode('utf-8'))
  *         if rc:
  *             raise RuntimeError(f'open failed {rc}')             # <<<<<<<<<<<<<<
  * 
  *     def __enter__(self):
  */
-    __pyx_t_1 = __Pyx_PyInt_From_int32_t(__pyx_v_rc); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 91, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyInt_From_int32_t(__pyx_v_rc); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 102, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
-    __pyx_t_4 = __Pyx_PyObject_FormatSimple(__pyx_t_1, __pyx_empty_unicode); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 91, __pyx_L1_error)
+    __pyx_t_4 = __Pyx_PyObject_FormatSimple(__pyx_t_1, __pyx_empty_unicode); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 102, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_4);
     __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-    __pyx_t_1 = __Pyx_PyUnicode_Concat(__pyx_kp_u_open_failed, __pyx_t_4); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 91, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyUnicode_Concat(__pyx_kp_u_open_failed, __pyx_t_4); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 102, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
     __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-    __pyx_t_4 = __Pyx_PyObject_CallOneArg(__pyx_builtin_RuntimeError, __pyx_t_1); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 91, __pyx_L1_error)
+    __pyx_t_4 = __Pyx_PyObject_CallOneArg(__pyx_builtin_RuntimeError, __pyx_t_1); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 102, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_4);
     __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
     __Pyx_Raise(__pyx_t_4, 0, 0, 0);
     __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-    __PYX_ERR(0, 91, __pyx_L1_error)
+    __PYX_ERR(0, 102, __pyx_L1_error)
 
-    /* "pyjls/binding.pyx":90
+    /* "pyjls/binding.pyx":101
  *         cdef int32_t rc
  *         rc = c_jls.jls_twr_open(&self._wr, path.encode('utf-8'))
  *         if rc:             # <<<<<<<<<<<<<<
@@ -3480,7 +3682,7 @@ static int __pyx_pf_5pyjls_7binding_6Writer___init__(struct __pyx_obj_5pyjls_7bi
  */
   }
 
-  /* "pyjls/binding.pyx":87
+  /* "pyjls/binding.pyx":98
  *     cdef c_jls.jls_twr_s * _wr
  * 
  *     def __init__(self, path: str):             # <<<<<<<<<<<<<<
@@ -3501,7 +3703,7 @@ static int __pyx_pf_5pyjls_7binding_6Writer___init__(struct __pyx_obj_5pyjls_7bi
   return __pyx_r;
 }
 
-/* "pyjls/binding.pyx":93
+/* "pyjls/binding.pyx":104
  *             raise RuntimeError(f'open failed {rc}')
  * 
  *     def __enter__(self):             # <<<<<<<<<<<<<<
@@ -3527,7 +3729,7 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_2__enter__(struct __pyx_obj_5p
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("__enter__", 0);
 
-  /* "pyjls/binding.pyx":94
+  /* "pyjls/binding.pyx":105
  * 
  *     def __enter__(self):
  *         return self             # <<<<<<<<<<<<<<
@@ -3539,7 +3741,7 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_2__enter__(struct __pyx_obj_5p
   __pyx_r = ((PyObject *)__pyx_v_self);
   goto __pyx_L0;
 
-  /* "pyjls/binding.pyx":93
+  /* "pyjls/binding.pyx":104
  *             raise RuntimeError(f'open failed {rc}')
  * 
  *     def __enter__(self):             # <<<<<<<<<<<<<<
@@ -3554,7 +3756,7 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_2__enter__(struct __pyx_obj_5p
   return __pyx_r;
 }
 
-/* "pyjls/binding.pyx":96
+/* "pyjls/binding.pyx":107
  *         return self
  * 
  *     def __exit__(self, type, value, traceback):             # <<<<<<<<<<<<<<
@@ -3599,17 +3801,17 @@ static PyObject *__pyx_pw_5pyjls_7binding_6Writer_5__exit__(PyObject *__pyx_v_se
         case  1:
         if (likely((values[1] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_value)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("__exit__", 1, 3, 3, 1); __PYX_ERR(0, 96, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("__exit__", 1, 3, 3, 1); __PYX_ERR(0, 107, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  2:
         if (likely((values[2] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_traceback)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("__exit__", 1, 3, 3, 2); __PYX_ERR(0, 96, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("__exit__", 1, 3, 3, 2); __PYX_ERR(0, 107, __pyx_L3_error)
         }
       }
       if (unlikely(kw_args > 0)) {
-        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "__exit__") < 0)) __PYX_ERR(0, 96, __pyx_L3_error)
+        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "__exit__") < 0)) __PYX_ERR(0, 107, __pyx_L3_error)
       }
     } else if (PyTuple_GET_SIZE(__pyx_args) != 3) {
       goto __pyx_L5_argtuple_error;
@@ -3624,7 +3826,7 @@ static PyObject *__pyx_pw_5pyjls_7binding_6Writer_5__exit__(PyObject *__pyx_v_se
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("__exit__", 1, 3, 3, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 96, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("__exit__", 1, 3, 3, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 107, __pyx_L3_error)
   __pyx_L3_error:;
   __Pyx_AddTraceback("pyjls.binding.Writer.__exit__", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __Pyx_RefNannyFinishContext();
@@ -3648,14 +3850,14 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_4__exit__(struct __pyx_obj_5py
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("__exit__", 0);
 
-  /* "pyjls/binding.pyx":97
+  /* "pyjls/binding.pyx":108
  * 
  *     def __exit__(self, type, value, traceback):
  *         self.close()             # <<<<<<<<<<<<<<
  * 
  *     def close(self):
  */
-  __pyx_t_2 = __Pyx_PyObject_GetAttrStr(((PyObject *)__pyx_v_self), __pyx_n_s_close); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 97, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_PyObject_GetAttrStr(((PyObject *)__pyx_v_self), __pyx_n_s_close); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 108, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   __pyx_t_3 = NULL;
   if (CYTHON_UNPACK_METHODS && likely(PyMethod_Check(__pyx_t_2))) {
@@ -3669,12 +3871,12 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_4__exit__(struct __pyx_obj_5py
   }
   __pyx_t_1 = (__pyx_t_3) ? __Pyx_PyObject_CallOneArg(__pyx_t_2, __pyx_t_3) : __Pyx_PyObject_CallNoArg(__pyx_t_2);
   __Pyx_XDECREF(__pyx_t_3); __pyx_t_3 = 0;
-  if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 97, __pyx_L1_error)
+  if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 108, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
-  /* "pyjls/binding.pyx":96
+  /* "pyjls/binding.pyx":107
  *         return self
  * 
  *     def __exit__(self, type, value, traceback):             # <<<<<<<<<<<<<<
@@ -3697,7 +3899,7 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_4__exit__(struct __pyx_obj_5py
   return __pyx_r;
 }
 
-/* "pyjls/binding.pyx":99
+/* "pyjls/binding.pyx":110
  *         self.close()
  * 
  *     def close(self):             # <<<<<<<<<<<<<<
@@ -3723,7 +3925,7 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_6close(struct __pyx_obj_5pyjls
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("close", 0);
 
-  /* "pyjls/binding.pyx":100
+  /* "pyjls/binding.pyx":111
  * 
  *     def close(self):
  *         c_jls.jls_twr_close(self._wr)             # <<<<<<<<<<<<<<
@@ -3732,7 +3934,7 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_6close(struct __pyx_obj_5pyjls
  */
   (void)(jls_twr_close(__pyx_v_self->_wr));
 
-  /* "pyjls/binding.pyx":99
+  /* "pyjls/binding.pyx":110
  *         self.close()
  * 
  *     def close(self):             # <<<<<<<<<<<<<<
@@ -3747,7 +3949,7 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_6close(struct __pyx_obj_5pyjls
   return __pyx_r;
 }
 
-/* "pyjls/binding.pyx":102
+/* "pyjls/binding.pyx":113
  *         c_jls.jls_twr_close(self._wr)
  * 
  *     def source_def(self, source_id, name=None, vendor=None, model=None, version=None, serial_number=None):             # <<<<<<<<<<<<<<
@@ -3834,7 +4036,7 @@ static PyObject *__pyx_pw_5pyjls_7binding_6Writer_9source_def(PyObject *__pyx_v_
         }
       }
       if (unlikely(kw_args > 0)) {
-        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "source_def") < 0)) __PYX_ERR(0, 102, __pyx_L3_error)
+        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "source_def") < 0)) __PYX_ERR(0, 113, __pyx_L3_error)
       }
     } else {
       switch (PyTuple_GET_SIZE(__pyx_args)) {
@@ -3862,7 +4064,7 @@ static PyObject *__pyx_pw_5pyjls_7binding_6Writer_9source_def(PyObject *__pyx_v_
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("source_def", 0, 1, 6, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 102, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("source_def", 0, 1, 6, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 113, __pyx_L3_error)
   __pyx_L3_error:;
   __Pyx_AddTraceback("pyjls.binding.Writer.source_def", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __Pyx_RefNannyFinishContext();
@@ -3900,14 +4102,14 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_8source_def(struct __pyx_obj_5
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("source_def", 0);
 
-  /* "pyjls/binding.pyx":105
+  /* "pyjls/binding.pyx":116
  *         cdef int32_t rc
  *         cdef c_jls.jls_source_def_s s
  *         name_b = _encode_str(name)             # <<<<<<<<<<<<<<
  *         vendor_b = _encode_str(vendor)
  *         model_b = _encode_str(model)
  */
-  __Pyx_GetModuleGlobalName(__pyx_t_2, __pyx_n_s_encode_str); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 105, __pyx_L1_error)
+  __Pyx_GetModuleGlobalName(__pyx_t_2, __pyx_n_s_encode_str); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 116, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   __pyx_t_3 = NULL;
   if (CYTHON_UNPACK_METHODS && unlikely(PyMethod_Check(__pyx_t_2))) {
@@ -3921,20 +4123,20 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_8source_def(struct __pyx_obj_5
   }
   __pyx_t_1 = (__pyx_t_3) ? __Pyx_PyObject_Call2Args(__pyx_t_2, __pyx_t_3, __pyx_v_name) : __Pyx_PyObject_CallOneArg(__pyx_t_2, __pyx_v_name);
   __Pyx_XDECREF(__pyx_t_3); __pyx_t_3 = 0;
-  if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 105, __pyx_L1_error)
+  if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 116, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
   __pyx_v_name_b = __pyx_t_1;
   __pyx_t_1 = 0;
 
-  /* "pyjls/binding.pyx":106
+  /* "pyjls/binding.pyx":117
  *         cdef c_jls.jls_source_def_s s
  *         name_b = _encode_str(name)
  *         vendor_b = _encode_str(vendor)             # <<<<<<<<<<<<<<
  *         model_b = _encode_str(model)
  *         version_b = _encode_str(version)
  */
-  __Pyx_GetModuleGlobalName(__pyx_t_2, __pyx_n_s_encode_str); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 106, __pyx_L1_error)
+  __Pyx_GetModuleGlobalName(__pyx_t_2, __pyx_n_s_encode_str); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 117, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   __pyx_t_3 = NULL;
   if (CYTHON_UNPACK_METHODS && unlikely(PyMethod_Check(__pyx_t_2))) {
@@ -3948,20 +4150,20 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_8source_def(struct __pyx_obj_5
   }
   __pyx_t_1 = (__pyx_t_3) ? __Pyx_PyObject_Call2Args(__pyx_t_2, __pyx_t_3, __pyx_v_vendor) : __Pyx_PyObject_CallOneArg(__pyx_t_2, __pyx_v_vendor);
   __Pyx_XDECREF(__pyx_t_3); __pyx_t_3 = 0;
-  if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 106, __pyx_L1_error)
+  if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 117, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
   __pyx_v_vendor_b = __pyx_t_1;
   __pyx_t_1 = 0;
 
-  /* "pyjls/binding.pyx":107
+  /* "pyjls/binding.pyx":118
  *         name_b = _encode_str(name)
  *         vendor_b = _encode_str(vendor)
  *         model_b = _encode_str(model)             # <<<<<<<<<<<<<<
  *         version_b = _encode_str(version)
  *         serial_number_b = _encode_str(serial_number)
  */
-  __Pyx_GetModuleGlobalName(__pyx_t_2, __pyx_n_s_encode_str); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 107, __pyx_L1_error)
+  __Pyx_GetModuleGlobalName(__pyx_t_2, __pyx_n_s_encode_str); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 118, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   __pyx_t_3 = NULL;
   if (CYTHON_UNPACK_METHODS && unlikely(PyMethod_Check(__pyx_t_2))) {
@@ -3975,20 +4177,20 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_8source_def(struct __pyx_obj_5
   }
   __pyx_t_1 = (__pyx_t_3) ? __Pyx_PyObject_Call2Args(__pyx_t_2, __pyx_t_3, __pyx_v_model) : __Pyx_PyObject_CallOneArg(__pyx_t_2, __pyx_v_model);
   __Pyx_XDECREF(__pyx_t_3); __pyx_t_3 = 0;
-  if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 107, __pyx_L1_error)
+  if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 118, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
   __pyx_v_model_b = __pyx_t_1;
   __pyx_t_1 = 0;
 
-  /* "pyjls/binding.pyx":108
+  /* "pyjls/binding.pyx":119
  *         vendor_b = _encode_str(vendor)
  *         model_b = _encode_str(model)
  *         version_b = _encode_str(version)             # <<<<<<<<<<<<<<
  *         serial_number_b = _encode_str(serial_number)
  *         s.source_id = source_id
  */
-  __Pyx_GetModuleGlobalName(__pyx_t_2, __pyx_n_s_encode_str); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 108, __pyx_L1_error)
+  __Pyx_GetModuleGlobalName(__pyx_t_2, __pyx_n_s_encode_str); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 119, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   __pyx_t_3 = NULL;
   if (CYTHON_UNPACK_METHODS && unlikely(PyMethod_Check(__pyx_t_2))) {
@@ -4002,20 +4204,20 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_8source_def(struct __pyx_obj_5
   }
   __pyx_t_1 = (__pyx_t_3) ? __Pyx_PyObject_Call2Args(__pyx_t_2, __pyx_t_3, __pyx_v_version) : __Pyx_PyObject_CallOneArg(__pyx_t_2, __pyx_v_version);
   __Pyx_XDECREF(__pyx_t_3); __pyx_t_3 = 0;
-  if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 108, __pyx_L1_error)
+  if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 119, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
   __pyx_v_version_b = __pyx_t_1;
   __pyx_t_1 = 0;
 
-  /* "pyjls/binding.pyx":109
+  /* "pyjls/binding.pyx":120
  *         model_b = _encode_str(model)
  *         version_b = _encode_str(version)
  *         serial_number_b = _encode_str(serial_number)             # <<<<<<<<<<<<<<
  *         s.source_id = source_id
  *         s.name = name_b
  */
-  __Pyx_GetModuleGlobalName(__pyx_t_2, __pyx_n_s_encode_str); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 109, __pyx_L1_error)
+  __Pyx_GetModuleGlobalName(__pyx_t_2, __pyx_n_s_encode_str); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 120, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   __pyx_t_3 = NULL;
   if (CYTHON_UNPACK_METHODS && unlikely(PyMethod_Check(__pyx_t_2))) {
@@ -4029,73 +4231,73 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_8source_def(struct __pyx_obj_5
   }
   __pyx_t_1 = (__pyx_t_3) ? __Pyx_PyObject_Call2Args(__pyx_t_2, __pyx_t_3, __pyx_v_serial_number) : __Pyx_PyObject_CallOneArg(__pyx_t_2, __pyx_v_serial_number);
   __Pyx_XDECREF(__pyx_t_3); __pyx_t_3 = 0;
-  if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 109, __pyx_L1_error)
+  if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 120, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
   __pyx_v_serial_number_b = __pyx_t_1;
   __pyx_t_1 = 0;
 
-  /* "pyjls/binding.pyx":110
+  /* "pyjls/binding.pyx":121
  *         version_b = _encode_str(version)
  *         serial_number_b = _encode_str(serial_number)
  *         s.source_id = source_id             # <<<<<<<<<<<<<<
  *         s.name = name_b
  *         s.vendor = vendor_b
  */
-  __pyx_t_4 = __Pyx_PyInt_As_uint16_t(__pyx_v_source_id); if (unlikely((__pyx_t_4 == ((uint16_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 110, __pyx_L1_error)
+  __pyx_t_4 = __Pyx_PyInt_As_uint16_t(__pyx_v_source_id); if (unlikely((__pyx_t_4 == ((uint16_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 121, __pyx_L1_error)
   __pyx_v_s.source_id = __pyx_t_4;
 
-  /* "pyjls/binding.pyx":111
+  /* "pyjls/binding.pyx":122
  *         serial_number_b = _encode_str(serial_number)
  *         s.source_id = source_id
  *         s.name = name_b             # <<<<<<<<<<<<<<
  *         s.vendor = vendor_b
  *         s.model = model_b
  */
-  __pyx_t_5 = __Pyx_PyObject_AsString(__pyx_v_name_b); if (unlikely((!__pyx_t_5) && PyErr_Occurred())) __PYX_ERR(0, 111, __pyx_L1_error)
+  __pyx_t_5 = __Pyx_PyObject_AsString(__pyx_v_name_b); if (unlikely((!__pyx_t_5) && PyErr_Occurred())) __PYX_ERR(0, 122, __pyx_L1_error)
   __pyx_v_s.name = __pyx_t_5;
 
-  /* "pyjls/binding.pyx":112
+  /* "pyjls/binding.pyx":123
  *         s.source_id = source_id
  *         s.name = name_b
  *         s.vendor = vendor_b             # <<<<<<<<<<<<<<
  *         s.model = model_b
  *         s.version = version_b
  */
-  __pyx_t_6 = __Pyx_PyObject_AsString(__pyx_v_vendor_b); if (unlikely((!__pyx_t_6) && PyErr_Occurred())) __PYX_ERR(0, 112, __pyx_L1_error)
+  __pyx_t_6 = __Pyx_PyObject_AsString(__pyx_v_vendor_b); if (unlikely((!__pyx_t_6) && PyErr_Occurred())) __PYX_ERR(0, 123, __pyx_L1_error)
   __pyx_v_s.vendor = __pyx_t_6;
 
-  /* "pyjls/binding.pyx":113
+  /* "pyjls/binding.pyx":124
  *         s.name = name_b
  *         s.vendor = vendor_b
  *         s.model = model_b             # <<<<<<<<<<<<<<
  *         s.version = version_b
  *         s.serial_number = serial_number_b
  */
-  __pyx_t_7 = __Pyx_PyObject_AsString(__pyx_v_model_b); if (unlikely((!__pyx_t_7) && PyErr_Occurred())) __PYX_ERR(0, 113, __pyx_L1_error)
+  __pyx_t_7 = __Pyx_PyObject_AsString(__pyx_v_model_b); if (unlikely((!__pyx_t_7) && PyErr_Occurred())) __PYX_ERR(0, 124, __pyx_L1_error)
   __pyx_v_s.model = __pyx_t_7;
 
-  /* "pyjls/binding.pyx":114
+  /* "pyjls/binding.pyx":125
  *         s.vendor = vendor_b
  *         s.model = model_b
  *         s.version = version_b             # <<<<<<<<<<<<<<
  *         s.serial_number = serial_number_b
  *         rc = c_jls.jls_twr_source_def(self._wr, &s)
  */
-  __pyx_t_8 = __Pyx_PyObject_AsString(__pyx_v_version_b); if (unlikely((!__pyx_t_8) && PyErr_Occurred())) __PYX_ERR(0, 114, __pyx_L1_error)
+  __pyx_t_8 = __Pyx_PyObject_AsString(__pyx_v_version_b); if (unlikely((!__pyx_t_8) && PyErr_Occurred())) __PYX_ERR(0, 125, __pyx_L1_error)
   __pyx_v_s.version = __pyx_t_8;
 
-  /* "pyjls/binding.pyx":115
+  /* "pyjls/binding.pyx":126
  *         s.model = model_b
  *         s.version = version_b
  *         s.serial_number = serial_number_b             # <<<<<<<<<<<<<<
  *         rc = c_jls.jls_twr_source_def(self._wr, &s)
  *         if rc:
  */
-  __pyx_t_9 = __Pyx_PyObject_AsString(__pyx_v_serial_number_b); if (unlikely((!__pyx_t_9) && PyErr_Occurred())) __PYX_ERR(0, 115, __pyx_L1_error)
+  __pyx_t_9 = __Pyx_PyObject_AsString(__pyx_v_serial_number_b); if (unlikely((!__pyx_t_9) && PyErr_Occurred())) __PYX_ERR(0, 126, __pyx_L1_error)
   __pyx_v_s.serial_number = __pyx_t_9;
 
-  /* "pyjls/binding.pyx":116
+  /* "pyjls/binding.pyx":127
  *         s.version = version_b
  *         s.serial_number = serial_number_b
  *         rc = c_jls.jls_twr_source_def(self._wr, &s)             # <<<<<<<<<<<<<<
@@ -4104,7 +4306,7 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_8source_def(struct __pyx_obj_5
  */
   __pyx_v_rc = jls_twr_source_def(__pyx_v_self->_wr, (&__pyx_v_s));
 
-  /* "pyjls/binding.pyx":117
+  /* "pyjls/binding.pyx":128
  *         s.serial_number = serial_number_b
  *         rc = c_jls.jls_twr_source_def(self._wr, &s)
  *         if rc:             # <<<<<<<<<<<<<<
@@ -4114,29 +4316,29 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_8source_def(struct __pyx_obj_5
   __pyx_t_10 = (__pyx_v_rc != 0);
   if (unlikely(__pyx_t_10)) {
 
-    /* "pyjls/binding.pyx":118
+    /* "pyjls/binding.pyx":129
  *         rc = c_jls.jls_twr_source_def(self._wr, &s)
  *         if rc:
  *             raise RuntimeError(f'source_def failed {rc}')             # <<<<<<<<<<<<<<
  * 
  *     def signal_def(self, signal_id, source_id, signal_type=None, data_type=None, sample_rate=None,
  */
-    __pyx_t_1 = __Pyx_PyInt_From_int32_t(__pyx_v_rc); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 118, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyInt_From_int32_t(__pyx_v_rc); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 129, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
-    __pyx_t_2 = __Pyx_PyObject_FormatSimple(__pyx_t_1, __pyx_empty_unicode); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 118, __pyx_L1_error)
+    __pyx_t_2 = __Pyx_PyObject_FormatSimple(__pyx_t_1, __pyx_empty_unicode); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 129, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_2);
     __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-    __pyx_t_1 = __Pyx_PyUnicode_Concat(__pyx_kp_u_source_def_failed, __pyx_t_2); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 118, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyUnicode_Concat(__pyx_kp_u_source_def_failed, __pyx_t_2); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 129, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
     __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
-    __pyx_t_2 = __Pyx_PyObject_CallOneArg(__pyx_builtin_RuntimeError, __pyx_t_1); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 118, __pyx_L1_error)
+    __pyx_t_2 = __Pyx_PyObject_CallOneArg(__pyx_builtin_RuntimeError, __pyx_t_1); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 129, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_2);
     __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
     __Pyx_Raise(__pyx_t_2, 0, 0, 0);
     __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
-    __PYX_ERR(0, 118, __pyx_L1_error)
+    __PYX_ERR(0, 129, __pyx_L1_error)
 
-    /* "pyjls/binding.pyx":117
+    /* "pyjls/binding.pyx":128
  *         s.serial_number = serial_number_b
  *         rc = c_jls.jls_twr_source_def(self._wr, &s)
  *         if rc:             # <<<<<<<<<<<<<<
@@ -4145,7 +4347,7 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_8source_def(struct __pyx_obj_5
  */
   }
 
-  /* "pyjls/binding.pyx":102
+  /* "pyjls/binding.pyx":113
  *         c_jls.jls_twr_close(self._wr)
  * 
  *     def source_def(self, source_id, name=None, vendor=None, model=None, version=None, serial_number=None):             # <<<<<<<<<<<<<<
@@ -4173,7 +4375,7 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_8source_def(struct __pyx_obj_5
   return __pyx_r;
 }
 
-/* "pyjls/binding.pyx":120
+/* "pyjls/binding.pyx":131
  *             raise RuntimeError(f'source_def failed {rc}')
  * 
  *     def signal_def(self, signal_id, source_id, signal_type=None, data_type=None, sample_rate=None,             # <<<<<<<<<<<<<<
@@ -4210,7 +4412,7 @@ static PyObject *__pyx_pw_5pyjls_7binding_6Writer_11signal_def(PyObject *__pyx_v
     values[3] = ((PyObject *)Py_None);
     values[4] = ((PyObject *)Py_None);
 
-    /* "pyjls/binding.pyx":121
+    /* "pyjls/binding.pyx":132
  * 
  *     def signal_def(self, signal_id, source_id, signal_type=None, data_type=None, sample_rate=None,
  *                    samples_per_data=None, sample_decimate_factor=None, entries_per_summary=None,             # <<<<<<<<<<<<<<
@@ -4221,7 +4423,7 @@ static PyObject *__pyx_pw_5pyjls_7binding_6Writer_11signal_def(PyObject *__pyx_v
     values[6] = ((PyObject *)Py_None);
     values[7] = ((PyObject *)Py_None);
 
-    /* "pyjls/binding.pyx":122
+    /* "pyjls/binding.pyx":133
  *     def signal_def(self, signal_id, source_id, signal_type=None, data_type=None, sample_rate=None,
  *                    samples_per_data=None, sample_decimate_factor=None, entries_per_summary=None,
  *                    summary_decimate_factor=None, annotation_decimate_factor=None, utc_decimate_factor=None,             # <<<<<<<<<<<<<<
@@ -4232,7 +4434,7 @@ static PyObject *__pyx_pw_5pyjls_7binding_6Writer_11signal_def(PyObject *__pyx_v
     values[9] = ((PyObject *)Py_None);
     values[10] = ((PyObject *)Py_None);
 
-    /* "pyjls/binding.pyx":123
+    /* "pyjls/binding.pyx":134
  *                    samples_per_data=None, sample_decimate_factor=None, entries_per_summary=None,
  *                    summary_decimate_factor=None, annotation_decimate_factor=None, utc_decimate_factor=None,
  *                    name=None, si_units=None):             # <<<<<<<<<<<<<<
@@ -4283,7 +4485,7 @@ static PyObject *__pyx_pw_5pyjls_7binding_6Writer_11signal_def(PyObject *__pyx_v
         case  1:
         if (likely((values[1] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_source_id)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("signal_def", 0, 2, 13, 1); __PYX_ERR(0, 120, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("signal_def", 0, 2, 13, 1); __PYX_ERR(0, 131, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  2:
@@ -4353,7 +4555,7 @@ static PyObject *__pyx_pw_5pyjls_7binding_6Writer_11signal_def(PyObject *__pyx_v
         }
       }
       if (unlikely(kw_args > 0)) {
-        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "signal_def") < 0)) __PYX_ERR(0, 120, __pyx_L3_error)
+        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "signal_def") < 0)) __PYX_ERR(0, 131, __pyx_L3_error)
       }
     } else {
       switch (PyTuple_GET_SIZE(__pyx_args)) {
@@ -4401,7 +4603,7 @@ static PyObject *__pyx_pw_5pyjls_7binding_6Writer_11signal_def(PyObject *__pyx_v
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("signal_def", 0, 2, 13, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 120, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("signal_def", 0, 2, 13, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 131, __pyx_L3_error)
   __pyx_L3_error:;
   __Pyx_AddTraceback("pyjls.binding.Writer.signal_def", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __Pyx_RefNannyFinishContext();
@@ -4409,7 +4611,7 @@ static PyObject *__pyx_pw_5pyjls_7binding_6Writer_11signal_def(PyObject *__pyx_v
   __pyx_L4_argument_unpacking_done:;
   __pyx_r = __pyx_pf_5pyjls_7binding_6Writer_10signal_def(((struct __pyx_obj_5pyjls_7binding_Writer *)__pyx_v_self), __pyx_v_signal_id, __pyx_v_source_id, __pyx_v_signal_type, __pyx_v_data_type, __pyx_v_sample_rate, __pyx_v_samples_per_data, __pyx_v_sample_decimate_factor, __pyx_v_entries_per_summary, __pyx_v_summary_decimate_factor, __pyx_v_annotation_decimate_factor, __pyx_v_utc_decimate_factor, __pyx_v_name, __pyx_v_si_units);
 
-  /* "pyjls/binding.pyx":120
+  /* "pyjls/binding.pyx":131
  *             raise RuntimeError(f'source_def failed {rc}')
  * 
  *     def signal_def(self, signal_id, source_id, signal_type=None, data_type=None, sample_rate=None,             # <<<<<<<<<<<<<<
@@ -4445,27 +4647,27 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_10signal_def(struct __pyx_obj_
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("signal_def", 0);
 
-  /* "pyjls/binding.pyx":126
+  /* "pyjls/binding.pyx":137
  *         cdef int32_t rc
  *         cdef c_jls.jls_signal_def_s s
  *         s.signal_id = signal_id             # <<<<<<<<<<<<<<
  *         s.source_id = source_id
  *         s.signal_type = 0 if signal_type is None else int(signal_type)
  */
-  __pyx_t_1 = __Pyx_PyInt_As_uint16_t(__pyx_v_signal_id); if (unlikely((__pyx_t_1 == ((uint16_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 126, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyInt_As_uint16_t(__pyx_v_signal_id); if (unlikely((__pyx_t_1 == ((uint16_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 137, __pyx_L1_error)
   __pyx_v_s.signal_id = __pyx_t_1;
 
-  /* "pyjls/binding.pyx":127
+  /* "pyjls/binding.pyx":138
  *         cdef c_jls.jls_signal_def_s s
  *         s.signal_id = signal_id
  *         s.source_id = source_id             # <<<<<<<<<<<<<<
  *         s.signal_type = 0 if signal_type is None else int(signal_type)
  *         s.data_type = DataType.F32 if data_type is None else data_type
  */
-  __pyx_t_1 = __Pyx_PyInt_As_uint16_t(__pyx_v_source_id); if (unlikely((__pyx_t_1 == ((uint16_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 127, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyInt_As_uint16_t(__pyx_v_source_id); if (unlikely((__pyx_t_1 == ((uint16_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 138, __pyx_L1_error)
   __pyx_v_s.source_id = __pyx_t_1;
 
-  /* "pyjls/binding.pyx":128
+  /* "pyjls/binding.pyx":139
  *         s.signal_id = signal_id
  *         s.source_id = source_id
  *         s.signal_type = 0 if signal_type is None else int(signal_type)             # <<<<<<<<<<<<<<
@@ -4476,15 +4678,15 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_10signal_def(struct __pyx_obj_
   if ((__pyx_t_3 != 0)) {
     __pyx_t_2 = 0;
   } else {
-    __pyx_t_4 = __Pyx_PyNumber_Int(__pyx_v_signal_type); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 128, __pyx_L1_error)
+    __pyx_t_4 = __Pyx_PyNumber_Int(__pyx_v_signal_type); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 139, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_4);
-    __pyx_t_5 = __Pyx_PyInt_As_uint8_t(__pyx_t_4); if (unlikely((__pyx_t_5 == ((uint8_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 128, __pyx_L1_error)
+    __pyx_t_5 = __Pyx_PyInt_As_uint8_t(__pyx_t_4); if (unlikely((__pyx_t_5 == ((uint8_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 139, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
     __pyx_t_2 = __pyx_t_5;
   }
   __pyx_v_s.signal_type = __pyx_t_2;
 
-  /* "pyjls/binding.pyx":129
+  /* "pyjls/binding.pyx":140
  *         s.source_id = source_id
  *         s.signal_type = 0 if signal_type is None else int(signal_type)
  *         s.data_type = DataType.F32 if data_type is None else data_type             # <<<<<<<<<<<<<<
@@ -4493,21 +4695,21 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_10signal_def(struct __pyx_obj_
  */
   __pyx_t_3 = (__pyx_v_data_type == Py_None);
   if ((__pyx_t_3 != 0)) {
-    __Pyx_GetModuleGlobalName(__pyx_t_4, __pyx_n_s_DataType); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 129, __pyx_L1_error)
+    __Pyx_GetModuleGlobalName(__pyx_t_4, __pyx_n_s_DataType); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 140, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_4);
-    __pyx_t_7 = __Pyx_PyObject_GetAttrStr(__pyx_t_4, __pyx_n_s_F32); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 129, __pyx_L1_error)
+    __pyx_t_7 = __Pyx_PyObject_GetAttrStr(__pyx_t_4, __pyx_n_s_F32); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 140, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_7);
     __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-    __pyx_t_8 = __Pyx_PyInt_As_uint32_t(__pyx_t_7); if (unlikely((__pyx_t_8 == ((uint32_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 129, __pyx_L1_error)
+    __pyx_t_8 = __Pyx_PyInt_As_uint32_t(__pyx_t_7); if (unlikely((__pyx_t_8 == ((uint32_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 140, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
     __pyx_t_6 = __pyx_t_8;
   } else {
-    __pyx_t_8 = __Pyx_PyInt_As_uint32_t(__pyx_v_data_type); if (unlikely((__pyx_t_8 == ((uint32_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 129, __pyx_L1_error)
+    __pyx_t_8 = __Pyx_PyInt_As_uint32_t(__pyx_v_data_type); if (unlikely((__pyx_t_8 == ((uint32_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 140, __pyx_L1_error)
     __pyx_t_6 = __pyx_t_8;
   }
   __pyx_v_s.data_type = __pyx_t_6;
 
-  /* "pyjls/binding.pyx":130
+  /* "pyjls/binding.pyx":141
  *         s.signal_type = 0 if signal_type is None else int(signal_type)
  *         s.data_type = DataType.F32 if data_type is None else data_type
  *         s.sample_rate = 0 if sample_rate is None else int(sample_rate)             # <<<<<<<<<<<<<<
@@ -4518,15 +4720,15 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_10signal_def(struct __pyx_obj_
   if ((__pyx_t_3 != 0)) {
     __pyx_t_6 = 0;
   } else {
-    __pyx_t_7 = __Pyx_PyNumber_Int(__pyx_v_sample_rate); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 130, __pyx_L1_error)
+    __pyx_t_7 = __Pyx_PyNumber_Int(__pyx_v_sample_rate); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 141, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_7);
-    __pyx_t_8 = __Pyx_PyInt_As_uint32_t(__pyx_t_7); if (unlikely((__pyx_t_8 == ((uint32_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 130, __pyx_L1_error)
+    __pyx_t_8 = __Pyx_PyInt_As_uint32_t(__pyx_t_7); if (unlikely((__pyx_t_8 == ((uint32_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 141, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
     __pyx_t_6 = __pyx_t_8;
   }
   __pyx_v_s.sample_rate = __pyx_t_6;
 
-  /* "pyjls/binding.pyx":131
+  /* "pyjls/binding.pyx":142
  *         s.data_type = DataType.F32 if data_type is None else data_type
  *         s.sample_rate = 0 if sample_rate is None else int(sample_rate)
  *         s.samples_per_data = 100000 if samples_per_data is None else int(samples_per_data)             # <<<<<<<<<<<<<<
@@ -4537,15 +4739,15 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_10signal_def(struct __pyx_obj_
   if ((__pyx_t_3 != 0)) {
     __pyx_t_6 = 0x186A0;
   } else {
-    __pyx_t_7 = __Pyx_PyNumber_Int(__pyx_v_samples_per_data); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 131, __pyx_L1_error)
+    __pyx_t_7 = __Pyx_PyNumber_Int(__pyx_v_samples_per_data); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 142, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_7);
-    __pyx_t_8 = __Pyx_PyInt_As_uint32_t(__pyx_t_7); if (unlikely((__pyx_t_8 == ((uint32_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 131, __pyx_L1_error)
+    __pyx_t_8 = __Pyx_PyInt_As_uint32_t(__pyx_t_7); if (unlikely((__pyx_t_8 == ((uint32_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 142, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
     __pyx_t_6 = __pyx_t_8;
   }
   __pyx_v_s.samples_per_data = __pyx_t_6;
 
-  /* "pyjls/binding.pyx":132
+  /* "pyjls/binding.pyx":143
  *         s.sample_rate = 0 if sample_rate is None else int(sample_rate)
  *         s.samples_per_data = 100000 if samples_per_data is None else int(samples_per_data)
  *         s.sample_decimate_factor = 100 if sample_decimate_factor is None else int(sample_decimate_factor)             # <<<<<<<<<<<<<<
@@ -4556,15 +4758,15 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_10signal_def(struct __pyx_obj_
   if ((__pyx_t_3 != 0)) {
     __pyx_t_6 = 0x64;
   } else {
-    __pyx_t_7 = __Pyx_PyNumber_Int(__pyx_v_sample_decimate_factor); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 132, __pyx_L1_error)
+    __pyx_t_7 = __Pyx_PyNumber_Int(__pyx_v_sample_decimate_factor); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 143, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_7);
-    __pyx_t_8 = __Pyx_PyInt_As_uint32_t(__pyx_t_7); if (unlikely((__pyx_t_8 == ((uint32_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 132, __pyx_L1_error)
+    __pyx_t_8 = __Pyx_PyInt_As_uint32_t(__pyx_t_7); if (unlikely((__pyx_t_8 == ((uint32_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 143, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
     __pyx_t_6 = __pyx_t_8;
   }
   __pyx_v_s.sample_decimate_factor = __pyx_t_6;
 
-  /* "pyjls/binding.pyx":133
+  /* "pyjls/binding.pyx":144
  *         s.samples_per_data = 100000 if samples_per_data is None else int(samples_per_data)
  *         s.sample_decimate_factor = 100 if sample_decimate_factor is None else int(sample_decimate_factor)
  *         s.entries_per_summary = 20000 if entries_per_summary is None else int(entries_per_summary)             # <<<<<<<<<<<<<<
@@ -4575,15 +4777,15 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_10signal_def(struct __pyx_obj_
   if ((__pyx_t_3 != 0)) {
     __pyx_t_6 = 0x4E20;
   } else {
-    __pyx_t_7 = __Pyx_PyNumber_Int(__pyx_v_entries_per_summary); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 133, __pyx_L1_error)
+    __pyx_t_7 = __Pyx_PyNumber_Int(__pyx_v_entries_per_summary); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 144, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_7);
-    __pyx_t_8 = __Pyx_PyInt_As_uint32_t(__pyx_t_7); if (unlikely((__pyx_t_8 == ((uint32_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 133, __pyx_L1_error)
+    __pyx_t_8 = __Pyx_PyInt_As_uint32_t(__pyx_t_7); if (unlikely((__pyx_t_8 == ((uint32_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 144, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
     __pyx_t_6 = __pyx_t_8;
   }
   __pyx_v_s.entries_per_summary = __pyx_t_6;
 
-  /* "pyjls/binding.pyx":134
+  /* "pyjls/binding.pyx":145
  *         s.sample_decimate_factor = 100 if sample_decimate_factor is None else int(sample_decimate_factor)
  *         s.entries_per_summary = 20000 if entries_per_summary is None else int(entries_per_summary)
  *         s.summary_decimate_factor = 100 if summary_decimate_factor is None else int(summary_decimate_factor)             # <<<<<<<<<<<<<<
@@ -4594,15 +4796,15 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_10signal_def(struct __pyx_obj_
   if ((__pyx_t_3 != 0)) {
     __pyx_t_6 = 0x64;
   } else {
-    __pyx_t_7 = __Pyx_PyNumber_Int(__pyx_v_summary_decimate_factor); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 134, __pyx_L1_error)
+    __pyx_t_7 = __Pyx_PyNumber_Int(__pyx_v_summary_decimate_factor); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 145, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_7);
-    __pyx_t_8 = __Pyx_PyInt_As_uint32_t(__pyx_t_7); if (unlikely((__pyx_t_8 == ((uint32_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 134, __pyx_L1_error)
+    __pyx_t_8 = __Pyx_PyInt_As_uint32_t(__pyx_t_7); if (unlikely((__pyx_t_8 == ((uint32_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 145, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
     __pyx_t_6 = __pyx_t_8;
   }
   __pyx_v_s.summary_decimate_factor = __pyx_t_6;
 
-  /* "pyjls/binding.pyx":135
+  /* "pyjls/binding.pyx":146
  *         s.entries_per_summary = 20000 if entries_per_summary is None else int(entries_per_summary)
  *         s.summary_decimate_factor = 100 if summary_decimate_factor is None else int(summary_decimate_factor)
  *         s.annotation_decimate_factor = 100 if annotation_decimate_factor is None else int(annotation_decimate_factor)             # <<<<<<<<<<<<<<
@@ -4613,15 +4815,15 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_10signal_def(struct __pyx_obj_
   if ((__pyx_t_3 != 0)) {
     __pyx_t_6 = 0x64;
   } else {
-    __pyx_t_7 = __Pyx_PyNumber_Int(__pyx_v_annotation_decimate_factor); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 135, __pyx_L1_error)
+    __pyx_t_7 = __Pyx_PyNumber_Int(__pyx_v_annotation_decimate_factor); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 146, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_7);
-    __pyx_t_8 = __Pyx_PyInt_As_uint32_t(__pyx_t_7); if (unlikely((__pyx_t_8 == ((uint32_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 135, __pyx_L1_error)
+    __pyx_t_8 = __Pyx_PyInt_As_uint32_t(__pyx_t_7); if (unlikely((__pyx_t_8 == ((uint32_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 146, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
     __pyx_t_6 = __pyx_t_8;
   }
   __pyx_v_s.annotation_decimate_factor = __pyx_t_6;
 
-  /* "pyjls/binding.pyx":136
+  /* "pyjls/binding.pyx":147
  *         s.summary_decimate_factor = 100 if summary_decimate_factor is None else int(summary_decimate_factor)
  *         s.annotation_decimate_factor = 100 if annotation_decimate_factor is None else int(annotation_decimate_factor)
  *         s.utc_decimate_factor = 100 if utc_decimate_factor is None else int(utc_decimate_factor)             # <<<<<<<<<<<<<<
@@ -4632,22 +4834,22 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_10signal_def(struct __pyx_obj_
   if ((__pyx_t_3 != 0)) {
     __pyx_t_6 = 0x64;
   } else {
-    __pyx_t_7 = __Pyx_PyNumber_Int(__pyx_v_utc_decimate_factor); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 136, __pyx_L1_error)
+    __pyx_t_7 = __Pyx_PyNumber_Int(__pyx_v_utc_decimate_factor); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 147, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_7);
-    __pyx_t_8 = __Pyx_PyInt_As_uint32_t(__pyx_t_7); if (unlikely((__pyx_t_8 == ((uint32_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 136, __pyx_L1_error)
+    __pyx_t_8 = __Pyx_PyInt_As_uint32_t(__pyx_t_7); if (unlikely((__pyx_t_8 == ((uint32_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 147, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
     __pyx_t_6 = __pyx_t_8;
   }
   __pyx_v_s.utc_decimate_factor = __pyx_t_6;
 
-  /* "pyjls/binding.pyx":137
+  /* "pyjls/binding.pyx":148
  *         s.annotation_decimate_factor = 100 if annotation_decimate_factor is None else int(annotation_decimate_factor)
  *         s.utc_decimate_factor = 100 if utc_decimate_factor is None else int(utc_decimate_factor)
  *         name_b = _encode_str(name)             # <<<<<<<<<<<<<<
  *         si_units_b = _encode_str(si_units)
  *         s.name = name_b
  */
-  __Pyx_GetModuleGlobalName(__pyx_t_4, __pyx_n_s_encode_str); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 137, __pyx_L1_error)
+  __Pyx_GetModuleGlobalName(__pyx_t_4, __pyx_n_s_encode_str); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 148, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
   __pyx_t_9 = NULL;
   if (CYTHON_UNPACK_METHODS && unlikely(PyMethod_Check(__pyx_t_4))) {
@@ -4661,20 +4863,20 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_10signal_def(struct __pyx_obj_
   }
   __pyx_t_7 = (__pyx_t_9) ? __Pyx_PyObject_Call2Args(__pyx_t_4, __pyx_t_9, __pyx_v_name) : __Pyx_PyObject_CallOneArg(__pyx_t_4, __pyx_v_name);
   __Pyx_XDECREF(__pyx_t_9); __pyx_t_9 = 0;
-  if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 137, __pyx_L1_error)
+  if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 148, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_7);
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
   __pyx_v_name_b = __pyx_t_7;
   __pyx_t_7 = 0;
 
-  /* "pyjls/binding.pyx":138
+  /* "pyjls/binding.pyx":149
  *         s.utc_decimate_factor = 100 if utc_decimate_factor is None else int(utc_decimate_factor)
  *         name_b = _encode_str(name)
  *         si_units_b = _encode_str(si_units)             # <<<<<<<<<<<<<<
  *         s.name = name_b
  *         s.si_units = si_units_b
  */
-  __Pyx_GetModuleGlobalName(__pyx_t_4, __pyx_n_s_encode_str); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 138, __pyx_L1_error)
+  __Pyx_GetModuleGlobalName(__pyx_t_4, __pyx_n_s_encode_str); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 149, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
   __pyx_t_9 = NULL;
   if (CYTHON_UNPACK_METHODS && unlikely(PyMethod_Check(__pyx_t_4))) {
@@ -4688,33 +4890,33 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_10signal_def(struct __pyx_obj_
   }
   __pyx_t_7 = (__pyx_t_9) ? __Pyx_PyObject_Call2Args(__pyx_t_4, __pyx_t_9, __pyx_v_si_units) : __Pyx_PyObject_CallOneArg(__pyx_t_4, __pyx_v_si_units);
   __Pyx_XDECREF(__pyx_t_9); __pyx_t_9 = 0;
-  if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 138, __pyx_L1_error)
+  if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 149, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_7);
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
   __pyx_v_si_units_b = __pyx_t_7;
   __pyx_t_7 = 0;
 
-  /* "pyjls/binding.pyx":139
+  /* "pyjls/binding.pyx":150
  *         name_b = _encode_str(name)
  *         si_units_b = _encode_str(si_units)
  *         s.name = name_b             # <<<<<<<<<<<<<<
  *         s.si_units = si_units_b
  *         rc = c_jls.jls_twr_signal_def(self._wr, &s)
  */
-  __pyx_t_10 = __Pyx_PyObject_AsString(__pyx_v_name_b); if (unlikely((!__pyx_t_10) && PyErr_Occurred())) __PYX_ERR(0, 139, __pyx_L1_error)
+  __pyx_t_10 = __Pyx_PyObject_AsString(__pyx_v_name_b); if (unlikely((!__pyx_t_10) && PyErr_Occurred())) __PYX_ERR(0, 150, __pyx_L1_error)
   __pyx_v_s.name = __pyx_t_10;
 
-  /* "pyjls/binding.pyx":140
+  /* "pyjls/binding.pyx":151
  *         si_units_b = _encode_str(si_units)
  *         s.name = name_b
  *         s.si_units = si_units_b             # <<<<<<<<<<<<<<
  *         rc = c_jls.jls_twr_signal_def(self._wr, &s)
  *         if rc:
  */
-  __pyx_t_11 = __Pyx_PyObject_AsString(__pyx_v_si_units_b); if (unlikely((!__pyx_t_11) && PyErr_Occurred())) __PYX_ERR(0, 140, __pyx_L1_error)
+  __pyx_t_11 = __Pyx_PyObject_AsString(__pyx_v_si_units_b); if (unlikely((!__pyx_t_11) && PyErr_Occurred())) __PYX_ERR(0, 151, __pyx_L1_error)
   __pyx_v_s.si_units = __pyx_t_11;
 
-  /* "pyjls/binding.pyx":141
+  /* "pyjls/binding.pyx":152
  *         s.name = name_b
  *         s.si_units = si_units_b
  *         rc = c_jls.jls_twr_signal_def(self._wr, &s)             # <<<<<<<<<<<<<<
@@ -4723,7 +4925,7 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_10signal_def(struct __pyx_obj_
  */
   __pyx_v_rc = jls_twr_signal_def(__pyx_v_self->_wr, (&__pyx_v_s));
 
-  /* "pyjls/binding.pyx":142
+  /* "pyjls/binding.pyx":153
  *         s.si_units = si_units_b
  *         rc = c_jls.jls_twr_signal_def(self._wr, &s)
  *         if rc:             # <<<<<<<<<<<<<<
@@ -4733,29 +4935,29 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_10signal_def(struct __pyx_obj_
   __pyx_t_3 = (__pyx_v_rc != 0);
   if (unlikely(__pyx_t_3)) {
 
-    /* "pyjls/binding.pyx":143
+    /* "pyjls/binding.pyx":154
  *         rc = c_jls.jls_twr_signal_def(self._wr, &s)
  *         if rc:
  *             raise RuntimeError(f'signal_def failed {rc}')             # <<<<<<<<<<<<<<
  * 
  *     def user_data(self, chunk_meta, data):
  */
-    __pyx_t_7 = __Pyx_PyInt_From_int32_t(__pyx_v_rc); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 143, __pyx_L1_error)
+    __pyx_t_7 = __Pyx_PyInt_From_int32_t(__pyx_v_rc); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 154, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_7);
-    __pyx_t_4 = __Pyx_PyObject_FormatSimple(__pyx_t_7, __pyx_empty_unicode); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 143, __pyx_L1_error)
+    __pyx_t_4 = __Pyx_PyObject_FormatSimple(__pyx_t_7, __pyx_empty_unicode); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 154, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_4);
     __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
-    __pyx_t_7 = __Pyx_PyUnicode_Concat(__pyx_kp_u_signal_def_failed, __pyx_t_4); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 143, __pyx_L1_error)
+    __pyx_t_7 = __Pyx_PyUnicode_Concat(__pyx_kp_u_signal_def_failed, __pyx_t_4); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 154, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_7);
     __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-    __pyx_t_4 = __Pyx_PyObject_CallOneArg(__pyx_builtin_RuntimeError, __pyx_t_7); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 143, __pyx_L1_error)
+    __pyx_t_4 = __Pyx_PyObject_CallOneArg(__pyx_builtin_RuntimeError, __pyx_t_7); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 154, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_4);
     __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
     __Pyx_Raise(__pyx_t_4, 0, 0, 0);
     __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-    __PYX_ERR(0, 143, __pyx_L1_error)
+    __PYX_ERR(0, 154, __pyx_L1_error)
 
-    /* "pyjls/binding.pyx":142
+    /* "pyjls/binding.pyx":153
  *         s.si_units = si_units_b
  *         rc = c_jls.jls_twr_signal_def(self._wr, &s)
  *         if rc:             # <<<<<<<<<<<<<<
@@ -4764,7 +4966,7 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_10signal_def(struct __pyx_obj_
  */
   }
 
-  /* "pyjls/binding.pyx":120
+  /* "pyjls/binding.pyx":131
  *             raise RuntimeError(f'source_def failed {rc}')
  * 
  *     def signal_def(self, signal_id, source_id, signal_type=None, data_type=None, sample_rate=None,             # <<<<<<<<<<<<<<
@@ -4789,12 +4991,12 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_10signal_def(struct __pyx_obj_
   return __pyx_r;
 }
 
-/* "pyjls/binding.pyx":145
+/* "pyjls/binding.pyx":156
  *             raise RuntimeError(f'signal_def failed {rc}')
  * 
  *     def user_data(self, chunk_meta, data):             # <<<<<<<<<<<<<<
  *         cdef int32_t rc
- *         storage_type, payload = _storage_pack(data)
+ *         storage_type, payload, payload_length = _storage_pack(data)
  */
 
 /* Python wrapper */
@@ -4831,11 +5033,11 @@ static PyObject *__pyx_pw_5pyjls_7binding_6Writer_13user_data(PyObject *__pyx_v_
         case  1:
         if (likely((values[1] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_data)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("user_data", 1, 2, 2, 1); __PYX_ERR(0, 145, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("user_data", 1, 2, 2, 1); __PYX_ERR(0, 156, __pyx_L3_error)
         }
       }
       if (unlikely(kw_args > 0)) {
-        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "user_data") < 0)) __PYX_ERR(0, 145, __pyx_L3_error)
+        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "user_data") < 0)) __PYX_ERR(0, 156, __pyx_L3_error)
       }
     } else if (PyTuple_GET_SIZE(__pyx_args) != 2) {
       goto __pyx_L5_argtuple_error;
@@ -4848,7 +5050,7 @@ static PyObject *__pyx_pw_5pyjls_7binding_6Writer_13user_data(PyObject *__pyx_v_
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("user_data", 1, 2, 2, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 145, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("user_data", 1, 2, 2, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 156, __pyx_L3_error)
   __pyx_L3_error:;
   __Pyx_AddTraceback("pyjls.binding.Writer.user_data", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __Pyx_RefNannyFinishContext();
@@ -4865,31 +5067,33 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_12user_data(struct __pyx_obj_5
   int32_t __pyx_v_rc;
   PyObject *__pyx_v_storage_type = NULL;
   PyObject *__pyx_v_payload = NULL;
+  PyObject *__pyx_v_payload_length = NULL;
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
   PyObject *__pyx_t_2 = NULL;
   PyObject *__pyx_t_3 = NULL;
   PyObject *__pyx_t_4 = NULL;
-  PyObject *(*__pyx_t_5)(PyObject *);
-  uint16_t __pyx_t_6;
-  enum jls_storage_type_e __pyx_t_7;
-  uint8_t const *__pyx_t_8;
-  Py_ssize_t __pyx_t_9;
-  int __pyx_t_10;
+  PyObject *__pyx_t_5 = NULL;
+  PyObject *(*__pyx_t_6)(PyObject *);
+  uint16_t __pyx_t_7;
+  enum jls_storage_type_e __pyx_t_8;
+  uint8_t const *__pyx_t_9;
+  uint32_t __pyx_t_10;
+  int __pyx_t_11;
   int __pyx_lineno = 0;
   const char *__pyx_filename = NULL;
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("user_data", 0);
 
-  /* "pyjls/binding.pyx":147
+  /* "pyjls/binding.pyx":158
  *     def user_data(self, chunk_meta, data):
  *         cdef int32_t rc
- *         storage_type, payload = _storage_pack(data)             # <<<<<<<<<<<<<<
- *         rc = c_jls.jls_twr_user_data(self._wr, chunk_meta, storage_type, payload, len(payload))
+ *         storage_type, payload, payload_length = _storage_pack(data)             # <<<<<<<<<<<<<<
+ *         rc = c_jls.jls_twr_user_data(self._wr, chunk_meta, storage_type, payload, payload_length)
  *         if rc:
  */
-  __Pyx_GetModuleGlobalName(__pyx_t_2, __pyx_n_s_storage_pack); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 147, __pyx_L1_error)
+  __Pyx_GetModuleGlobalName(__pyx_t_2, __pyx_n_s_storage_pack); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 158, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   __pyx_t_3 = NULL;
   if (CYTHON_UNPACK_METHODS && unlikely(PyMethod_Check(__pyx_t_2))) {
@@ -4903,120 +5107,129 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_12user_data(struct __pyx_obj_5
   }
   __pyx_t_1 = (__pyx_t_3) ? __Pyx_PyObject_Call2Args(__pyx_t_2, __pyx_t_3, __pyx_v_data) : __Pyx_PyObject_CallOneArg(__pyx_t_2, __pyx_v_data);
   __Pyx_XDECREF(__pyx_t_3); __pyx_t_3 = 0;
-  if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 147, __pyx_L1_error)
+  if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 158, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
   if ((likely(PyTuple_CheckExact(__pyx_t_1))) || (PyList_CheckExact(__pyx_t_1))) {
     PyObject* sequence = __pyx_t_1;
     Py_ssize_t size = __Pyx_PySequence_SIZE(sequence);
-    if (unlikely(size != 2)) {
-      if (size > 2) __Pyx_RaiseTooManyValuesError(2);
+    if (unlikely(size != 3)) {
+      if (size > 3) __Pyx_RaiseTooManyValuesError(3);
       else if (size >= 0) __Pyx_RaiseNeedMoreValuesError(size);
-      __PYX_ERR(0, 147, __pyx_L1_error)
+      __PYX_ERR(0, 158, __pyx_L1_error)
     }
     #if CYTHON_ASSUME_SAFE_MACROS && !CYTHON_AVOID_BORROWED_REFS
     if (likely(PyTuple_CheckExact(sequence))) {
       __pyx_t_2 = PyTuple_GET_ITEM(sequence, 0); 
       __pyx_t_3 = PyTuple_GET_ITEM(sequence, 1); 
+      __pyx_t_4 = PyTuple_GET_ITEM(sequence, 2); 
     } else {
       __pyx_t_2 = PyList_GET_ITEM(sequence, 0); 
       __pyx_t_3 = PyList_GET_ITEM(sequence, 1); 
+      __pyx_t_4 = PyList_GET_ITEM(sequence, 2); 
     }
     __Pyx_INCREF(__pyx_t_2);
     __Pyx_INCREF(__pyx_t_3);
+    __Pyx_INCREF(__pyx_t_4);
     #else
-    __pyx_t_2 = PySequence_ITEM(sequence, 0); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 147, __pyx_L1_error)
+    __pyx_t_2 = PySequence_ITEM(sequence, 0); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 158, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_2);
-    __pyx_t_3 = PySequence_ITEM(sequence, 1); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 147, __pyx_L1_error)
+    __pyx_t_3 = PySequence_ITEM(sequence, 1); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 158, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_3);
+    __pyx_t_4 = PySequence_ITEM(sequence, 2); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 158, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_4);
     #endif
     __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
   } else {
     Py_ssize_t index = -1;
-    __pyx_t_4 = PyObject_GetIter(__pyx_t_1); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 147, __pyx_L1_error)
-    __Pyx_GOTREF(__pyx_t_4);
+    __pyx_t_5 = PyObject_GetIter(__pyx_t_1); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 158, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_5);
     __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-    __pyx_t_5 = Py_TYPE(__pyx_t_4)->tp_iternext;
-    index = 0; __pyx_t_2 = __pyx_t_5(__pyx_t_4); if (unlikely(!__pyx_t_2)) goto __pyx_L3_unpacking_failed;
+    __pyx_t_6 = Py_TYPE(__pyx_t_5)->tp_iternext;
+    index = 0; __pyx_t_2 = __pyx_t_6(__pyx_t_5); if (unlikely(!__pyx_t_2)) goto __pyx_L3_unpacking_failed;
     __Pyx_GOTREF(__pyx_t_2);
-    index = 1; __pyx_t_3 = __pyx_t_5(__pyx_t_4); if (unlikely(!__pyx_t_3)) goto __pyx_L3_unpacking_failed;
+    index = 1; __pyx_t_3 = __pyx_t_6(__pyx_t_5); if (unlikely(!__pyx_t_3)) goto __pyx_L3_unpacking_failed;
     __Pyx_GOTREF(__pyx_t_3);
-    if (__Pyx_IternextUnpackEndCheck(__pyx_t_5(__pyx_t_4), 2) < 0) __PYX_ERR(0, 147, __pyx_L1_error)
-    __pyx_t_5 = NULL;
-    __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
+    index = 2; __pyx_t_4 = __pyx_t_6(__pyx_t_5); if (unlikely(!__pyx_t_4)) goto __pyx_L3_unpacking_failed;
+    __Pyx_GOTREF(__pyx_t_4);
+    if (__Pyx_IternextUnpackEndCheck(__pyx_t_6(__pyx_t_5), 3) < 0) __PYX_ERR(0, 158, __pyx_L1_error)
+    __pyx_t_6 = NULL;
+    __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
     goto __pyx_L4_unpacking_done;
     __pyx_L3_unpacking_failed:;
-    __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-    __pyx_t_5 = NULL;
+    __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+    __pyx_t_6 = NULL;
     if (__Pyx_IterFinish() == 0) __Pyx_RaiseNeedMoreValuesError(index);
-    __PYX_ERR(0, 147, __pyx_L1_error)
+    __PYX_ERR(0, 158, __pyx_L1_error)
     __pyx_L4_unpacking_done:;
   }
   __pyx_v_storage_type = __pyx_t_2;
   __pyx_t_2 = 0;
   __pyx_v_payload = __pyx_t_3;
   __pyx_t_3 = 0;
+  __pyx_v_payload_length = __pyx_t_4;
+  __pyx_t_4 = 0;
 
-  /* "pyjls/binding.pyx":148
+  /* "pyjls/binding.pyx":159
  *         cdef int32_t rc
- *         storage_type, payload = _storage_pack(data)
- *         rc = c_jls.jls_twr_user_data(self._wr, chunk_meta, storage_type, payload, len(payload))             # <<<<<<<<<<<<<<
+ *         storage_type, payload, payload_length = _storage_pack(data)
+ *         rc = c_jls.jls_twr_user_data(self._wr, chunk_meta, storage_type, payload, payload_length)             # <<<<<<<<<<<<<<
  *         if rc:
  *             raise RuntimeError(f'user_data failed {rc}')
  */
-  __pyx_t_6 = __Pyx_PyInt_As_uint16_t(__pyx_v_chunk_meta); if (unlikely((__pyx_t_6 == ((uint16_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 148, __pyx_L1_error)
-  __pyx_t_7 = ((enum jls_storage_type_e)__Pyx_PyInt_As_enum__jls_storage_type_e(__pyx_v_storage_type)); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 148, __pyx_L1_error)
-  __pyx_t_8 = __Pyx_PyObject_AsUString(__pyx_v_payload); if (unlikely((!__pyx_t_8) && PyErr_Occurred())) __PYX_ERR(0, 148, __pyx_L1_error)
-  __pyx_t_9 = PyObject_Length(__pyx_v_payload); if (unlikely(__pyx_t_9 == ((Py_ssize_t)-1))) __PYX_ERR(0, 148, __pyx_L1_error)
-  __pyx_v_rc = jls_twr_user_data(__pyx_v_self->_wr, __pyx_t_6, __pyx_t_7, __pyx_t_8, __pyx_t_9);
+  __pyx_t_7 = __Pyx_PyInt_As_uint16_t(__pyx_v_chunk_meta); if (unlikely((__pyx_t_7 == ((uint16_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 159, __pyx_L1_error)
+  __pyx_t_8 = ((enum jls_storage_type_e)__Pyx_PyInt_As_enum__jls_storage_type_e(__pyx_v_storage_type)); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 159, __pyx_L1_error)
+  __pyx_t_9 = __Pyx_PyObject_AsUString(__pyx_v_payload); if (unlikely((!__pyx_t_9) && PyErr_Occurred())) __PYX_ERR(0, 159, __pyx_L1_error)
+  __pyx_t_10 = __Pyx_PyInt_As_uint32_t(__pyx_v_payload_length); if (unlikely((__pyx_t_10 == ((uint32_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 159, __pyx_L1_error)
+  __pyx_v_rc = jls_twr_user_data(__pyx_v_self->_wr, __pyx_t_7, __pyx_t_8, __pyx_t_9, __pyx_t_10);
 
-  /* "pyjls/binding.pyx":149
- *         storage_type, payload = _storage_pack(data)
- *         rc = c_jls.jls_twr_user_data(self._wr, chunk_meta, storage_type, payload, len(payload))
+  /* "pyjls/binding.pyx":160
+ *         storage_type, payload, payload_length = _storage_pack(data)
+ *         rc = c_jls.jls_twr_user_data(self._wr, chunk_meta, storage_type, payload, payload_length)
  *         if rc:             # <<<<<<<<<<<<<<
  *             raise RuntimeError(f'user_data failed {rc}')
  * 
  */
-  __pyx_t_10 = (__pyx_v_rc != 0);
-  if (unlikely(__pyx_t_10)) {
+  __pyx_t_11 = (__pyx_v_rc != 0);
+  if (unlikely(__pyx_t_11)) {
 
-    /* "pyjls/binding.pyx":150
- *         rc = c_jls.jls_twr_user_data(self._wr, chunk_meta, storage_type, payload, len(payload))
+    /* "pyjls/binding.pyx":161
+ *         rc = c_jls.jls_twr_user_data(self._wr, chunk_meta, storage_type, payload, payload_length)
  *         if rc:
  *             raise RuntimeError(f'user_data failed {rc}')             # <<<<<<<<<<<<<<
  * 
  *     def fsr_f32(self, signal_id, sample_id, data):
  */
-    __pyx_t_1 = __Pyx_PyInt_From_int32_t(__pyx_v_rc); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 150, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyInt_From_int32_t(__pyx_v_rc); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 161, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
-    __pyx_t_3 = __Pyx_PyObject_FormatSimple(__pyx_t_1, __pyx_empty_unicode); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 150, __pyx_L1_error)
-    __Pyx_GOTREF(__pyx_t_3);
+    __pyx_t_4 = __Pyx_PyObject_FormatSimple(__pyx_t_1, __pyx_empty_unicode); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 161, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_4);
     __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-    __pyx_t_1 = __Pyx_PyUnicode_Concat(__pyx_kp_u_user_data_failed, __pyx_t_3); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 150, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyUnicode_Concat(__pyx_kp_u_user_data_failed, __pyx_t_4); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 161, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
-    __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
-    __pyx_t_3 = __Pyx_PyObject_CallOneArg(__pyx_builtin_RuntimeError, __pyx_t_1); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 150, __pyx_L1_error)
-    __Pyx_GOTREF(__pyx_t_3);
+    __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
+    __pyx_t_4 = __Pyx_PyObject_CallOneArg(__pyx_builtin_RuntimeError, __pyx_t_1); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 161, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_4);
     __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-    __Pyx_Raise(__pyx_t_3, 0, 0, 0);
-    __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
-    __PYX_ERR(0, 150, __pyx_L1_error)
+    __Pyx_Raise(__pyx_t_4, 0, 0, 0);
+    __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
+    __PYX_ERR(0, 161, __pyx_L1_error)
 
-    /* "pyjls/binding.pyx":149
- *         storage_type, payload = _storage_pack(data)
- *         rc = c_jls.jls_twr_user_data(self._wr, chunk_meta, storage_type, payload, len(payload))
+    /* "pyjls/binding.pyx":160
+ *         storage_type, payload, payload_length = _storage_pack(data)
+ *         rc = c_jls.jls_twr_user_data(self._wr, chunk_meta, storage_type, payload, payload_length)
  *         if rc:             # <<<<<<<<<<<<<<
  *             raise RuntimeError(f'user_data failed {rc}')
  * 
  */
   }
 
-  /* "pyjls/binding.pyx":145
+  /* "pyjls/binding.pyx":156
  *             raise RuntimeError(f'signal_def failed {rc}')
  * 
  *     def user_data(self, chunk_meta, data):             # <<<<<<<<<<<<<<
  *         cdef int32_t rc
- *         storage_type, payload = _storage_pack(data)
+ *         storage_type, payload, payload_length = _storage_pack(data)
  */
 
   /* function exit code */
@@ -5027,17 +5240,19 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_12user_data(struct __pyx_obj_5
   __Pyx_XDECREF(__pyx_t_2);
   __Pyx_XDECREF(__pyx_t_3);
   __Pyx_XDECREF(__pyx_t_4);
+  __Pyx_XDECREF(__pyx_t_5);
   __Pyx_AddTraceback("pyjls.binding.Writer.user_data", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __pyx_r = NULL;
   __pyx_L0:;
   __Pyx_XDECREF(__pyx_v_storage_type);
   __Pyx_XDECREF(__pyx_v_payload);
+  __Pyx_XDECREF(__pyx_v_payload_length);
   __Pyx_XGIVEREF(__pyx_r);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
 
-/* "pyjls/binding.pyx":152
+/* "pyjls/binding.pyx":163
  *             raise RuntimeError(f'user_data failed {rc}')
  * 
  *     def fsr_f32(self, signal_id, sample_id, data):             # <<<<<<<<<<<<<<
@@ -5082,17 +5297,17 @@ static PyObject *__pyx_pw_5pyjls_7binding_6Writer_15fsr_f32(PyObject *__pyx_v_se
         case  1:
         if (likely((values[1] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_sample_id)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("fsr_f32", 1, 3, 3, 1); __PYX_ERR(0, 152, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("fsr_f32", 1, 3, 3, 1); __PYX_ERR(0, 163, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  2:
         if (likely((values[2] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_data)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("fsr_f32", 1, 3, 3, 2); __PYX_ERR(0, 152, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("fsr_f32", 1, 3, 3, 2); __PYX_ERR(0, 163, __pyx_L3_error)
         }
       }
       if (unlikely(kw_args > 0)) {
-        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "fsr_f32") < 0)) __PYX_ERR(0, 152, __pyx_L3_error)
+        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "fsr_f32") < 0)) __PYX_ERR(0, 163, __pyx_L3_error)
       }
     } else if (PyTuple_GET_SIZE(__pyx_args) != 3) {
       goto __pyx_L5_argtuple_error;
@@ -5107,7 +5322,7 @@ static PyObject *__pyx_pw_5pyjls_7binding_6Writer_15fsr_f32(PyObject *__pyx_v_se
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("fsr_f32", 1, 3, 3, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 152, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("fsr_f32", 1, 3, 3, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 163, __pyx_L3_error)
   __pyx_L3_error:;
   __Pyx_AddTraceback("pyjls.binding.Writer.fsr_f32", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __Pyx_RefNannyFinishContext();
@@ -5139,27 +5354,27 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_14fsr_f32(struct __pyx_obj_5py
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("fsr_f32", 0);
 
-  /* "pyjls/binding.pyx":154
+  /* "pyjls/binding.pyx":165
  *     def fsr_f32(self, signal_id, sample_id, data):
  *         cdef int32_t rc
  *         cdef np.float32_t [::1] f32 = data             # <<<<<<<<<<<<<<
  *         rc = c_jls.jls_twr_fsr_f32(self._wr, signal_id, sample_id, &f32[0], len(data))
  *         if rc:
  */
-  __pyx_t_1 = __Pyx_PyObject_to_MemoryviewSlice_dc_nn___pyx_t_5numpy_float32_t(__pyx_v_data, PyBUF_WRITABLE); if (unlikely(!__pyx_t_1.memview)) __PYX_ERR(0, 154, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyObject_to_MemoryviewSlice_dc_nn___pyx_t_5numpy_float32_t(__pyx_v_data, PyBUF_WRITABLE); if (unlikely(!__pyx_t_1.memview)) __PYX_ERR(0, 165, __pyx_L1_error)
   __pyx_v_f32 = __pyx_t_1;
   __pyx_t_1.memview = NULL;
   __pyx_t_1.data = NULL;
 
-  /* "pyjls/binding.pyx":155
+  /* "pyjls/binding.pyx":166
  *         cdef int32_t rc
  *         cdef np.float32_t [::1] f32 = data
  *         rc = c_jls.jls_twr_fsr_f32(self._wr, signal_id, sample_id, &f32[0], len(data))             # <<<<<<<<<<<<<<
  *         if rc:
  *             raise RuntimeError(f'fsr_f32 failed {rc}')
  */
-  __pyx_t_2 = __Pyx_PyInt_As_uint16_t(__pyx_v_signal_id); if (unlikely((__pyx_t_2 == ((uint16_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 155, __pyx_L1_error)
-  __pyx_t_3 = __Pyx_PyInt_As_int64_t(__pyx_v_sample_id); if (unlikely((__pyx_t_3 == ((int64_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 155, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_PyInt_As_uint16_t(__pyx_v_signal_id); if (unlikely((__pyx_t_2 == ((uint16_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 166, __pyx_L1_error)
+  __pyx_t_3 = __Pyx_PyInt_As_int64_t(__pyx_v_sample_id); if (unlikely((__pyx_t_3 == ((int64_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 166, __pyx_L1_error)
   __pyx_t_4 = 0;
   __pyx_t_5 = -1;
   if (__pyx_t_4 < 0) {
@@ -5168,12 +5383,12 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_14fsr_f32(struct __pyx_obj_5py
   } else if (unlikely(__pyx_t_4 >= __pyx_v_f32.shape[0])) __pyx_t_5 = 0;
   if (unlikely(__pyx_t_5 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_5);
-    __PYX_ERR(0, 155, __pyx_L1_error)
+    __PYX_ERR(0, 166, __pyx_L1_error)
   }
-  __pyx_t_6 = PyObject_Length(__pyx_v_data); if (unlikely(__pyx_t_6 == ((Py_ssize_t)-1))) __PYX_ERR(0, 155, __pyx_L1_error)
+  __pyx_t_6 = PyObject_Length(__pyx_v_data); if (unlikely(__pyx_t_6 == ((Py_ssize_t)-1))) __PYX_ERR(0, 166, __pyx_L1_error)
   __pyx_v_rc = jls_twr_fsr_f32(__pyx_v_self->_wr, __pyx_t_2, __pyx_t_3, (&(*((__pyx_t_5numpy_float32_t *) ( /* dim=0 */ ((char *) (((__pyx_t_5numpy_float32_t *) __pyx_v_f32.data) + __pyx_t_4)) )))), __pyx_t_6);
 
-  /* "pyjls/binding.pyx":156
+  /* "pyjls/binding.pyx":167
  *         cdef np.float32_t [::1] f32 = data
  *         rc = c_jls.jls_twr_fsr_f32(self._wr, signal_id, sample_id, &f32[0], len(data))
  *         if rc:             # <<<<<<<<<<<<<<
@@ -5183,29 +5398,29 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_14fsr_f32(struct __pyx_obj_5py
   __pyx_t_7 = (__pyx_v_rc != 0);
   if (unlikely(__pyx_t_7)) {
 
-    /* "pyjls/binding.pyx":157
+    /* "pyjls/binding.pyx":168
  *         rc = c_jls.jls_twr_fsr_f32(self._wr, signal_id, sample_id, &f32[0], len(data))
  *         if rc:
  *             raise RuntimeError(f'fsr_f32 failed {rc}')             # <<<<<<<<<<<<<<
  * 
  *     def annotation(self, signal_id, timestamp, annotation_type, data):
  */
-    __pyx_t_8 = __Pyx_PyInt_From_int32_t(__pyx_v_rc); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 157, __pyx_L1_error)
+    __pyx_t_8 = __Pyx_PyInt_From_int32_t(__pyx_v_rc); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 168, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_8);
-    __pyx_t_9 = __Pyx_PyObject_FormatSimple(__pyx_t_8, __pyx_empty_unicode); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 157, __pyx_L1_error)
+    __pyx_t_9 = __Pyx_PyObject_FormatSimple(__pyx_t_8, __pyx_empty_unicode); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 168, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_9);
     __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
-    __pyx_t_8 = __Pyx_PyUnicode_Concat(__pyx_kp_u_fsr_f32_failed, __pyx_t_9); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 157, __pyx_L1_error)
+    __pyx_t_8 = __Pyx_PyUnicode_Concat(__pyx_kp_u_fsr_f32_failed, __pyx_t_9); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 168, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_8);
     __Pyx_DECREF(__pyx_t_9); __pyx_t_9 = 0;
-    __pyx_t_9 = __Pyx_PyObject_CallOneArg(__pyx_builtin_RuntimeError, __pyx_t_8); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 157, __pyx_L1_error)
+    __pyx_t_9 = __Pyx_PyObject_CallOneArg(__pyx_builtin_RuntimeError, __pyx_t_8); if (unlikely(!__pyx_t_9)) __PYX_ERR(0, 168, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_9);
     __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
     __Pyx_Raise(__pyx_t_9, 0, 0, 0);
     __Pyx_DECREF(__pyx_t_9); __pyx_t_9 = 0;
-    __PYX_ERR(0, 157, __pyx_L1_error)
+    __PYX_ERR(0, 168, __pyx_L1_error)
 
-    /* "pyjls/binding.pyx":156
+    /* "pyjls/binding.pyx":167
  *         cdef np.float32_t [::1] f32 = data
  *         rc = c_jls.jls_twr_fsr_f32(self._wr, signal_id, sample_id, &f32[0], len(data))
  *         if rc:             # <<<<<<<<<<<<<<
@@ -5214,7 +5429,7 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_14fsr_f32(struct __pyx_obj_5py
  */
   }
 
-  /* "pyjls/binding.pyx":152
+  /* "pyjls/binding.pyx":163
  *             raise RuntimeError(f'user_data failed {rc}')
  * 
  *     def fsr_f32(self, signal_id, sample_id, data):             # <<<<<<<<<<<<<<
@@ -5238,7 +5453,7 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_14fsr_f32(struct __pyx_obj_5py
   return __pyx_r;
 }
 
-/* "pyjls/binding.pyx":159
+/* "pyjls/binding.pyx":170
  *             raise RuntimeError(f'fsr_f32 failed {rc}')
  * 
  *     def annotation(self, signal_id, timestamp, annotation_type, data):             # <<<<<<<<<<<<<<
@@ -5286,23 +5501,23 @@ static PyObject *__pyx_pw_5pyjls_7binding_6Writer_17annotation(PyObject *__pyx_v
         case  1:
         if (likely((values[1] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_timestamp)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("annotation", 1, 4, 4, 1); __PYX_ERR(0, 159, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("annotation", 1, 4, 4, 1); __PYX_ERR(0, 170, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  2:
         if (likely((values[2] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_annotation_type)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("annotation", 1, 4, 4, 2); __PYX_ERR(0, 159, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("annotation", 1, 4, 4, 2); __PYX_ERR(0, 170, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  3:
         if (likely((values[3] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_data)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("annotation", 1, 4, 4, 3); __PYX_ERR(0, 159, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("annotation", 1, 4, 4, 3); __PYX_ERR(0, 170, __pyx_L3_error)
         }
       }
       if (unlikely(kw_args > 0)) {
-        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "annotation") < 0)) __PYX_ERR(0, 159, __pyx_L3_error)
+        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "annotation") < 0)) __PYX_ERR(0, 170, __pyx_L3_error)
       }
     } else if (PyTuple_GET_SIZE(__pyx_args) != 4) {
       goto __pyx_L5_argtuple_error;
@@ -5319,7 +5534,7 @@ static PyObject *__pyx_pw_5pyjls_7binding_6Writer_17annotation(PyObject *__pyx_v
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("annotation", 1, 4, 4, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 159, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("annotation", 1, 4, 4, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 170, __pyx_L3_error)
   __pyx_L3_error:;
   __Pyx_AddTraceback("pyjls.binding.Writer.annotation", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __Pyx_RefNannyFinishContext();
@@ -5336,6 +5551,7 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_16annotation(struct __pyx_obj_
   int32_t __pyx_v_rc;
   PyObject *__pyx_v_storage_type = NULL;
   PyObject *__pyx_v_payload = NULL;
+  PyObject *__pyx_v_payload_length = NULL;
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
   int __pyx_t_1;
@@ -5344,40 +5560,41 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_16annotation(struct __pyx_obj_
   PyObject *__pyx_t_4 = NULL;
   PyObject *__pyx_t_5 = NULL;
   PyObject *__pyx_t_6 = NULL;
-  PyObject *(*__pyx_t_7)(PyObject *);
-  uint16_t __pyx_t_8;
-  int64_t __pyx_t_9;
-  enum jls_annotation_type_e __pyx_t_10;
-  enum jls_storage_type_e __pyx_t_11;
-  uint8_t const *__pyx_t_12;
-  Py_ssize_t __pyx_t_13;
+  PyObject *__pyx_t_7 = NULL;
+  PyObject *(*__pyx_t_8)(PyObject *);
+  uint16_t __pyx_t_9;
+  int64_t __pyx_t_10;
+  enum jls_annotation_type_e __pyx_t_11;
+  enum jls_storage_type_e __pyx_t_12;
+  uint8_t const *__pyx_t_13;
+  uint32_t __pyx_t_14;
   int __pyx_lineno = 0;
   const char *__pyx_filename = NULL;
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("annotation", 0);
   __Pyx_INCREF(__pyx_v_annotation_type);
 
-  /* "pyjls/binding.pyx":161
+  /* "pyjls/binding.pyx":172
  *     def annotation(self, signal_id, timestamp, annotation_type, data):
  *         cdef int32_t rc
  *         if isinstance(annotation_type, str):             # <<<<<<<<<<<<<<
  *             annotation_type = _annotation_map[annotation_type.lower()]
- *         storage_type, payload = _storage_pack(data)
+ *         storage_type, payload, payload_length = _storage_pack(data)
  */
   __pyx_t_1 = PyUnicode_Check(__pyx_v_annotation_type); 
   __pyx_t_2 = (__pyx_t_1 != 0);
   if (__pyx_t_2) {
 
-    /* "pyjls/binding.pyx":162
+    /* "pyjls/binding.pyx":173
  *         cdef int32_t rc
  *         if isinstance(annotation_type, str):
  *             annotation_type = _annotation_map[annotation_type.lower()]             # <<<<<<<<<<<<<<
- *         storage_type, payload = _storage_pack(data)
+ *         storage_type, payload, payload_length = _storage_pack(data)
  *         rc = c_jls.jls_twr_annotation(self._wr, signal_id, timestamp, annotation_type,
  */
-    __Pyx_GetModuleGlobalName(__pyx_t_3, __pyx_n_s_annotation_map); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 162, __pyx_L1_error)
+    __Pyx_GetModuleGlobalName(__pyx_t_3, __pyx_n_s_annotation_map); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 173, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_3);
-    __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_v_annotation_type, __pyx_n_s_lower); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 162, __pyx_L1_error)
+    __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_v_annotation_type, __pyx_n_s_lower); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 173, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
     __pyx_t_6 = NULL;
     if (CYTHON_UNPACK_METHODS && likely(PyMethod_Check(__pyx_t_5))) {
@@ -5391,33 +5608,33 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_16annotation(struct __pyx_obj_
     }
     __pyx_t_4 = (__pyx_t_6) ? __Pyx_PyObject_CallOneArg(__pyx_t_5, __pyx_t_6) : __Pyx_PyObject_CallNoArg(__pyx_t_5);
     __Pyx_XDECREF(__pyx_t_6); __pyx_t_6 = 0;
-    if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 162, __pyx_L1_error)
+    if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 173, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_4);
     __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-    __pyx_t_5 = __Pyx_PyObject_GetItem(__pyx_t_3, __pyx_t_4); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 162, __pyx_L1_error)
+    __pyx_t_5 = __Pyx_PyObject_GetItem(__pyx_t_3, __pyx_t_4); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 173, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
     __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
     __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
     __Pyx_DECREF_SET(__pyx_v_annotation_type, __pyx_t_5);
     __pyx_t_5 = 0;
 
-    /* "pyjls/binding.pyx":161
+    /* "pyjls/binding.pyx":172
  *     def annotation(self, signal_id, timestamp, annotation_type, data):
  *         cdef int32_t rc
  *         if isinstance(annotation_type, str):             # <<<<<<<<<<<<<<
  *             annotation_type = _annotation_map[annotation_type.lower()]
- *         storage_type, payload = _storage_pack(data)
+ *         storage_type, payload, payload_length = _storage_pack(data)
  */
   }
 
-  /* "pyjls/binding.pyx":163
+  /* "pyjls/binding.pyx":174
  *         if isinstance(annotation_type, str):
  *             annotation_type = _annotation_map[annotation_type.lower()]
- *         storage_type, payload = _storage_pack(data)             # <<<<<<<<<<<<<<
+ *         storage_type, payload, payload_length = _storage_pack(data)             # <<<<<<<<<<<<<<
  *         rc = c_jls.jls_twr_annotation(self._wr, signal_id, timestamp, annotation_type,
- *             storage_type, payload, len(payload))
+ *             storage_type, payload, payload_length)
  */
-  __Pyx_GetModuleGlobalName(__pyx_t_4, __pyx_n_s_storage_pack); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 163, __pyx_L1_error)
+  __Pyx_GetModuleGlobalName(__pyx_t_4, __pyx_n_s_storage_pack); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 174, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
   __pyx_t_3 = NULL;
   if (CYTHON_UNPACK_METHODS && unlikely(PyMethod_Check(__pyx_t_4))) {
@@ -5431,94 +5648,103 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_16annotation(struct __pyx_obj_
   }
   __pyx_t_5 = (__pyx_t_3) ? __Pyx_PyObject_Call2Args(__pyx_t_4, __pyx_t_3, __pyx_v_data) : __Pyx_PyObject_CallOneArg(__pyx_t_4, __pyx_v_data);
   __Pyx_XDECREF(__pyx_t_3); __pyx_t_3 = 0;
-  if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 163, __pyx_L1_error)
+  if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 174, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_5);
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
   if ((likely(PyTuple_CheckExact(__pyx_t_5))) || (PyList_CheckExact(__pyx_t_5))) {
     PyObject* sequence = __pyx_t_5;
     Py_ssize_t size = __Pyx_PySequence_SIZE(sequence);
-    if (unlikely(size != 2)) {
-      if (size > 2) __Pyx_RaiseTooManyValuesError(2);
+    if (unlikely(size != 3)) {
+      if (size > 3) __Pyx_RaiseTooManyValuesError(3);
       else if (size >= 0) __Pyx_RaiseNeedMoreValuesError(size);
-      __PYX_ERR(0, 163, __pyx_L1_error)
+      __PYX_ERR(0, 174, __pyx_L1_error)
     }
     #if CYTHON_ASSUME_SAFE_MACROS && !CYTHON_AVOID_BORROWED_REFS
     if (likely(PyTuple_CheckExact(sequence))) {
       __pyx_t_4 = PyTuple_GET_ITEM(sequence, 0); 
       __pyx_t_3 = PyTuple_GET_ITEM(sequence, 1); 
+      __pyx_t_6 = PyTuple_GET_ITEM(sequence, 2); 
     } else {
       __pyx_t_4 = PyList_GET_ITEM(sequence, 0); 
       __pyx_t_3 = PyList_GET_ITEM(sequence, 1); 
+      __pyx_t_6 = PyList_GET_ITEM(sequence, 2); 
     }
     __Pyx_INCREF(__pyx_t_4);
     __Pyx_INCREF(__pyx_t_3);
+    __Pyx_INCREF(__pyx_t_6);
     #else
-    __pyx_t_4 = PySequence_ITEM(sequence, 0); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 163, __pyx_L1_error)
+    __pyx_t_4 = PySequence_ITEM(sequence, 0); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 174, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_4);
-    __pyx_t_3 = PySequence_ITEM(sequence, 1); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 163, __pyx_L1_error)
+    __pyx_t_3 = PySequence_ITEM(sequence, 1); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 174, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_3);
+    __pyx_t_6 = PySequence_ITEM(sequence, 2); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 174, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_6);
     #endif
     __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
   } else {
     Py_ssize_t index = -1;
-    __pyx_t_6 = PyObject_GetIter(__pyx_t_5); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 163, __pyx_L1_error)
-    __Pyx_GOTREF(__pyx_t_6);
+    __pyx_t_7 = PyObject_GetIter(__pyx_t_5); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 174, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_7);
     __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-    __pyx_t_7 = Py_TYPE(__pyx_t_6)->tp_iternext;
-    index = 0; __pyx_t_4 = __pyx_t_7(__pyx_t_6); if (unlikely(!__pyx_t_4)) goto __pyx_L4_unpacking_failed;
+    __pyx_t_8 = Py_TYPE(__pyx_t_7)->tp_iternext;
+    index = 0; __pyx_t_4 = __pyx_t_8(__pyx_t_7); if (unlikely(!__pyx_t_4)) goto __pyx_L4_unpacking_failed;
     __Pyx_GOTREF(__pyx_t_4);
-    index = 1; __pyx_t_3 = __pyx_t_7(__pyx_t_6); if (unlikely(!__pyx_t_3)) goto __pyx_L4_unpacking_failed;
+    index = 1; __pyx_t_3 = __pyx_t_8(__pyx_t_7); if (unlikely(!__pyx_t_3)) goto __pyx_L4_unpacking_failed;
     __Pyx_GOTREF(__pyx_t_3);
-    if (__Pyx_IternextUnpackEndCheck(__pyx_t_7(__pyx_t_6), 2) < 0) __PYX_ERR(0, 163, __pyx_L1_error)
-    __pyx_t_7 = NULL;
-    __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
+    index = 2; __pyx_t_6 = __pyx_t_8(__pyx_t_7); if (unlikely(!__pyx_t_6)) goto __pyx_L4_unpacking_failed;
+    __Pyx_GOTREF(__pyx_t_6);
+    if (__Pyx_IternextUnpackEndCheck(__pyx_t_8(__pyx_t_7), 3) < 0) __PYX_ERR(0, 174, __pyx_L1_error)
+    __pyx_t_8 = NULL;
+    __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
     goto __pyx_L5_unpacking_done;
     __pyx_L4_unpacking_failed:;
-    __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
-    __pyx_t_7 = NULL;
+    __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
+    __pyx_t_8 = NULL;
     if (__Pyx_IterFinish() == 0) __Pyx_RaiseNeedMoreValuesError(index);
-    __PYX_ERR(0, 163, __pyx_L1_error)
+    __PYX_ERR(0, 174, __pyx_L1_error)
     __pyx_L5_unpacking_done:;
   }
   __pyx_v_storage_type = __pyx_t_4;
   __pyx_t_4 = 0;
   __pyx_v_payload = __pyx_t_3;
   __pyx_t_3 = 0;
+  __pyx_v_payload_length = __pyx_t_6;
+  __pyx_t_6 = 0;
 
-  /* "pyjls/binding.pyx":164
+  /* "pyjls/binding.pyx":175
  *             annotation_type = _annotation_map[annotation_type.lower()]
- *         storage_type, payload = _storage_pack(data)
+ *         storage_type, payload, payload_length = _storage_pack(data)
  *         rc = c_jls.jls_twr_annotation(self._wr, signal_id, timestamp, annotation_type,             # <<<<<<<<<<<<<<
- *             storage_type, payload, len(payload))
+ *             storage_type, payload, payload_length)
  *         if rc:
  */
-  __pyx_t_8 = __Pyx_PyInt_As_uint16_t(__pyx_v_signal_id); if (unlikely((__pyx_t_8 == ((uint16_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 164, __pyx_L1_error)
-  __pyx_t_9 = __Pyx_PyInt_As_int64_t(__pyx_v_timestamp); if (unlikely((__pyx_t_9 == ((int64_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 164, __pyx_L1_error)
-  __pyx_t_10 = ((enum jls_annotation_type_e)__Pyx_PyInt_As_enum__jls_annotation_type_e(__pyx_v_annotation_type)); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 164, __pyx_L1_error)
+  __pyx_t_9 = __Pyx_PyInt_As_uint16_t(__pyx_v_signal_id); if (unlikely((__pyx_t_9 == ((uint16_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 175, __pyx_L1_error)
+  __pyx_t_10 = __Pyx_PyInt_As_int64_t(__pyx_v_timestamp); if (unlikely((__pyx_t_10 == ((int64_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 175, __pyx_L1_error)
+  __pyx_t_11 = ((enum jls_annotation_type_e)__Pyx_PyInt_As_enum__jls_annotation_type_e(__pyx_v_annotation_type)); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 175, __pyx_L1_error)
 
-  /* "pyjls/binding.pyx":165
- *         storage_type, payload = _storage_pack(data)
+  /* "pyjls/binding.pyx":176
+ *         storage_type, payload, payload_length = _storage_pack(data)
  *         rc = c_jls.jls_twr_annotation(self._wr, signal_id, timestamp, annotation_type,
- *             storage_type, payload, len(payload))             # <<<<<<<<<<<<<<
+ *             storage_type, payload, payload_length)             # <<<<<<<<<<<<<<
  *         if rc:
  *             raise RuntimeError(f'annotation failed {rc}')
  */
-  __pyx_t_11 = ((enum jls_storage_type_e)__Pyx_PyInt_As_enum__jls_storage_type_e(__pyx_v_storage_type)); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 165, __pyx_L1_error)
-  __pyx_t_12 = __Pyx_PyObject_AsUString(__pyx_v_payload); if (unlikely((!__pyx_t_12) && PyErr_Occurred())) __PYX_ERR(0, 165, __pyx_L1_error)
-  __pyx_t_13 = PyObject_Length(__pyx_v_payload); if (unlikely(__pyx_t_13 == ((Py_ssize_t)-1))) __PYX_ERR(0, 165, __pyx_L1_error)
+  __pyx_t_12 = ((enum jls_storage_type_e)__Pyx_PyInt_As_enum__jls_storage_type_e(__pyx_v_storage_type)); if (unlikely(PyErr_Occurred())) __PYX_ERR(0, 176, __pyx_L1_error)
+  __pyx_t_13 = __Pyx_PyObject_AsUString(__pyx_v_payload); if (unlikely((!__pyx_t_13) && PyErr_Occurred())) __PYX_ERR(0, 176, __pyx_L1_error)
+  __pyx_t_14 = __Pyx_PyInt_As_uint32_t(__pyx_v_payload_length); if (unlikely((__pyx_t_14 == ((uint32_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 176, __pyx_L1_error)
 
-  /* "pyjls/binding.pyx":164
+  /* "pyjls/binding.pyx":175
  *             annotation_type = _annotation_map[annotation_type.lower()]
- *         storage_type, payload = _storage_pack(data)
+ *         storage_type, payload, payload_length = _storage_pack(data)
  *         rc = c_jls.jls_twr_annotation(self._wr, signal_id, timestamp, annotation_type,             # <<<<<<<<<<<<<<
- *             storage_type, payload, len(payload))
+ *             storage_type, payload, payload_length)
  *         if rc:
  */
-  __pyx_v_rc = jls_twr_annotation(__pyx_v_self->_wr, __pyx_t_8, __pyx_t_9, __pyx_t_10, __pyx_t_11, __pyx_t_12, __pyx_t_13);
+  __pyx_v_rc = jls_twr_annotation(__pyx_v_self->_wr, __pyx_t_9, __pyx_t_10, __pyx_t_11, __pyx_t_12, __pyx_t_13, __pyx_t_14);
 
-  /* "pyjls/binding.pyx":166
+  /* "pyjls/binding.pyx":177
  *         rc = c_jls.jls_twr_annotation(self._wr, signal_id, timestamp, annotation_type,
- *             storage_type, payload, len(payload))
+ *             storage_type, payload, payload_length)
  *         if rc:             # <<<<<<<<<<<<<<
  *             raise RuntimeError(f'annotation failed {rc}')
  * 
@@ -5526,38 +5752,38 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_16annotation(struct __pyx_obj_
   __pyx_t_2 = (__pyx_v_rc != 0);
   if (unlikely(__pyx_t_2)) {
 
-    /* "pyjls/binding.pyx":167
- *             storage_type, payload, len(payload))
+    /* "pyjls/binding.pyx":178
+ *             storage_type, payload, payload_length)
  *         if rc:
  *             raise RuntimeError(f'annotation failed {rc}')             # <<<<<<<<<<<<<<
  * 
  * 
  */
-    __pyx_t_5 = __Pyx_PyInt_From_int32_t(__pyx_v_rc); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 167, __pyx_L1_error)
+    __pyx_t_5 = __Pyx_PyInt_From_int32_t(__pyx_v_rc); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 178, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
-    __pyx_t_3 = __Pyx_PyObject_FormatSimple(__pyx_t_5, __pyx_empty_unicode); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 167, __pyx_L1_error)
-    __Pyx_GOTREF(__pyx_t_3);
+    __pyx_t_6 = __Pyx_PyObject_FormatSimple(__pyx_t_5, __pyx_empty_unicode); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 178, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_6);
     __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-    __pyx_t_5 = __Pyx_PyUnicode_Concat(__pyx_kp_u_annotation_failed, __pyx_t_3); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 167, __pyx_L1_error)
+    __pyx_t_5 = __Pyx_PyUnicode_Concat(__pyx_kp_u_annotation_failed, __pyx_t_6); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 178, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
-    __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
-    __pyx_t_3 = __Pyx_PyObject_CallOneArg(__pyx_builtin_RuntimeError, __pyx_t_5); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 167, __pyx_L1_error)
-    __Pyx_GOTREF(__pyx_t_3);
+    __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
+    __pyx_t_6 = __Pyx_PyObject_CallOneArg(__pyx_builtin_RuntimeError, __pyx_t_5); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 178, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_6);
     __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-    __Pyx_Raise(__pyx_t_3, 0, 0, 0);
-    __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
-    __PYX_ERR(0, 167, __pyx_L1_error)
+    __Pyx_Raise(__pyx_t_6, 0, 0, 0);
+    __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
+    __PYX_ERR(0, 178, __pyx_L1_error)
 
-    /* "pyjls/binding.pyx":166
+    /* "pyjls/binding.pyx":177
  *         rc = c_jls.jls_twr_annotation(self._wr, signal_id, timestamp, annotation_type,
- *             storage_type, payload, len(payload))
+ *             storage_type, payload, payload_length)
  *         if rc:             # <<<<<<<<<<<<<<
  *             raise RuntimeError(f'annotation failed {rc}')
  * 
  */
   }
 
-  /* "pyjls/binding.pyx":159
+  /* "pyjls/binding.pyx":170
  *             raise RuntimeError(f'fsr_f32 failed {rc}')
  * 
  *     def annotation(self, signal_id, timestamp, annotation_type, data):             # <<<<<<<<<<<<<<
@@ -5573,11 +5799,13 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_16annotation(struct __pyx_obj_
   __Pyx_XDECREF(__pyx_t_4);
   __Pyx_XDECREF(__pyx_t_5);
   __Pyx_XDECREF(__pyx_t_6);
+  __Pyx_XDECREF(__pyx_t_7);
   __Pyx_AddTraceback("pyjls.binding.Writer.annotation", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __pyx_r = NULL;
   __pyx_L0:;
   __Pyx_XDECREF(__pyx_v_storage_type);
   __Pyx_XDECREF(__pyx_v_payload);
+  __Pyx_XDECREF(__pyx_v_payload_length);
   __Pyx_XDECREF(__pyx_v_annotation_type);
   __Pyx_XGIVEREF(__pyx_r);
   __Pyx_RefNannyFinishContext();
@@ -5697,7 +5925,7 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Writer_20__setstate_cython__(CYTHON_U
   return __pyx_r;
 }
 
-/* "pyjls/binding.pyx":175
+/* "pyjls/binding.pyx":186
  *     cdef object _signals
  * 
  *     def __init__(self, path: str):             # <<<<<<<<<<<<<<
@@ -5734,7 +5962,7 @@ static int __pyx_pw_5pyjls_7binding_6Reader_1__init__(PyObject *__pyx_v_self, Py
         else goto __pyx_L5_argtuple_error;
       }
       if (unlikely(kw_args > 0)) {
-        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "__init__") < 0)) __PYX_ERR(0, 175, __pyx_L3_error)
+        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "__init__") < 0)) __PYX_ERR(0, 186, __pyx_L3_error)
       }
     } else if (PyTuple_GET_SIZE(__pyx_args) != 1) {
       goto __pyx_L5_argtuple_error;
@@ -5745,13 +5973,13 @@ static int __pyx_pw_5pyjls_7binding_6Reader_1__init__(PyObject *__pyx_v_self, Py
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("__init__", 1, 1, 1, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 175, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("__init__", 1, 1, 1, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 186, __pyx_L3_error)
   __pyx_L3_error:;
   __Pyx_AddTraceback("pyjls.binding.Reader.__init__", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __Pyx_RefNannyFinishContext();
   return -1;
   __pyx_L4_argument_unpacking_done:;
-  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_path), (&PyUnicode_Type), 1, "path", 1))) __PYX_ERR(0, 175, __pyx_L1_error)
+  if (unlikely(!__Pyx_ArgTypeTest(((PyObject *)__pyx_v_path), (&PyUnicode_Type), 1, "path", 1))) __PYX_ERR(0, 186, __pyx_L1_error)
   __pyx_r = __pyx_pf_5pyjls_7binding_6Reader___init__(((struct __pyx_obj_5pyjls_7binding_Reader *)__pyx_v_self), __pyx_v_path);
 
   /* function exit code */
@@ -5796,14 +6024,14 @@ static int __pyx_pf_5pyjls_7binding_6Reader___init__(struct __pyx_obj_5pyjls_7bi
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("__init__", 0);
 
-  /* "pyjls/binding.pyx":181
+  /* "pyjls/binding.pyx":192
  *         cdef uint16_t count
  *         cdef int64_t samples
  *         self._sources = {}             # <<<<<<<<<<<<<<
  *         self._signals = {}
  *         rc = c_jls.jls_rd_open(&self._rd, path.encode('utf-8'))
  */
-  __pyx_t_1 = __Pyx_PyDict_NewPresized(0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 181, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyDict_NewPresized(0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 192, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __Pyx_GIVEREF(__pyx_t_1);
   __Pyx_GOTREF(__pyx_v_self->_sources);
@@ -5811,14 +6039,14 @@ static int __pyx_pf_5pyjls_7binding_6Reader___init__(struct __pyx_obj_5pyjls_7bi
   __pyx_v_self->_sources = __pyx_t_1;
   __pyx_t_1 = 0;
 
-  /* "pyjls/binding.pyx":182
+  /* "pyjls/binding.pyx":193
  *         cdef int64_t samples
  *         self._sources = {}
  *         self._signals = {}             # <<<<<<<<<<<<<<
  *         rc = c_jls.jls_rd_open(&self._rd, path.encode('utf-8'))
  *         if rc:
  */
-  __pyx_t_1 = __Pyx_PyDict_NewPresized(0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 182, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyDict_NewPresized(0); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 193, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __Pyx_GIVEREF(__pyx_t_1);
   __Pyx_GOTREF(__pyx_v_self->_signals);
@@ -5826,7 +6054,7 @@ static int __pyx_pf_5pyjls_7binding_6Reader___init__(struct __pyx_obj_5pyjls_7bi
   __pyx_v_self->_signals = __pyx_t_1;
   __pyx_t_1 = 0;
 
-  /* "pyjls/binding.pyx":183
+  /* "pyjls/binding.pyx":194
  *         self._sources = {}
  *         self._signals = {}
  *         rc = c_jls.jls_rd_open(&self._rd, path.encode('utf-8'))             # <<<<<<<<<<<<<<
@@ -5835,15 +6063,15 @@ static int __pyx_pf_5pyjls_7binding_6Reader___init__(struct __pyx_obj_5pyjls_7bi
  */
   if (unlikely(__pyx_v_path == Py_None)) {
     PyErr_Format(PyExc_AttributeError, "'NoneType' object has no attribute '%.30s'", "encode");
-    __PYX_ERR(0, 183, __pyx_L1_error)
+    __PYX_ERR(0, 194, __pyx_L1_error)
   }
-  __pyx_t_1 = PyUnicode_AsUTF8String(__pyx_v_path); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 183, __pyx_L1_error)
+  __pyx_t_1 = PyUnicode_AsUTF8String(__pyx_v_path); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 194, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
-  __pyx_t_2 = __Pyx_PyBytes_AsString(__pyx_t_1); if (unlikely((!__pyx_t_2) && PyErr_Occurred())) __PYX_ERR(0, 183, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_PyBytes_AsString(__pyx_t_1); if (unlikely((!__pyx_t_2) && PyErr_Occurred())) __PYX_ERR(0, 194, __pyx_L1_error)
   __pyx_v_rc = jls_rd_open((&__pyx_v_self->_rd), __pyx_t_2);
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
-  /* "pyjls/binding.pyx":184
+  /* "pyjls/binding.pyx":195
  *         self._signals = {}
  *         rc = c_jls.jls_rd_open(&self._rd, path.encode('utf-8'))
  *         if rc:             # <<<<<<<<<<<<<<
@@ -5853,29 +6081,29 @@ static int __pyx_pf_5pyjls_7binding_6Reader___init__(struct __pyx_obj_5pyjls_7bi
   __pyx_t_3 = (__pyx_v_rc != 0);
   if (unlikely(__pyx_t_3)) {
 
-    /* "pyjls/binding.pyx":185
+    /* "pyjls/binding.pyx":196
  *         rc = c_jls.jls_rd_open(&self._rd, path.encode('utf-8'))
  *         if rc:
  *             raise RuntimeError(f'open failed {rc}')             # <<<<<<<<<<<<<<
  * 
  *         rc = c_jls.jls_rd_sources(self._rd, &sources, &count)
  */
-    __pyx_t_1 = __Pyx_PyInt_From_int32_t(__pyx_v_rc); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 185, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyInt_From_int32_t(__pyx_v_rc); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 196, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
-    __pyx_t_4 = __Pyx_PyObject_FormatSimple(__pyx_t_1, __pyx_empty_unicode); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 185, __pyx_L1_error)
+    __pyx_t_4 = __Pyx_PyObject_FormatSimple(__pyx_t_1, __pyx_empty_unicode); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 196, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_4);
     __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-    __pyx_t_1 = __Pyx_PyUnicode_Concat(__pyx_kp_u_open_failed, __pyx_t_4); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 185, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyUnicode_Concat(__pyx_kp_u_open_failed, __pyx_t_4); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 196, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
     __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-    __pyx_t_4 = __Pyx_PyObject_CallOneArg(__pyx_builtin_RuntimeError, __pyx_t_1); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 185, __pyx_L1_error)
+    __pyx_t_4 = __Pyx_PyObject_CallOneArg(__pyx_builtin_RuntimeError, __pyx_t_1); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 196, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_4);
     __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
     __Pyx_Raise(__pyx_t_4, 0, 0, 0);
     __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-    __PYX_ERR(0, 185, __pyx_L1_error)
+    __PYX_ERR(0, 196, __pyx_L1_error)
 
-    /* "pyjls/binding.pyx":184
+    /* "pyjls/binding.pyx":195
  *         self._signals = {}
  *         rc = c_jls.jls_rd_open(&self._rd, path.encode('utf-8'))
  *         if rc:             # <<<<<<<<<<<<<<
@@ -5884,7 +6112,7 @@ static int __pyx_pf_5pyjls_7binding_6Reader___init__(struct __pyx_obj_5pyjls_7bi
  */
   }
 
-  /* "pyjls/binding.pyx":187
+  /* "pyjls/binding.pyx":198
  *             raise RuntimeError(f'open failed {rc}')
  * 
  *         rc = c_jls.jls_rd_sources(self._rd, &sources, &count)             # <<<<<<<<<<<<<<
@@ -5893,7 +6121,7 @@ static int __pyx_pf_5pyjls_7binding_6Reader___init__(struct __pyx_obj_5pyjls_7bi
  */
   __pyx_v_rc = jls_rd_sources(__pyx_v_self->_rd, (&__pyx_v_sources), (&__pyx_v_count));
 
-  /* "pyjls/binding.pyx":188
+  /* "pyjls/binding.pyx":199
  * 
  *         rc = c_jls.jls_rd_sources(self._rd, &sources, &count)
  *         if rc:             # <<<<<<<<<<<<<<
@@ -5903,29 +6131,29 @@ static int __pyx_pf_5pyjls_7binding_6Reader___init__(struct __pyx_obj_5pyjls_7bi
   __pyx_t_3 = (__pyx_v_rc != 0);
   if (unlikely(__pyx_t_3)) {
 
-    /* "pyjls/binding.pyx":189
+    /* "pyjls/binding.pyx":200
  *         rc = c_jls.jls_rd_sources(self._rd, &sources, &count)
  *         if rc:
  *             raise RuntimeError(f'read sources failed {rc}')             # <<<<<<<<<<<<<<
  *         for i in range(count):
  *             source_def = SourceDef(
  */
-    __pyx_t_4 = __Pyx_PyInt_From_int32_t(__pyx_v_rc); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 189, __pyx_L1_error)
+    __pyx_t_4 = __Pyx_PyInt_From_int32_t(__pyx_v_rc); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 200, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_4);
-    __pyx_t_1 = __Pyx_PyObject_FormatSimple(__pyx_t_4, __pyx_empty_unicode); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 189, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyObject_FormatSimple(__pyx_t_4, __pyx_empty_unicode); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 200, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
     __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-    __pyx_t_4 = __Pyx_PyUnicode_Concat(__pyx_kp_u_read_sources_failed, __pyx_t_1); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 189, __pyx_L1_error)
+    __pyx_t_4 = __Pyx_PyUnicode_Concat(__pyx_kp_u_read_sources_failed, __pyx_t_1); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 200, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_4);
     __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-    __pyx_t_1 = __Pyx_PyObject_CallOneArg(__pyx_builtin_RuntimeError, __pyx_t_4); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 189, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyObject_CallOneArg(__pyx_builtin_RuntimeError, __pyx_t_4); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 200, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
     __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
     __Pyx_Raise(__pyx_t_1, 0, 0, 0);
     __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-    __PYX_ERR(0, 189, __pyx_L1_error)
+    __PYX_ERR(0, 200, __pyx_L1_error)
 
-    /* "pyjls/binding.pyx":188
+    /* "pyjls/binding.pyx":199
  * 
  *         rc = c_jls.jls_rd_sources(self._rd, &sources, &count)
  *         if rc:             # <<<<<<<<<<<<<<
@@ -5934,7 +6162,7 @@ static int __pyx_pf_5pyjls_7binding_6Reader___init__(struct __pyx_obj_5pyjls_7bi
  */
   }
 
-  /* "pyjls/binding.pyx":190
+  /* "pyjls/binding.pyx":201
  *         if rc:
  *             raise RuntimeError(f'read sources failed {rc}')
  *         for i in range(count):             # <<<<<<<<<<<<<<
@@ -5946,31 +6174,31 @@ static int __pyx_pf_5pyjls_7binding_6Reader___init__(struct __pyx_obj_5pyjls_7bi
   for (__pyx_t_7 = 0; __pyx_t_7 < __pyx_t_6; __pyx_t_7+=1) {
     __pyx_v_i = __pyx_t_7;
 
-    /* "pyjls/binding.pyx":191
+    /* "pyjls/binding.pyx":202
  *             raise RuntimeError(f'read sources failed {rc}')
  *         for i in range(count):
  *             source_def = SourceDef(             # <<<<<<<<<<<<<<
  *                 source_id=sources[i].source_id,
  *                 name=sources[i].name.decode('utf-8'),
  */
-    __Pyx_GetModuleGlobalName(__pyx_t_1, __pyx_n_s_SourceDef); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 191, __pyx_L1_error)
+    __Pyx_GetModuleGlobalName(__pyx_t_1, __pyx_n_s_SourceDef); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 202, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
 
-    /* "pyjls/binding.pyx":192
+    /* "pyjls/binding.pyx":203
  *         for i in range(count):
  *             source_def = SourceDef(
  *                 source_id=sources[i].source_id,             # <<<<<<<<<<<<<<
  *                 name=sources[i].name.decode('utf-8'),
  *                 vendor=sources[i].vendor.decode('utf-8'),
  */
-    __pyx_t_4 = __Pyx_PyDict_NewPresized(6); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 192, __pyx_L1_error)
+    __pyx_t_4 = __Pyx_PyDict_NewPresized(6); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 203, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_4);
-    __pyx_t_8 = __Pyx_PyInt_From_uint16_t((__pyx_v_sources[__pyx_v_i]).source_id); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 192, __pyx_L1_error)
+    __pyx_t_8 = __Pyx_PyInt_From_uint16_t((__pyx_v_sources[__pyx_v_i]).source_id); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 203, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_8);
-    if (PyDict_SetItem(__pyx_t_4, __pyx_n_s_source_id, __pyx_t_8) < 0) __PYX_ERR(0, 192, __pyx_L1_error)
+    if (PyDict_SetItem(__pyx_t_4, __pyx_n_s_source_id, __pyx_t_8) < 0) __PYX_ERR(0, 203, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
 
-    /* "pyjls/binding.pyx":193
+    /* "pyjls/binding.pyx":204
  *             source_def = SourceDef(
  *                 source_id=sources[i].source_id,
  *                 name=sources[i].name.decode('utf-8'),             # <<<<<<<<<<<<<<
@@ -5978,12 +6206,12 @@ static int __pyx_pf_5pyjls_7binding_6Reader___init__(struct __pyx_obj_5pyjls_7bi
  *                 model=sources[i].model.decode('utf-8'),
  */
     __pyx_t_9 = (__pyx_v_sources[__pyx_v_i]).name;
-    __pyx_t_8 = __Pyx_decode_c_string(__pyx_t_9, 0, strlen(__pyx_t_9), NULL, NULL, PyUnicode_DecodeUTF8); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 193, __pyx_L1_error)
+    __pyx_t_8 = __Pyx_decode_c_string(__pyx_t_9, 0, strlen(__pyx_t_9), NULL, NULL, PyUnicode_DecodeUTF8); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 204, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_8);
-    if (PyDict_SetItem(__pyx_t_4, __pyx_n_s_name, __pyx_t_8) < 0) __PYX_ERR(0, 192, __pyx_L1_error)
+    if (PyDict_SetItem(__pyx_t_4, __pyx_n_s_name, __pyx_t_8) < 0) __PYX_ERR(0, 203, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
 
-    /* "pyjls/binding.pyx":194
+    /* "pyjls/binding.pyx":205
  *                 source_id=sources[i].source_id,
  *                 name=sources[i].name.decode('utf-8'),
  *                 vendor=sources[i].vendor.decode('utf-8'),             # <<<<<<<<<<<<<<
@@ -5991,12 +6219,12 @@ static int __pyx_pf_5pyjls_7binding_6Reader___init__(struct __pyx_obj_5pyjls_7bi
  *                 version=sources[i].version.decode('utf-8'),
  */
     __pyx_t_10 = (__pyx_v_sources[__pyx_v_i]).vendor;
-    __pyx_t_8 = __Pyx_decode_c_string(__pyx_t_10, 0, strlen(__pyx_t_10), NULL, NULL, PyUnicode_DecodeUTF8); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 194, __pyx_L1_error)
+    __pyx_t_8 = __Pyx_decode_c_string(__pyx_t_10, 0, strlen(__pyx_t_10), NULL, NULL, PyUnicode_DecodeUTF8); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 205, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_8);
-    if (PyDict_SetItem(__pyx_t_4, __pyx_n_s_vendor, __pyx_t_8) < 0) __PYX_ERR(0, 192, __pyx_L1_error)
+    if (PyDict_SetItem(__pyx_t_4, __pyx_n_s_vendor, __pyx_t_8) < 0) __PYX_ERR(0, 203, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
 
-    /* "pyjls/binding.pyx":195
+    /* "pyjls/binding.pyx":206
  *                 name=sources[i].name.decode('utf-8'),
  *                 vendor=sources[i].vendor.decode('utf-8'),
  *                 model=sources[i].model.decode('utf-8'),             # <<<<<<<<<<<<<<
@@ -6004,12 +6232,12 @@ static int __pyx_pf_5pyjls_7binding_6Reader___init__(struct __pyx_obj_5pyjls_7bi
  *                 serial_number=sources[i].serial_number.decode('utf-8'))
  */
     __pyx_t_11 = (__pyx_v_sources[__pyx_v_i]).model;
-    __pyx_t_8 = __Pyx_decode_c_string(__pyx_t_11, 0, strlen(__pyx_t_11), NULL, NULL, PyUnicode_DecodeUTF8); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 195, __pyx_L1_error)
+    __pyx_t_8 = __Pyx_decode_c_string(__pyx_t_11, 0, strlen(__pyx_t_11), NULL, NULL, PyUnicode_DecodeUTF8); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 206, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_8);
-    if (PyDict_SetItem(__pyx_t_4, __pyx_n_s_model, __pyx_t_8) < 0) __PYX_ERR(0, 192, __pyx_L1_error)
+    if (PyDict_SetItem(__pyx_t_4, __pyx_n_s_model, __pyx_t_8) < 0) __PYX_ERR(0, 203, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
 
-    /* "pyjls/binding.pyx":196
+    /* "pyjls/binding.pyx":207
  *                 vendor=sources[i].vendor.decode('utf-8'),
  *                 model=sources[i].model.decode('utf-8'),
  *                 version=sources[i].version.decode('utf-8'),             # <<<<<<<<<<<<<<
@@ -6017,12 +6245,12 @@ static int __pyx_pf_5pyjls_7binding_6Reader___init__(struct __pyx_obj_5pyjls_7bi
  *             self._sources[sources[i].source_id] = source_def
  */
     __pyx_t_12 = (__pyx_v_sources[__pyx_v_i]).version;
-    __pyx_t_8 = __Pyx_decode_c_string(__pyx_t_12, 0, strlen(__pyx_t_12), NULL, NULL, PyUnicode_DecodeUTF8); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 196, __pyx_L1_error)
+    __pyx_t_8 = __Pyx_decode_c_string(__pyx_t_12, 0, strlen(__pyx_t_12), NULL, NULL, PyUnicode_DecodeUTF8); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 207, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_8);
-    if (PyDict_SetItem(__pyx_t_4, __pyx_n_s_version, __pyx_t_8) < 0) __PYX_ERR(0, 192, __pyx_L1_error)
+    if (PyDict_SetItem(__pyx_t_4, __pyx_n_s_version, __pyx_t_8) < 0) __PYX_ERR(0, 203, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
 
-    /* "pyjls/binding.pyx":197
+    /* "pyjls/binding.pyx":208
  *                 model=sources[i].model.decode('utf-8'),
  *                 version=sources[i].version.decode('utf-8'),
  *                 serial_number=sources[i].serial_number.decode('utf-8'))             # <<<<<<<<<<<<<<
@@ -6030,36 +6258,36 @@ static int __pyx_pf_5pyjls_7binding_6Reader___init__(struct __pyx_obj_5pyjls_7bi
  * 
  */
     __pyx_t_13 = (__pyx_v_sources[__pyx_v_i]).serial_number;
-    __pyx_t_8 = __Pyx_decode_c_string(__pyx_t_13, 0, strlen(__pyx_t_13), NULL, NULL, PyUnicode_DecodeUTF8); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 197, __pyx_L1_error)
+    __pyx_t_8 = __Pyx_decode_c_string(__pyx_t_13, 0, strlen(__pyx_t_13), NULL, NULL, PyUnicode_DecodeUTF8); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 208, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_8);
-    if (PyDict_SetItem(__pyx_t_4, __pyx_n_s_serial_number, __pyx_t_8) < 0) __PYX_ERR(0, 192, __pyx_L1_error)
+    if (PyDict_SetItem(__pyx_t_4, __pyx_n_s_serial_number, __pyx_t_8) < 0) __PYX_ERR(0, 203, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
 
-    /* "pyjls/binding.pyx":191
+    /* "pyjls/binding.pyx":202
  *             raise RuntimeError(f'read sources failed {rc}')
  *         for i in range(count):
  *             source_def = SourceDef(             # <<<<<<<<<<<<<<
  *                 source_id=sources[i].source_id,
  *                 name=sources[i].name.decode('utf-8'),
  */
-    __pyx_t_8 = __Pyx_PyObject_Call(__pyx_t_1, __pyx_empty_tuple, __pyx_t_4); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 191, __pyx_L1_error)
+    __pyx_t_8 = __Pyx_PyObject_Call(__pyx_t_1, __pyx_empty_tuple, __pyx_t_4); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 202, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_8);
     __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
     __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
     __Pyx_XDECREF_SET(__pyx_v_source_def, __pyx_t_8);
     __pyx_t_8 = 0;
 
-    /* "pyjls/binding.pyx":198
+    /* "pyjls/binding.pyx":209
  *                 version=sources[i].version.decode('utf-8'),
  *                 serial_number=sources[i].serial_number.decode('utf-8'))
  *             self._sources[sources[i].source_id] = source_def             # <<<<<<<<<<<<<<
  * 
  *         rc = c_jls.jls_rd_signals(self._rd, &signals, &count)
  */
-    if (unlikely(__Pyx_SetItemInt(__pyx_v_self->_sources, (__pyx_v_sources[__pyx_v_i]).source_id, __pyx_v_source_def, uint16_t, 0, __Pyx_PyInt_From_uint16_t, 0, 0, 1) < 0)) __PYX_ERR(0, 198, __pyx_L1_error)
+    if (unlikely(__Pyx_SetItemInt(__pyx_v_self->_sources, (__pyx_v_sources[__pyx_v_i]).source_id, __pyx_v_source_def, uint16_t, 0, __Pyx_PyInt_From_uint16_t, 0, 0, 1) < 0)) __PYX_ERR(0, 209, __pyx_L1_error)
   }
 
-  /* "pyjls/binding.pyx":200
+  /* "pyjls/binding.pyx":211
  *             self._sources[sources[i].source_id] = source_def
  * 
  *         rc = c_jls.jls_rd_signals(self._rd, &signals, &count)             # <<<<<<<<<<<<<<
@@ -6068,7 +6296,7 @@ static int __pyx_pf_5pyjls_7binding_6Reader___init__(struct __pyx_obj_5pyjls_7bi
  */
   __pyx_v_rc = jls_rd_signals(__pyx_v_self->_rd, (&__pyx_v_signals), (&__pyx_v_count));
 
-  /* "pyjls/binding.pyx":201
+  /* "pyjls/binding.pyx":212
  * 
  *         rc = c_jls.jls_rd_signals(self._rd, &signals, &count)
  *         if rc:             # <<<<<<<<<<<<<<
@@ -6078,29 +6306,29 @@ static int __pyx_pf_5pyjls_7binding_6Reader___init__(struct __pyx_obj_5pyjls_7bi
   __pyx_t_3 = (__pyx_v_rc != 0);
   if (unlikely(__pyx_t_3)) {
 
-    /* "pyjls/binding.pyx":202
+    /* "pyjls/binding.pyx":213
  *         rc = c_jls.jls_rd_signals(self._rd, &signals, &count)
  *         if rc:
  *             raise RuntimeError(f'read signals failed {rc}')             # <<<<<<<<<<<<<<
  *         for i in range(count):
  *             signal_id = signals[i].signal_id
  */
-    __pyx_t_8 = __Pyx_PyInt_From_int32_t(__pyx_v_rc); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 202, __pyx_L1_error)
+    __pyx_t_8 = __Pyx_PyInt_From_int32_t(__pyx_v_rc); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 213, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_8);
-    __pyx_t_4 = __Pyx_PyObject_FormatSimple(__pyx_t_8, __pyx_empty_unicode); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 202, __pyx_L1_error)
+    __pyx_t_4 = __Pyx_PyObject_FormatSimple(__pyx_t_8, __pyx_empty_unicode); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 213, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_4);
     __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
-    __pyx_t_8 = __Pyx_PyUnicode_Concat(__pyx_kp_u_read_signals_failed, __pyx_t_4); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 202, __pyx_L1_error)
+    __pyx_t_8 = __Pyx_PyUnicode_Concat(__pyx_kp_u_read_signals_failed, __pyx_t_4); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 213, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_8);
     __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-    __pyx_t_4 = __Pyx_PyObject_CallOneArg(__pyx_builtin_RuntimeError, __pyx_t_8); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 202, __pyx_L1_error)
+    __pyx_t_4 = __Pyx_PyObject_CallOneArg(__pyx_builtin_RuntimeError, __pyx_t_8); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 213, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_4);
     __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
     __Pyx_Raise(__pyx_t_4, 0, 0, 0);
     __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-    __PYX_ERR(0, 202, __pyx_L1_error)
+    __PYX_ERR(0, 213, __pyx_L1_error)
 
-    /* "pyjls/binding.pyx":201
+    /* "pyjls/binding.pyx":212
  * 
  *         rc = c_jls.jls_rd_signals(self._rd, &signals, &count)
  *         if rc:             # <<<<<<<<<<<<<<
@@ -6109,7 +6337,7 @@ static int __pyx_pf_5pyjls_7binding_6Reader___init__(struct __pyx_obj_5pyjls_7bi
  */
   }
 
-  /* "pyjls/binding.pyx":203
+  /* "pyjls/binding.pyx":214
  *         if rc:
  *             raise RuntimeError(f'read signals failed {rc}')
  *         for i in range(count):             # <<<<<<<<<<<<<<
@@ -6121,7 +6349,7 @@ static int __pyx_pf_5pyjls_7binding_6Reader___init__(struct __pyx_obj_5pyjls_7bi
   for (__pyx_t_7 = 0; __pyx_t_7 < __pyx_t_6; __pyx_t_7+=1) {
     __pyx_v_i = __pyx_t_7;
 
-    /* "pyjls/binding.pyx":204
+    /* "pyjls/binding.pyx":215
  *             raise RuntimeError(f'read signals failed {rc}')
  *         for i in range(count):
  *             signal_id = signals[i].signal_id             # <<<<<<<<<<<<<<
@@ -6131,151 +6359,151 @@ static int __pyx_pf_5pyjls_7binding_6Reader___init__(struct __pyx_obj_5pyjls_7bi
     __pyx_t_14 = (__pyx_v_signals[__pyx_v_i]).signal_id;
     __pyx_v_signal_id = __pyx_t_14;
 
-    /* "pyjls/binding.pyx":205
+    /* "pyjls/binding.pyx":216
  *         for i in range(count):
  *             signal_id = signals[i].signal_id
  *             signal_def = SignalDef(             # <<<<<<<<<<<<<<
  *                 signal_id=signal_id,
  *                 source_id=signals[i].source_id,
  */
-    __Pyx_GetModuleGlobalName(__pyx_t_4, __pyx_n_s_SignalDef); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 205, __pyx_L1_error)
+    __Pyx_GetModuleGlobalName(__pyx_t_4, __pyx_n_s_SignalDef); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 216, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_4);
 
-    /* "pyjls/binding.pyx":206
+    /* "pyjls/binding.pyx":217
  *             signal_id = signals[i].signal_id
  *             signal_def = SignalDef(
  *                 signal_id=signal_id,             # <<<<<<<<<<<<<<
  *                 source_id=signals[i].source_id,
  *                 signal_type=signals[i].signal_type,
  */
-    __pyx_t_8 = __Pyx_PyDict_NewPresized(13); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 206, __pyx_L1_error)
+    __pyx_t_8 = __Pyx_PyDict_NewPresized(13); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 217, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_8);
-    __pyx_t_1 = __Pyx_PyInt_From_uint16_t(__pyx_v_signal_id); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 206, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyInt_From_uint16_t(__pyx_v_signal_id); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 217, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
-    if (PyDict_SetItem(__pyx_t_8, __pyx_n_s_signal_id, __pyx_t_1) < 0) __PYX_ERR(0, 206, __pyx_L1_error)
+    if (PyDict_SetItem(__pyx_t_8, __pyx_n_s_signal_id, __pyx_t_1) < 0) __PYX_ERR(0, 217, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
-    /* "pyjls/binding.pyx":207
+    /* "pyjls/binding.pyx":218
  *             signal_def = SignalDef(
  *                 signal_id=signal_id,
  *                 source_id=signals[i].source_id,             # <<<<<<<<<<<<<<
  *                 signal_type=signals[i].signal_type,
  *                 data_type=signals[i].data_type,
  */
-    __pyx_t_1 = __Pyx_PyInt_From_uint16_t((__pyx_v_signals[__pyx_v_i]).source_id); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 207, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyInt_From_uint16_t((__pyx_v_signals[__pyx_v_i]).source_id); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 218, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
-    if (PyDict_SetItem(__pyx_t_8, __pyx_n_s_source_id, __pyx_t_1) < 0) __PYX_ERR(0, 206, __pyx_L1_error)
+    if (PyDict_SetItem(__pyx_t_8, __pyx_n_s_source_id, __pyx_t_1) < 0) __PYX_ERR(0, 217, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
-    /* "pyjls/binding.pyx":208
+    /* "pyjls/binding.pyx":219
  *                 signal_id=signal_id,
  *                 source_id=signals[i].source_id,
  *                 signal_type=signals[i].signal_type,             # <<<<<<<<<<<<<<
  *                 data_type=signals[i].data_type,
  *                 sample_rate=signals[i].sample_rate,
  */
-    __pyx_t_1 = __Pyx_PyInt_From_uint8_t((__pyx_v_signals[__pyx_v_i]).signal_type); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 208, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyInt_From_uint8_t((__pyx_v_signals[__pyx_v_i]).signal_type); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 219, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
-    if (PyDict_SetItem(__pyx_t_8, __pyx_n_s_signal_type, __pyx_t_1) < 0) __PYX_ERR(0, 206, __pyx_L1_error)
+    if (PyDict_SetItem(__pyx_t_8, __pyx_n_s_signal_type, __pyx_t_1) < 0) __PYX_ERR(0, 217, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
-    /* "pyjls/binding.pyx":209
+    /* "pyjls/binding.pyx":220
  *                 source_id=signals[i].source_id,
  *                 signal_type=signals[i].signal_type,
  *                 data_type=signals[i].data_type,             # <<<<<<<<<<<<<<
  *                 sample_rate=signals[i].sample_rate,
  *                 samples_per_data=signals[i].samples_per_data,
  */
-    __pyx_t_1 = __Pyx_PyInt_From_uint32_t((__pyx_v_signals[__pyx_v_i]).data_type); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 209, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyInt_From_uint32_t((__pyx_v_signals[__pyx_v_i]).data_type); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 220, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
-    if (PyDict_SetItem(__pyx_t_8, __pyx_n_s_data_type, __pyx_t_1) < 0) __PYX_ERR(0, 206, __pyx_L1_error)
+    if (PyDict_SetItem(__pyx_t_8, __pyx_n_s_data_type, __pyx_t_1) < 0) __PYX_ERR(0, 217, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
-    /* "pyjls/binding.pyx":210
+    /* "pyjls/binding.pyx":221
  *                 signal_type=signals[i].signal_type,
  *                 data_type=signals[i].data_type,
  *                 sample_rate=signals[i].sample_rate,             # <<<<<<<<<<<<<<
  *                 samples_per_data=signals[i].samples_per_data,
  *                 sample_decimate_factor=signals[i].sample_decimate_factor,
  */
-    __pyx_t_1 = __Pyx_PyInt_From_uint32_t((__pyx_v_signals[__pyx_v_i]).sample_rate); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 210, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyInt_From_uint32_t((__pyx_v_signals[__pyx_v_i]).sample_rate); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 221, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
-    if (PyDict_SetItem(__pyx_t_8, __pyx_n_s_sample_rate, __pyx_t_1) < 0) __PYX_ERR(0, 206, __pyx_L1_error)
+    if (PyDict_SetItem(__pyx_t_8, __pyx_n_s_sample_rate, __pyx_t_1) < 0) __PYX_ERR(0, 217, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
-    /* "pyjls/binding.pyx":211
+    /* "pyjls/binding.pyx":222
  *                 data_type=signals[i].data_type,
  *                 sample_rate=signals[i].sample_rate,
  *                 samples_per_data=signals[i].samples_per_data,             # <<<<<<<<<<<<<<
  *                 sample_decimate_factor=signals[i].sample_decimate_factor,
  *                 entries_per_summary=signals[i].entries_per_summary,
  */
-    __pyx_t_1 = __Pyx_PyInt_From_uint32_t((__pyx_v_signals[__pyx_v_i]).samples_per_data); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 211, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyInt_From_uint32_t((__pyx_v_signals[__pyx_v_i]).samples_per_data); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 222, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
-    if (PyDict_SetItem(__pyx_t_8, __pyx_n_s_samples_per_data, __pyx_t_1) < 0) __PYX_ERR(0, 206, __pyx_L1_error)
+    if (PyDict_SetItem(__pyx_t_8, __pyx_n_s_samples_per_data, __pyx_t_1) < 0) __PYX_ERR(0, 217, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
-    /* "pyjls/binding.pyx":212
+    /* "pyjls/binding.pyx":223
  *                 sample_rate=signals[i].sample_rate,
  *                 samples_per_data=signals[i].samples_per_data,
  *                 sample_decimate_factor=signals[i].sample_decimate_factor,             # <<<<<<<<<<<<<<
  *                 entries_per_summary=signals[i].entries_per_summary,
  *                 summary_decimate_factor=signals[i].summary_decimate_factor,
  */
-    __pyx_t_1 = __Pyx_PyInt_From_uint32_t((__pyx_v_signals[__pyx_v_i]).sample_decimate_factor); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 212, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyInt_From_uint32_t((__pyx_v_signals[__pyx_v_i]).sample_decimate_factor); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 223, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
-    if (PyDict_SetItem(__pyx_t_8, __pyx_n_s_sample_decimate_factor, __pyx_t_1) < 0) __PYX_ERR(0, 206, __pyx_L1_error)
+    if (PyDict_SetItem(__pyx_t_8, __pyx_n_s_sample_decimate_factor, __pyx_t_1) < 0) __PYX_ERR(0, 217, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
-    /* "pyjls/binding.pyx":213
+    /* "pyjls/binding.pyx":224
  *                 samples_per_data=signals[i].samples_per_data,
  *                 sample_decimate_factor=signals[i].sample_decimate_factor,
  *                 entries_per_summary=signals[i].entries_per_summary,             # <<<<<<<<<<<<<<
  *                 summary_decimate_factor=signals[i].summary_decimate_factor,
  *                 annotation_decimate_factor=signals[i].annotation_decimate_factor,
  */
-    __pyx_t_1 = __Pyx_PyInt_From_uint32_t((__pyx_v_signals[__pyx_v_i]).entries_per_summary); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 213, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyInt_From_uint32_t((__pyx_v_signals[__pyx_v_i]).entries_per_summary); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 224, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
-    if (PyDict_SetItem(__pyx_t_8, __pyx_n_s_entries_per_summary, __pyx_t_1) < 0) __PYX_ERR(0, 206, __pyx_L1_error)
+    if (PyDict_SetItem(__pyx_t_8, __pyx_n_s_entries_per_summary, __pyx_t_1) < 0) __PYX_ERR(0, 217, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
-    /* "pyjls/binding.pyx":214
+    /* "pyjls/binding.pyx":225
  *                 sample_decimate_factor=signals[i].sample_decimate_factor,
  *                 entries_per_summary=signals[i].entries_per_summary,
  *                 summary_decimate_factor=signals[i].summary_decimate_factor,             # <<<<<<<<<<<<<<
  *                 annotation_decimate_factor=signals[i].annotation_decimate_factor,
  *                 utc_decimate_factor=signals[i].utc_decimate_factor,
  */
-    __pyx_t_1 = __Pyx_PyInt_From_uint32_t((__pyx_v_signals[__pyx_v_i]).summary_decimate_factor); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 214, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyInt_From_uint32_t((__pyx_v_signals[__pyx_v_i]).summary_decimate_factor); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 225, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
-    if (PyDict_SetItem(__pyx_t_8, __pyx_n_s_summary_decimate_factor, __pyx_t_1) < 0) __PYX_ERR(0, 206, __pyx_L1_error)
+    if (PyDict_SetItem(__pyx_t_8, __pyx_n_s_summary_decimate_factor, __pyx_t_1) < 0) __PYX_ERR(0, 217, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
-    /* "pyjls/binding.pyx":215
+    /* "pyjls/binding.pyx":226
  *                 entries_per_summary=signals[i].entries_per_summary,
  *                 summary_decimate_factor=signals[i].summary_decimate_factor,
  *                 annotation_decimate_factor=signals[i].annotation_decimate_factor,             # <<<<<<<<<<<<<<
  *                 utc_decimate_factor=signals[i].utc_decimate_factor,
  *                 name=signals[i].name.decode('utf-8'),
  */
-    __pyx_t_1 = __Pyx_PyInt_From_uint32_t((__pyx_v_signals[__pyx_v_i]).annotation_decimate_factor); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 215, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyInt_From_uint32_t((__pyx_v_signals[__pyx_v_i]).annotation_decimate_factor); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 226, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
-    if (PyDict_SetItem(__pyx_t_8, __pyx_n_s_annotation_decimate_factor, __pyx_t_1) < 0) __PYX_ERR(0, 206, __pyx_L1_error)
+    if (PyDict_SetItem(__pyx_t_8, __pyx_n_s_annotation_decimate_factor, __pyx_t_1) < 0) __PYX_ERR(0, 217, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
-    /* "pyjls/binding.pyx":216
+    /* "pyjls/binding.pyx":227
  *                 summary_decimate_factor=signals[i].summary_decimate_factor,
  *                 annotation_decimate_factor=signals[i].annotation_decimate_factor,
  *                 utc_decimate_factor=signals[i].utc_decimate_factor,             # <<<<<<<<<<<<<<
  *                 name=signals[i].name.decode('utf-8'),
  *                 si_units=signals[i].si_units.decode('utf-8'))
  */
-    __pyx_t_1 = __Pyx_PyInt_From_uint32_t((__pyx_v_signals[__pyx_v_i]).utc_decimate_factor); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 216, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyInt_From_uint32_t((__pyx_v_signals[__pyx_v_i]).utc_decimate_factor); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 227, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
-    if (PyDict_SetItem(__pyx_t_8, __pyx_n_s_utc_decimate_factor, __pyx_t_1) < 0) __PYX_ERR(0, 206, __pyx_L1_error)
+    if (PyDict_SetItem(__pyx_t_8, __pyx_n_s_utc_decimate_factor, __pyx_t_1) < 0) __PYX_ERR(0, 217, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
-    /* "pyjls/binding.pyx":217
+    /* "pyjls/binding.pyx":228
  *                 annotation_decimate_factor=signals[i].annotation_decimate_factor,
  *                 utc_decimate_factor=signals[i].utc_decimate_factor,
  *                 name=signals[i].name.decode('utf-8'),             # <<<<<<<<<<<<<<
@@ -6283,12 +6511,12 @@ static int __pyx_pf_5pyjls_7binding_6Reader___init__(struct __pyx_obj_5pyjls_7bi
  *             if signal_def.signal_type == 0:
  */
     __pyx_t_15 = (__pyx_v_signals[__pyx_v_i]).name;
-    __pyx_t_1 = __Pyx_decode_c_string(__pyx_t_15, 0, strlen(__pyx_t_15), NULL, NULL, PyUnicode_DecodeUTF8); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 217, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_decode_c_string(__pyx_t_15, 0, strlen(__pyx_t_15), NULL, NULL, PyUnicode_DecodeUTF8); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 228, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
-    if (PyDict_SetItem(__pyx_t_8, __pyx_n_s_name, __pyx_t_1) < 0) __PYX_ERR(0, 206, __pyx_L1_error)
+    if (PyDict_SetItem(__pyx_t_8, __pyx_n_s_name, __pyx_t_1) < 0) __PYX_ERR(0, 217, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
-    /* "pyjls/binding.pyx":218
+    /* "pyjls/binding.pyx":229
  *                 utc_decimate_factor=signals[i].utc_decimate_factor,
  *                 name=signals[i].name.decode('utf-8'),
  *                 si_units=signals[i].si_units.decode('utf-8'))             # <<<<<<<<<<<<<<
@@ -6296,42 +6524,42 @@ static int __pyx_pf_5pyjls_7binding_6Reader___init__(struct __pyx_obj_5pyjls_7bi
  *                 rc = c_jls.jls_rd_fsr_length(self._rd, signal_id, &samples)
  */
     __pyx_t_16 = (__pyx_v_signals[__pyx_v_i]).si_units;
-    __pyx_t_1 = __Pyx_decode_c_string(__pyx_t_16, 0, strlen(__pyx_t_16), NULL, NULL, PyUnicode_DecodeUTF8); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 218, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_decode_c_string(__pyx_t_16, 0, strlen(__pyx_t_16), NULL, NULL, PyUnicode_DecodeUTF8); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 229, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
-    if (PyDict_SetItem(__pyx_t_8, __pyx_n_s_si_units, __pyx_t_1) < 0) __PYX_ERR(0, 206, __pyx_L1_error)
+    if (PyDict_SetItem(__pyx_t_8, __pyx_n_s_si_units, __pyx_t_1) < 0) __PYX_ERR(0, 217, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
-    /* "pyjls/binding.pyx":205
+    /* "pyjls/binding.pyx":216
  *         for i in range(count):
  *             signal_id = signals[i].signal_id
  *             signal_def = SignalDef(             # <<<<<<<<<<<<<<
  *                 signal_id=signal_id,
  *                 source_id=signals[i].source_id,
  */
-    __pyx_t_1 = __Pyx_PyObject_Call(__pyx_t_4, __pyx_empty_tuple, __pyx_t_8); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 205, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyObject_Call(__pyx_t_4, __pyx_empty_tuple, __pyx_t_8); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 216, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
     __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
     __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
     __Pyx_XDECREF_SET(__pyx_v_signal_def, __pyx_t_1);
     __pyx_t_1 = 0;
 
-    /* "pyjls/binding.pyx":219
+    /* "pyjls/binding.pyx":230
  *                 name=signals[i].name.decode('utf-8'),
  *                 si_units=signals[i].si_units.decode('utf-8'))
  *             if signal_def.signal_type == 0:             # <<<<<<<<<<<<<<
  *                 rc = c_jls.jls_rd_fsr_length(self._rd, signal_id, &samples)
  *                 if rc:
  */
-    __pyx_t_1 = __Pyx_PyObject_GetAttrStr(__pyx_v_signal_def, __pyx_n_s_signal_type); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 219, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyObject_GetAttrStr(__pyx_v_signal_def, __pyx_n_s_signal_type); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 230, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
-    __pyx_t_8 = __Pyx_PyInt_EqObjC(__pyx_t_1, __pyx_int_0, 0, 0); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 219, __pyx_L1_error)
+    __pyx_t_8 = __Pyx_PyInt_EqObjC(__pyx_t_1, __pyx_int_0, 0, 0); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 230, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_8);
     __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-    __pyx_t_3 = __Pyx_PyObject_IsTrue(__pyx_t_8); if (unlikely(__pyx_t_3 < 0)) __PYX_ERR(0, 219, __pyx_L1_error)
+    __pyx_t_3 = __Pyx_PyObject_IsTrue(__pyx_t_8); if (unlikely(__pyx_t_3 < 0)) __PYX_ERR(0, 230, __pyx_L1_error)
     __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
     if (__pyx_t_3) {
 
-      /* "pyjls/binding.pyx":220
+      /* "pyjls/binding.pyx":231
  *                 si_units=signals[i].si_units.decode('utf-8'))
  *             if signal_def.signal_type == 0:
  *                 rc = c_jls.jls_rd_fsr_length(self._rd, signal_id, &samples)             # <<<<<<<<<<<<<<
@@ -6340,7 +6568,7 @@ static int __pyx_pf_5pyjls_7binding_6Reader___init__(struct __pyx_obj_5pyjls_7bi
  */
       __pyx_v_rc = jls_rd_fsr_length(__pyx_v_self->_rd, __pyx_v_signal_id, (&__pyx_v_samples));
 
-      /* "pyjls/binding.pyx":221
+      /* "pyjls/binding.pyx":232
  *             if signal_def.signal_type == 0:
  *                 rc = c_jls.jls_rd_fsr_length(self._rd, signal_id, &samples)
  *                 if rc:             # <<<<<<<<<<<<<<
@@ -6350,29 +6578,29 @@ static int __pyx_pf_5pyjls_7binding_6Reader___init__(struct __pyx_obj_5pyjls_7bi
       __pyx_t_3 = (__pyx_v_rc != 0);
       if (unlikely(__pyx_t_3)) {
 
-        /* "pyjls/binding.pyx":222
+        /* "pyjls/binding.pyx":233
  *                 rc = c_jls.jls_rd_fsr_length(self._rd, signal_id, &samples)
  *                 if rc:
  *                     raise RuntimeError(f'fsr signal length failed {rc}')             # <<<<<<<<<<<<<<
  *                 signal_def.length = samples
  *             self._signals[signal_id] = signal_def
  */
-        __pyx_t_8 = __Pyx_PyInt_From_int32_t(__pyx_v_rc); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 222, __pyx_L1_error)
+        __pyx_t_8 = __Pyx_PyInt_From_int32_t(__pyx_v_rc); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 233, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_8);
-        __pyx_t_1 = __Pyx_PyObject_FormatSimple(__pyx_t_8, __pyx_empty_unicode); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 222, __pyx_L1_error)
+        __pyx_t_1 = __Pyx_PyObject_FormatSimple(__pyx_t_8, __pyx_empty_unicode); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 233, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_1);
         __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
-        __pyx_t_8 = __Pyx_PyUnicode_Concat(__pyx_kp_u_fsr_signal_length_failed, __pyx_t_1); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 222, __pyx_L1_error)
+        __pyx_t_8 = __Pyx_PyUnicode_Concat(__pyx_kp_u_fsr_signal_length_failed, __pyx_t_1); if (unlikely(!__pyx_t_8)) __PYX_ERR(0, 233, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_8);
         __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-        __pyx_t_1 = __Pyx_PyObject_CallOneArg(__pyx_builtin_RuntimeError, __pyx_t_8); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 222, __pyx_L1_error)
+        __pyx_t_1 = __Pyx_PyObject_CallOneArg(__pyx_builtin_RuntimeError, __pyx_t_8); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 233, __pyx_L1_error)
         __Pyx_GOTREF(__pyx_t_1);
         __Pyx_DECREF(__pyx_t_8); __pyx_t_8 = 0;
         __Pyx_Raise(__pyx_t_1, 0, 0, 0);
         __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-        __PYX_ERR(0, 222, __pyx_L1_error)
+        __PYX_ERR(0, 233, __pyx_L1_error)
 
-        /* "pyjls/binding.pyx":221
+        /* "pyjls/binding.pyx":232
  *             if signal_def.signal_type == 0:
  *                 rc = c_jls.jls_rd_fsr_length(self._rd, signal_id, &samples)
  *                 if rc:             # <<<<<<<<<<<<<<
@@ -6381,19 +6609,19 @@ static int __pyx_pf_5pyjls_7binding_6Reader___init__(struct __pyx_obj_5pyjls_7bi
  */
       }
 
-      /* "pyjls/binding.pyx":223
+      /* "pyjls/binding.pyx":234
  *                 if rc:
  *                     raise RuntimeError(f'fsr signal length failed {rc}')
  *                 signal_def.length = samples             # <<<<<<<<<<<<<<
  *             self._signals[signal_id] = signal_def
  * 
  */
-      __pyx_t_1 = __Pyx_PyInt_From_int64_t(__pyx_v_samples); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 223, __pyx_L1_error)
+      __pyx_t_1 = __Pyx_PyInt_From_int64_t(__pyx_v_samples); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 234, __pyx_L1_error)
       __Pyx_GOTREF(__pyx_t_1);
-      if (__Pyx_PyObject_SetAttrStr(__pyx_v_signal_def, __pyx_n_s_length, __pyx_t_1) < 0) __PYX_ERR(0, 223, __pyx_L1_error)
+      if (__Pyx_PyObject_SetAttrStr(__pyx_v_signal_def, __pyx_n_s_length, __pyx_t_1) < 0) __PYX_ERR(0, 234, __pyx_L1_error)
       __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
-      /* "pyjls/binding.pyx":219
+      /* "pyjls/binding.pyx":230
  *                 name=signals[i].name.decode('utf-8'),
  *                 si_units=signals[i].si_units.decode('utf-8'))
  *             if signal_def.signal_type == 0:             # <<<<<<<<<<<<<<
@@ -6402,17 +6630,17 @@ static int __pyx_pf_5pyjls_7binding_6Reader___init__(struct __pyx_obj_5pyjls_7bi
  */
     }
 
-    /* "pyjls/binding.pyx":224
+    /* "pyjls/binding.pyx":235
  *                     raise RuntimeError(f'fsr signal length failed {rc}')
  *                 signal_def.length = samples
  *             self._signals[signal_id] = signal_def             # <<<<<<<<<<<<<<
  * 
  *     def __enter__(self):
  */
-    if (unlikely(__Pyx_SetItemInt(__pyx_v_self->_signals, __pyx_v_signal_id, __pyx_v_signal_def, uint16_t, 0, __Pyx_PyInt_From_uint16_t, 0, 0, 1) < 0)) __PYX_ERR(0, 224, __pyx_L1_error)
+    if (unlikely(__Pyx_SetItemInt(__pyx_v_self->_signals, __pyx_v_signal_id, __pyx_v_signal_def, uint16_t, 0, __Pyx_PyInt_From_uint16_t, 0, 0, 1) < 0)) __PYX_ERR(0, 235, __pyx_L1_error)
   }
 
-  /* "pyjls/binding.pyx":175
+  /* "pyjls/binding.pyx":186
  *     cdef object _signals
  * 
  *     def __init__(self, path: str):             # <<<<<<<<<<<<<<
@@ -6436,7 +6664,7 @@ static int __pyx_pf_5pyjls_7binding_6Reader___init__(struct __pyx_obj_5pyjls_7bi
   return __pyx_r;
 }
 
-/* "pyjls/binding.pyx":226
+/* "pyjls/binding.pyx":237
  *             self._signals[signal_id] = signal_def
  * 
  *     def __enter__(self):             # <<<<<<<<<<<<<<
@@ -6462,7 +6690,7 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Reader_2__enter__(struct __pyx_obj_5p
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("__enter__", 0);
 
-  /* "pyjls/binding.pyx":227
+  /* "pyjls/binding.pyx":238
  * 
  *     def __enter__(self):
  *         return self             # <<<<<<<<<<<<<<
@@ -6474,7 +6702,7 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Reader_2__enter__(struct __pyx_obj_5p
   __pyx_r = ((PyObject *)__pyx_v_self);
   goto __pyx_L0;
 
-  /* "pyjls/binding.pyx":226
+  /* "pyjls/binding.pyx":237
  *             self._signals[signal_id] = signal_def
  * 
  *     def __enter__(self):             # <<<<<<<<<<<<<<
@@ -6489,7 +6717,7 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Reader_2__enter__(struct __pyx_obj_5p
   return __pyx_r;
 }
 
-/* "pyjls/binding.pyx":229
+/* "pyjls/binding.pyx":240
  *         return self
  * 
  *     def __exit__(self, type, value, traceback):             # <<<<<<<<<<<<<<
@@ -6534,17 +6762,17 @@ static PyObject *__pyx_pw_5pyjls_7binding_6Reader_5__exit__(PyObject *__pyx_v_se
         case  1:
         if (likely((values[1] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_value)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("__exit__", 1, 3, 3, 1); __PYX_ERR(0, 229, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("__exit__", 1, 3, 3, 1); __PYX_ERR(0, 240, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  2:
         if (likely((values[2] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_traceback)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("__exit__", 1, 3, 3, 2); __PYX_ERR(0, 229, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("__exit__", 1, 3, 3, 2); __PYX_ERR(0, 240, __pyx_L3_error)
         }
       }
       if (unlikely(kw_args > 0)) {
-        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "__exit__") < 0)) __PYX_ERR(0, 229, __pyx_L3_error)
+        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "__exit__") < 0)) __PYX_ERR(0, 240, __pyx_L3_error)
       }
     } else if (PyTuple_GET_SIZE(__pyx_args) != 3) {
       goto __pyx_L5_argtuple_error;
@@ -6559,7 +6787,7 @@ static PyObject *__pyx_pw_5pyjls_7binding_6Reader_5__exit__(PyObject *__pyx_v_se
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("__exit__", 1, 3, 3, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 229, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("__exit__", 1, 3, 3, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 240, __pyx_L3_error)
   __pyx_L3_error:;
   __Pyx_AddTraceback("pyjls.binding.Reader.__exit__", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __Pyx_RefNannyFinishContext();
@@ -6583,14 +6811,14 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Reader_4__exit__(struct __pyx_obj_5py
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("__exit__", 0);
 
-  /* "pyjls/binding.pyx":230
+  /* "pyjls/binding.pyx":241
  * 
  *     def __exit__(self, type, value, traceback):
  *         self.close()             # <<<<<<<<<<<<<<
  * 
  *     def close(self):
  */
-  __pyx_t_2 = __Pyx_PyObject_GetAttrStr(((PyObject *)__pyx_v_self), __pyx_n_s_close); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 230, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_PyObject_GetAttrStr(((PyObject *)__pyx_v_self), __pyx_n_s_close); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 241, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   __pyx_t_3 = NULL;
   if (CYTHON_UNPACK_METHODS && likely(PyMethod_Check(__pyx_t_2))) {
@@ -6604,12 +6832,12 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Reader_4__exit__(struct __pyx_obj_5py
   }
   __pyx_t_1 = (__pyx_t_3) ? __Pyx_PyObject_CallOneArg(__pyx_t_2, __pyx_t_3) : __Pyx_PyObject_CallNoArg(__pyx_t_2);
   __Pyx_XDECREF(__pyx_t_3); __pyx_t_3 = 0;
-  if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 230, __pyx_L1_error)
+  if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 241, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
 
-  /* "pyjls/binding.pyx":229
+  /* "pyjls/binding.pyx":240
  *         return self
  * 
  *     def __exit__(self, type, value, traceback):             # <<<<<<<<<<<<<<
@@ -6632,7 +6860,7 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Reader_4__exit__(struct __pyx_obj_5py
   return __pyx_r;
 }
 
-/* "pyjls/binding.pyx":232
+/* "pyjls/binding.pyx":243
  *         self.close()
  * 
  *     def close(self):             # <<<<<<<<<<<<<<
@@ -6658,7 +6886,7 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Reader_6close(struct __pyx_obj_5pyjls
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("close", 0);
 
-  /* "pyjls/binding.pyx":233
+  /* "pyjls/binding.pyx":244
  * 
  *     def close(self):
  *         c_jls.jls_rd_close(self._rd)             # <<<<<<<<<<<<<<
@@ -6667,7 +6895,7 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Reader_6close(struct __pyx_obj_5pyjls
  */
   jls_rd_close(__pyx_v_self->_rd);
 
-  /* "pyjls/binding.pyx":232
+  /* "pyjls/binding.pyx":243
  *         self.close()
  * 
  *     def close(self):             # <<<<<<<<<<<<<<
@@ -6682,7 +6910,7 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Reader_6close(struct __pyx_obj_5pyjls
   return __pyx_r;
 }
 
-/* "pyjls/binding.pyx":236
+/* "pyjls/binding.pyx":247
  * 
  *     @property
  *     def sources(self):             # <<<<<<<<<<<<<<
@@ -6708,7 +6936,7 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Reader_7sources___get__(struct __pyx_
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("__get__", 0);
 
-  /* "pyjls/binding.pyx":237
+  /* "pyjls/binding.pyx":248
  *     @property
  *     def sources(self):
  *         return self._sources             # <<<<<<<<<<<<<<
@@ -6720,7 +6948,7 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Reader_7sources___get__(struct __pyx_
   __pyx_r = __pyx_v_self->_sources;
   goto __pyx_L0;
 
-  /* "pyjls/binding.pyx":236
+  /* "pyjls/binding.pyx":247
  * 
  *     @property
  *     def sources(self):             # <<<<<<<<<<<<<<
@@ -6735,7 +6963,7 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Reader_7sources___get__(struct __pyx_
   return __pyx_r;
 }
 
-/* "pyjls/binding.pyx":240
+/* "pyjls/binding.pyx":251
  * 
  *     @property
  *     def signals(self):             # <<<<<<<<<<<<<<
@@ -6761,7 +6989,7 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Reader_7signals___get__(struct __pyx_
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("__get__", 0);
 
-  /* "pyjls/binding.pyx":241
+  /* "pyjls/binding.pyx":252
  *     @property
  *     def signals(self):
  *         return self._signals             # <<<<<<<<<<<<<<
@@ -6773,7 +7001,7 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Reader_7signals___get__(struct __pyx_
   __pyx_r = __pyx_v_self->_signals;
   goto __pyx_L0;
 
-  /* "pyjls/binding.pyx":240
+  /* "pyjls/binding.pyx":251
  * 
  *     @property
  *     def signals(self):             # <<<<<<<<<<<<<<
@@ -6788,7 +7016,7 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Reader_7signals___get__(struct __pyx_
   return __pyx_r;
 }
 
-/* "pyjls/binding.pyx":243
+/* "pyjls/binding.pyx":254
  *         return self._signals
  * 
  *     def fsr(self, signal_id, start_sample_id, length):             # <<<<<<<<<<<<<<
@@ -6833,17 +7061,17 @@ static PyObject *__pyx_pw_5pyjls_7binding_6Reader_9fsr(PyObject *__pyx_v_self, P
         case  1:
         if (likely((values[1] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_start_sample_id)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("fsr", 1, 3, 3, 1); __PYX_ERR(0, 243, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("fsr", 1, 3, 3, 1); __PYX_ERR(0, 254, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  2:
         if (likely((values[2] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_length)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("fsr", 1, 3, 3, 2); __PYX_ERR(0, 243, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("fsr", 1, 3, 3, 2); __PYX_ERR(0, 254, __pyx_L3_error)
         }
       }
       if (unlikely(kw_args > 0)) {
-        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "fsr") < 0)) __PYX_ERR(0, 243, __pyx_L3_error)
+        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "fsr") < 0)) __PYX_ERR(0, 254, __pyx_L3_error)
       }
     } else if (PyTuple_GET_SIZE(__pyx_args) != 3) {
       goto __pyx_L5_argtuple_error;
@@ -6858,7 +7086,7 @@ static PyObject *__pyx_pw_5pyjls_7binding_6Reader_9fsr(PyObject *__pyx_v_self, P
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("fsr", 1, 3, 3, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 243, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("fsr", 1, 3, 3, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 254, __pyx_L3_error)
   __pyx_L3_error:;
   __Pyx_AddTraceback("pyjls.binding.Reader.fsr", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __Pyx_RefNannyFinishContext();
@@ -6894,33 +7122,33 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Reader_8fsr(struct __pyx_obj_5pyjls_7
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("fsr", 0);
 
-  /* "pyjls/binding.pyx":246
+  /* "pyjls/binding.pyx":257
  *         cdef int32_t rc
  *         cdef np.float32_t [::1] c_data
  *         data = np.empty(length, dtype=np.float32)             # <<<<<<<<<<<<<<
  *         c_data = data
  *         rc = c_jls.jls_rd_fsr_f32(self._rd, signal_id, start_sample_id, &c_data[0], length)
  */
-  __Pyx_GetModuleGlobalName(__pyx_t_1, __pyx_n_s_np); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 246, __pyx_L1_error)
+  __Pyx_GetModuleGlobalName(__pyx_t_1, __pyx_n_s_np); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 257, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
-  __pyx_t_2 = __Pyx_PyObject_GetAttrStr(__pyx_t_1, __pyx_n_s_empty); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 246, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_PyObject_GetAttrStr(__pyx_t_1, __pyx_n_s_empty); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 257, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-  __pyx_t_1 = PyTuple_New(1); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 246, __pyx_L1_error)
+  __pyx_t_1 = PyTuple_New(1); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 257, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __Pyx_INCREF(__pyx_v_length);
   __Pyx_GIVEREF(__pyx_v_length);
   PyTuple_SET_ITEM(__pyx_t_1, 0, __pyx_v_length);
-  __pyx_t_3 = __Pyx_PyDict_NewPresized(1); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 246, __pyx_L1_error)
+  __pyx_t_3 = __Pyx_PyDict_NewPresized(1); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 257, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_3);
-  __Pyx_GetModuleGlobalName(__pyx_t_4, __pyx_n_s_np); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 246, __pyx_L1_error)
+  __Pyx_GetModuleGlobalName(__pyx_t_4, __pyx_n_s_np); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 257, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
-  __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_t_4, __pyx_n_s_float32); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 246, __pyx_L1_error)
+  __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_t_4, __pyx_n_s_float32); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 257, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_5);
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-  if (PyDict_SetItem(__pyx_t_3, __pyx_n_s_dtype, __pyx_t_5) < 0) __PYX_ERR(0, 246, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_3, __pyx_n_s_dtype, __pyx_t_5) < 0) __PYX_ERR(0, 257, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-  __pyx_t_5 = __Pyx_PyObject_Call(__pyx_t_2, __pyx_t_1, __pyx_t_3); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 246, __pyx_L1_error)
+  __pyx_t_5 = __Pyx_PyObject_Call(__pyx_t_2, __pyx_t_1, __pyx_t_3); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 257, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_5);
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
@@ -6928,27 +7156,27 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Reader_8fsr(struct __pyx_obj_5pyjls_7
   __pyx_v_data = __pyx_t_5;
   __pyx_t_5 = 0;
 
-  /* "pyjls/binding.pyx":247
+  /* "pyjls/binding.pyx":258
  *         cdef np.float32_t [::1] c_data
  *         data = np.empty(length, dtype=np.float32)
  *         c_data = data             # <<<<<<<<<<<<<<
  *         rc = c_jls.jls_rd_fsr_f32(self._rd, signal_id, start_sample_id, &c_data[0], length)
  *         if rc:
  */
-  __pyx_t_6 = __Pyx_PyObject_to_MemoryviewSlice_dc_nn___pyx_t_5numpy_float32_t(__pyx_v_data, PyBUF_WRITABLE); if (unlikely(!__pyx_t_6.memview)) __PYX_ERR(0, 247, __pyx_L1_error)
+  __pyx_t_6 = __Pyx_PyObject_to_MemoryviewSlice_dc_nn___pyx_t_5numpy_float32_t(__pyx_v_data, PyBUF_WRITABLE); if (unlikely(!__pyx_t_6.memview)) __PYX_ERR(0, 258, __pyx_L1_error)
   __pyx_v_c_data = __pyx_t_6;
   __pyx_t_6.memview = NULL;
   __pyx_t_6.data = NULL;
 
-  /* "pyjls/binding.pyx":248
+  /* "pyjls/binding.pyx":259
  *         data = np.empty(length, dtype=np.float32)
  *         c_data = data
  *         rc = c_jls.jls_rd_fsr_f32(self._rd, signal_id, start_sample_id, &c_data[0], length)             # <<<<<<<<<<<<<<
  *         if rc:
  *             raise RuntimeError(f'fsr failed {rc}')
  */
-  __pyx_t_7 = __Pyx_PyInt_As_uint16_t(__pyx_v_signal_id); if (unlikely((__pyx_t_7 == ((uint16_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 248, __pyx_L1_error)
-  __pyx_t_8 = __Pyx_PyInt_As_int64_t(__pyx_v_start_sample_id); if (unlikely((__pyx_t_8 == ((int64_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 248, __pyx_L1_error)
+  __pyx_t_7 = __Pyx_PyInt_As_uint16_t(__pyx_v_signal_id); if (unlikely((__pyx_t_7 == ((uint16_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 259, __pyx_L1_error)
+  __pyx_t_8 = __Pyx_PyInt_As_int64_t(__pyx_v_start_sample_id); if (unlikely((__pyx_t_8 == ((int64_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 259, __pyx_L1_error)
   __pyx_t_9 = 0;
   __pyx_t_10 = -1;
   if (__pyx_t_9 < 0) {
@@ -6957,12 +7185,12 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Reader_8fsr(struct __pyx_obj_5pyjls_7
   } else if (unlikely(__pyx_t_9 >= __pyx_v_c_data.shape[0])) __pyx_t_10 = 0;
   if (unlikely(__pyx_t_10 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_10);
-    __PYX_ERR(0, 248, __pyx_L1_error)
+    __PYX_ERR(0, 259, __pyx_L1_error)
   }
-  __pyx_t_11 = __Pyx_PyInt_As_int64_t(__pyx_v_length); if (unlikely((__pyx_t_11 == ((int64_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 248, __pyx_L1_error)
+  __pyx_t_11 = __Pyx_PyInt_As_int64_t(__pyx_v_length); if (unlikely((__pyx_t_11 == ((int64_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 259, __pyx_L1_error)
   __pyx_v_rc = jls_rd_fsr_f32(__pyx_v_self->_rd, __pyx_t_7, __pyx_t_8, (&(*((__pyx_t_5numpy_float32_t *) ( /* dim=0 */ ((char *) (((__pyx_t_5numpy_float32_t *) __pyx_v_c_data.data) + __pyx_t_9)) )))), __pyx_t_11);
 
-  /* "pyjls/binding.pyx":249
+  /* "pyjls/binding.pyx":260
  *         c_data = data
  *         rc = c_jls.jls_rd_fsr_f32(self._rd, signal_id, start_sample_id, &c_data[0], length)
  *         if rc:             # <<<<<<<<<<<<<<
@@ -6972,29 +7200,29 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Reader_8fsr(struct __pyx_obj_5pyjls_7
   __pyx_t_12 = (__pyx_v_rc != 0);
   if (unlikely(__pyx_t_12)) {
 
-    /* "pyjls/binding.pyx":250
+    /* "pyjls/binding.pyx":261
  *         rc = c_jls.jls_rd_fsr_f32(self._rd, signal_id, start_sample_id, &c_data[0], length)
  *         if rc:
  *             raise RuntimeError(f'fsr failed {rc}')             # <<<<<<<<<<<<<<
  *         return data
  * 
  */
-    __pyx_t_5 = __Pyx_PyInt_From_int32_t(__pyx_v_rc); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 250, __pyx_L1_error)
+    __pyx_t_5 = __Pyx_PyInt_From_int32_t(__pyx_v_rc); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 261, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
-    __pyx_t_3 = __Pyx_PyObject_FormatSimple(__pyx_t_5, __pyx_empty_unicode); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 250, __pyx_L1_error)
+    __pyx_t_3 = __Pyx_PyObject_FormatSimple(__pyx_t_5, __pyx_empty_unicode); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 261, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_3);
     __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-    __pyx_t_5 = __Pyx_PyUnicode_Concat(__pyx_kp_u_fsr_failed, __pyx_t_3); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 250, __pyx_L1_error)
+    __pyx_t_5 = __Pyx_PyUnicode_Concat(__pyx_kp_u_fsr_failed, __pyx_t_3); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 261, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
     __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
-    __pyx_t_3 = __Pyx_PyObject_CallOneArg(__pyx_builtin_RuntimeError, __pyx_t_5); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 250, __pyx_L1_error)
+    __pyx_t_3 = __Pyx_PyObject_CallOneArg(__pyx_builtin_RuntimeError, __pyx_t_5); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 261, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_3);
     __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
     __Pyx_Raise(__pyx_t_3, 0, 0, 0);
     __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
-    __PYX_ERR(0, 250, __pyx_L1_error)
+    __PYX_ERR(0, 261, __pyx_L1_error)
 
-    /* "pyjls/binding.pyx":249
+    /* "pyjls/binding.pyx":260
  *         c_data = data
  *         rc = c_jls.jls_rd_fsr_f32(self._rd, signal_id, start_sample_id, &c_data[0], length)
  *         if rc:             # <<<<<<<<<<<<<<
@@ -7003,7 +7231,7 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Reader_8fsr(struct __pyx_obj_5pyjls_7
  */
   }
 
-  /* "pyjls/binding.pyx":251
+  /* "pyjls/binding.pyx":262
  *         if rc:
  *             raise RuntimeError(f'fsr failed {rc}')
  *         return data             # <<<<<<<<<<<<<<
@@ -7015,7 +7243,7 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Reader_8fsr(struct __pyx_obj_5pyjls_7
   __pyx_r = __pyx_v_data;
   goto __pyx_L0;
 
-  /* "pyjls/binding.pyx":243
+  /* "pyjls/binding.pyx":254
  *         return self._signals
  * 
  *     def fsr(self, signal_id, start_sample_id, length):             # <<<<<<<<<<<<<<
@@ -7041,7 +7269,7 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Reader_8fsr(struct __pyx_obj_5pyjls_7
   return __pyx_r;
 }
 
-/* "pyjls/binding.pyx":253
+/* "pyjls/binding.pyx":264
  *         return data
  * 
  *     def fsr_statistics(self, signal_id, start_sample_id, increment, length):             # <<<<<<<<<<<<<<
@@ -7089,23 +7317,23 @@ static PyObject *__pyx_pw_5pyjls_7binding_6Reader_11fsr_statistics(PyObject *__p
         case  1:
         if (likely((values[1] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_start_sample_id)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("fsr_statistics", 1, 4, 4, 1); __PYX_ERR(0, 253, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("fsr_statistics", 1, 4, 4, 1); __PYX_ERR(0, 264, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  2:
         if (likely((values[2] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_increment)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("fsr_statistics", 1, 4, 4, 2); __PYX_ERR(0, 253, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("fsr_statistics", 1, 4, 4, 2); __PYX_ERR(0, 264, __pyx_L3_error)
         }
         CYTHON_FALLTHROUGH;
         case  3:
         if (likely((values[3] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_length)) != 0)) kw_args--;
         else {
-          __Pyx_RaiseArgtupleInvalid("fsr_statistics", 1, 4, 4, 3); __PYX_ERR(0, 253, __pyx_L3_error)
+          __Pyx_RaiseArgtupleInvalid("fsr_statistics", 1, 4, 4, 3); __PYX_ERR(0, 264, __pyx_L3_error)
         }
       }
       if (unlikely(kw_args > 0)) {
-        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "fsr_statistics") < 0)) __PYX_ERR(0, 253, __pyx_L3_error)
+        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "fsr_statistics") < 0)) __PYX_ERR(0, 264, __pyx_L3_error)
       }
     } else if (PyTuple_GET_SIZE(__pyx_args) != 4) {
       goto __pyx_L5_argtuple_error;
@@ -7122,7 +7350,7 @@ static PyObject *__pyx_pw_5pyjls_7binding_6Reader_11fsr_statistics(PyObject *__p
   }
   goto __pyx_L4_argument_unpacking_done;
   __pyx_L5_argtuple_error:;
-  __Pyx_RaiseArgtupleInvalid("fsr_statistics", 1, 4, 4, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 253, __pyx_L3_error)
+  __Pyx_RaiseArgtupleInvalid("fsr_statistics", 1, 4, 4, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 264, __pyx_L3_error)
   __pyx_L3_error:;
   __Pyx_AddTraceback("pyjls.binding.Reader.fsr_statistics", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __Pyx_RefNannyFinishContext();
@@ -7160,19 +7388,19 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Reader_10fsr_statistics(struct __pyx_
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("fsr_statistics", 0);
 
-  /* "pyjls/binding.pyx":256
+  /* "pyjls/binding.pyx":267
  *         cdef int32_t rc
  *         cdef np.float32_t [:, :] c_data
  *         data = np.empty((length, 4), dtype=np.float32)             # <<<<<<<<<<<<<<
  *         c_data = data
  *         rc = c_jls.jls_rd_fsr_f32_statistics(self._rd, signal_id, start_sample_id, increment, &c_data[0, 0], length)
  */
-  __Pyx_GetModuleGlobalName(__pyx_t_1, __pyx_n_s_np); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 256, __pyx_L1_error)
+  __Pyx_GetModuleGlobalName(__pyx_t_1, __pyx_n_s_np); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 267, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
-  __pyx_t_2 = __Pyx_PyObject_GetAttrStr(__pyx_t_1, __pyx_n_s_empty); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 256, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_PyObject_GetAttrStr(__pyx_t_1, __pyx_n_s_empty); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 267, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-  __pyx_t_1 = PyTuple_New(2); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 256, __pyx_L1_error)
+  __pyx_t_1 = PyTuple_New(2); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 267, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __Pyx_INCREF(__pyx_v_length);
   __Pyx_GIVEREF(__pyx_v_length);
@@ -7180,21 +7408,21 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Reader_10fsr_statistics(struct __pyx_
   __Pyx_INCREF(__pyx_int_4);
   __Pyx_GIVEREF(__pyx_int_4);
   PyTuple_SET_ITEM(__pyx_t_1, 1, __pyx_int_4);
-  __pyx_t_3 = PyTuple_New(1); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 256, __pyx_L1_error)
+  __pyx_t_3 = PyTuple_New(1); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 267, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_3);
   __Pyx_GIVEREF(__pyx_t_1);
   PyTuple_SET_ITEM(__pyx_t_3, 0, __pyx_t_1);
   __pyx_t_1 = 0;
-  __pyx_t_1 = __Pyx_PyDict_NewPresized(1); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 256, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyDict_NewPresized(1); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 267, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
-  __Pyx_GetModuleGlobalName(__pyx_t_4, __pyx_n_s_np); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 256, __pyx_L1_error)
+  __Pyx_GetModuleGlobalName(__pyx_t_4, __pyx_n_s_np); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 267, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_4);
-  __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_t_4, __pyx_n_s_float32); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 256, __pyx_L1_error)
+  __pyx_t_5 = __Pyx_PyObject_GetAttrStr(__pyx_t_4, __pyx_n_s_float32); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 267, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_5);
   __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
-  if (PyDict_SetItem(__pyx_t_1, __pyx_n_s_dtype, __pyx_t_5) < 0) __PYX_ERR(0, 256, __pyx_L1_error)
+  if (PyDict_SetItem(__pyx_t_1, __pyx_n_s_dtype, __pyx_t_5) < 0) __PYX_ERR(0, 267, __pyx_L1_error)
   __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-  __pyx_t_5 = __Pyx_PyObject_Call(__pyx_t_2, __pyx_t_3, __pyx_t_1); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 256, __pyx_L1_error)
+  __pyx_t_5 = __Pyx_PyObject_Call(__pyx_t_2, __pyx_t_3, __pyx_t_1); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 267, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_5);
   __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
   __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
@@ -7202,28 +7430,28 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Reader_10fsr_statistics(struct __pyx_
   __pyx_v_data = __pyx_t_5;
   __pyx_t_5 = 0;
 
-  /* "pyjls/binding.pyx":257
+  /* "pyjls/binding.pyx":268
  *         cdef np.float32_t [:, :] c_data
  *         data = np.empty((length, 4), dtype=np.float32)
  *         c_data = data             # <<<<<<<<<<<<<<
  *         rc = c_jls.jls_rd_fsr_f32_statistics(self._rd, signal_id, start_sample_id, increment, &c_data[0, 0], length)
  *         if rc:
  */
-  __pyx_t_6 = __Pyx_PyObject_to_MemoryviewSlice_dsds_nn___pyx_t_5numpy_float32_t(__pyx_v_data, PyBUF_WRITABLE); if (unlikely(!__pyx_t_6.memview)) __PYX_ERR(0, 257, __pyx_L1_error)
+  __pyx_t_6 = __Pyx_PyObject_to_MemoryviewSlice_dsds_nn___pyx_t_5numpy_float32_t(__pyx_v_data, PyBUF_WRITABLE); if (unlikely(!__pyx_t_6.memview)) __PYX_ERR(0, 268, __pyx_L1_error)
   __pyx_v_c_data = __pyx_t_6;
   __pyx_t_6.memview = NULL;
   __pyx_t_6.data = NULL;
 
-  /* "pyjls/binding.pyx":258
+  /* "pyjls/binding.pyx":269
  *         data = np.empty((length, 4), dtype=np.float32)
  *         c_data = data
  *         rc = c_jls.jls_rd_fsr_f32_statistics(self._rd, signal_id, start_sample_id, increment, &c_data[0, 0], length)             # <<<<<<<<<<<<<<
  *         if rc:
  *             raise RuntimeError(f'fsr_statistics failed {rc}')
  */
-  __pyx_t_7 = __Pyx_PyInt_As_uint16_t(__pyx_v_signal_id); if (unlikely((__pyx_t_7 == ((uint16_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 258, __pyx_L1_error)
-  __pyx_t_8 = __Pyx_PyInt_As_int64_t(__pyx_v_start_sample_id); if (unlikely((__pyx_t_8 == ((int64_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 258, __pyx_L1_error)
-  __pyx_t_9 = __Pyx_PyInt_As_int64_t(__pyx_v_increment); if (unlikely((__pyx_t_9 == ((int64_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 258, __pyx_L1_error)
+  __pyx_t_7 = __Pyx_PyInt_As_uint16_t(__pyx_v_signal_id); if (unlikely((__pyx_t_7 == ((uint16_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 269, __pyx_L1_error)
+  __pyx_t_8 = __Pyx_PyInt_As_int64_t(__pyx_v_start_sample_id); if (unlikely((__pyx_t_8 == ((int64_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 269, __pyx_L1_error)
+  __pyx_t_9 = __Pyx_PyInt_As_int64_t(__pyx_v_increment); if (unlikely((__pyx_t_9 == ((int64_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 269, __pyx_L1_error)
   __pyx_t_10 = 0;
   __pyx_t_11 = 0;
   __pyx_t_12 = -1;
@@ -7237,12 +7465,12 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Reader_10fsr_statistics(struct __pyx_
   } else if (unlikely(__pyx_t_11 >= __pyx_v_c_data.shape[1])) __pyx_t_12 = 1;
   if (unlikely(__pyx_t_12 != -1)) {
     __Pyx_RaiseBufferIndexError(__pyx_t_12);
-    __PYX_ERR(0, 258, __pyx_L1_error)
+    __PYX_ERR(0, 269, __pyx_L1_error)
   }
-  __pyx_t_13 = __Pyx_PyInt_As_int64_t(__pyx_v_length); if (unlikely((__pyx_t_13 == ((int64_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 258, __pyx_L1_error)
+  __pyx_t_13 = __Pyx_PyInt_As_int64_t(__pyx_v_length); if (unlikely((__pyx_t_13 == ((int64_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 269, __pyx_L1_error)
   __pyx_v_rc = jls_rd_fsr_f32_statistics(__pyx_v_self->_rd, __pyx_t_7, __pyx_t_8, __pyx_t_9, (&(*((__pyx_t_5numpy_float32_t *) ( /* dim=1 */ (( /* dim=0 */ (__pyx_v_c_data.data + __pyx_t_10 * __pyx_v_c_data.strides[0]) ) + __pyx_t_11 * __pyx_v_c_data.strides[1]) )))), __pyx_t_13);
 
-  /* "pyjls/binding.pyx":259
+  /* "pyjls/binding.pyx":270
  *         c_data = data
  *         rc = c_jls.jls_rd_fsr_f32_statistics(self._rd, signal_id, start_sample_id, increment, &c_data[0, 0], length)
  *         if rc:             # <<<<<<<<<<<<<<
@@ -7252,29 +7480,29 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Reader_10fsr_statistics(struct __pyx_
   __pyx_t_14 = (__pyx_v_rc != 0);
   if (unlikely(__pyx_t_14)) {
 
-    /* "pyjls/binding.pyx":260
+    /* "pyjls/binding.pyx":271
  *         rc = c_jls.jls_rd_fsr_f32_statistics(self._rd, signal_id, start_sample_id, increment, &c_data[0, 0], length)
  *         if rc:
  *             raise RuntimeError(f'fsr_statistics failed {rc}')             # <<<<<<<<<<<<<<
  *         return data
  * 
  */
-    __pyx_t_5 = __Pyx_PyInt_From_int32_t(__pyx_v_rc); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 260, __pyx_L1_error)
+    __pyx_t_5 = __Pyx_PyInt_From_int32_t(__pyx_v_rc); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 271, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
-    __pyx_t_1 = __Pyx_PyObject_FormatSimple(__pyx_t_5, __pyx_empty_unicode); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 260, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyObject_FormatSimple(__pyx_t_5, __pyx_empty_unicode); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 271, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
     __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
-    __pyx_t_5 = __Pyx_PyUnicode_Concat(__pyx_kp_u_fsr_statistics_failed, __pyx_t_1); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 260, __pyx_L1_error)
+    __pyx_t_5 = __Pyx_PyUnicode_Concat(__pyx_kp_u_fsr_statistics_failed, __pyx_t_1); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 271, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_5);
     __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-    __pyx_t_1 = __Pyx_PyObject_CallOneArg(__pyx_builtin_RuntimeError, __pyx_t_5); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 260, __pyx_L1_error)
+    __pyx_t_1 = __Pyx_PyObject_CallOneArg(__pyx_builtin_RuntimeError, __pyx_t_5); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 271, __pyx_L1_error)
     __Pyx_GOTREF(__pyx_t_1);
     __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
     __Pyx_Raise(__pyx_t_1, 0, 0, 0);
     __Pyx_DECREF(__pyx_t_1); __pyx_t_1 = 0;
-    __PYX_ERR(0, 260, __pyx_L1_error)
+    __PYX_ERR(0, 271, __pyx_L1_error)
 
-    /* "pyjls/binding.pyx":259
+    /* "pyjls/binding.pyx":270
  *         c_data = data
  *         rc = c_jls.jls_rd_fsr_f32_statistics(self._rd, signal_id, start_sample_id, increment, &c_data[0, 0], length)
  *         if rc:             # <<<<<<<<<<<<<<
@@ -7283,19 +7511,19 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Reader_10fsr_statistics(struct __pyx_
  */
   }
 
-  /* "pyjls/binding.pyx":261
+  /* "pyjls/binding.pyx":272
  *         if rc:
  *             raise RuntimeError(f'fsr_statistics failed {rc}')
  *         return data             # <<<<<<<<<<<<<<
  * 
- *     #ctypedef int32_t (*jls_rd_annotation_cbk_fn)(void * user_data, const jls_annotation_s * annotation)
+ *     def annotations(self, signal_id, timestamp, cbk_fn):
  */
   __Pyx_XDECREF(__pyx_r);
   __Pyx_INCREF(__pyx_v_data);
   __pyx_r = __pyx_v_data;
   goto __pyx_L0;
 
-  /* "pyjls/binding.pyx":253
+  /* "pyjls/binding.pyx":264
  *         return data
  * 
  *     def fsr_statistics(self, signal_id, start_sample_id, increment, length):             # <<<<<<<<<<<<<<
@@ -7321,6 +7549,282 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Reader_10fsr_statistics(struct __pyx_
   return __pyx_r;
 }
 
+/* "pyjls/binding.pyx":274
+ *         return data
+ * 
+ *     def annotations(self, signal_id, timestamp, cbk_fn):             # <<<<<<<<<<<<<<
+ *         cdef int32_t rc
+ *         rc = c_jls.jls_rd_annotations(self._rd, signal_id, timestamp, _annotation_cbk_fn, <void *> cbk_fn)
+ */
+
+/* Python wrapper */
+static PyObject *__pyx_pw_5pyjls_7binding_6Reader_13annotations(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds); /*proto*/
+static PyObject *__pyx_pw_5pyjls_7binding_6Reader_13annotations(PyObject *__pyx_v_self, PyObject *__pyx_args, PyObject *__pyx_kwds) {
+  PyObject *__pyx_v_signal_id = 0;
+  PyObject *__pyx_v_timestamp = 0;
+  PyObject *__pyx_v_cbk_fn = 0;
+  int __pyx_lineno = 0;
+  const char *__pyx_filename = NULL;
+  int __pyx_clineno = 0;
+  PyObject *__pyx_r = 0;
+  __Pyx_RefNannyDeclarations
+  __Pyx_RefNannySetupContext("annotations (wrapper)", 0);
+  {
+    static PyObject **__pyx_pyargnames[] = {&__pyx_n_s_signal_id,&__pyx_n_s_timestamp,&__pyx_n_s_cbk_fn,0};
+    PyObject* values[3] = {0,0,0};
+    if (unlikely(__pyx_kwds)) {
+      Py_ssize_t kw_args;
+      const Py_ssize_t pos_args = PyTuple_GET_SIZE(__pyx_args);
+      switch (pos_args) {
+        case  3: values[2] = PyTuple_GET_ITEM(__pyx_args, 2);
+        CYTHON_FALLTHROUGH;
+        case  2: values[1] = PyTuple_GET_ITEM(__pyx_args, 1);
+        CYTHON_FALLTHROUGH;
+        case  1: values[0] = PyTuple_GET_ITEM(__pyx_args, 0);
+        CYTHON_FALLTHROUGH;
+        case  0: break;
+        default: goto __pyx_L5_argtuple_error;
+      }
+      kw_args = PyDict_Size(__pyx_kwds);
+      switch (pos_args) {
+        case  0:
+        if (likely((values[0] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_signal_id)) != 0)) kw_args--;
+        else goto __pyx_L5_argtuple_error;
+        CYTHON_FALLTHROUGH;
+        case  1:
+        if (likely((values[1] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_timestamp)) != 0)) kw_args--;
+        else {
+          __Pyx_RaiseArgtupleInvalid("annotations", 1, 3, 3, 1); __PYX_ERR(0, 274, __pyx_L3_error)
+        }
+        CYTHON_FALLTHROUGH;
+        case  2:
+        if (likely((values[2] = __Pyx_PyDict_GetItemStr(__pyx_kwds, __pyx_n_s_cbk_fn)) != 0)) kw_args--;
+        else {
+          __Pyx_RaiseArgtupleInvalid("annotations", 1, 3, 3, 2); __PYX_ERR(0, 274, __pyx_L3_error)
+        }
+      }
+      if (unlikely(kw_args > 0)) {
+        if (unlikely(__Pyx_ParseOptionalKeywords(__pyx_kwds, __pyx_pyargnames, 0, values, pos_args, "annotations") < 0)) __PYX_ERR(0, 274, __pyx_L3_error)
+      }
+    } else if (PyTuple_GET_SIZE(__pyx_args) != 3) {
+      goto __pyx_L5_argtuple_error;
+    } else {
+      values[0] = PyTuple_GET_ITEM(__pyx_args, 0);
+      values[1] = PyTuple_GET_ITEM(__pyx_args, 1);
+      values[2] = PyTuple_GET_ITEM(__pyx_args, 2);
+    }
+    __pyx_v_signal_id = values[0];
+    __pyx_v_timestamp = values[1];
+    __pyx_v_cbk_fn = values[2];
+  }
+  goto __pyx_L4_argument_unpacking_done;
+  __pyx_L5_argtuple_error:;
+  __Pyx_RaiseArgtupleInvalid("annotations", 1, 3, 3, PyTuple_GET_SIZE(__pyx_args)); __PYX_ERR(0, 274, __pyx_L3_error)
+  __pyx_L3_error:;
+  __Pyx_AddTraceback("pyjls.binding.Reader.annotations", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __Pyx_RefNannyFinishContext();
+  return NULL;
+  __pyx_L4_argument_unpacking_done:;
+  __pyx_r = __pyx_pf_5pyjls_7binding_6Reader_12annotations(((struct __pyx_obj_5pyjls_7binding_Reader *)__pyx_v_self), __pyx_v_signal_id, __pyx_v_timestamp, __pyx_v_cbk_fn);
+
+  /* function exit code */
+  __Pyx_RefNannyFinishContext();
+  return __pyx_r;
+}
+
+static PyObject *__pyx_pf_5pyjls_7binding_6Reader_12annotations(struct __pyx_obj_5pyjls_7binding_Reader *__pyx_v_self, PyObject *__pyx_v_signal_id, PyObject *__pyx_v_timestamp, PyObject *__pyx_v_cbk_fn) {
+  int32_t __pyx_v_rc;
+  PyObject *__pyx_r = NULL;
+  __Pyx_RefNannyDeclarations
+  uint16_t __pyx_t_1;
+  int64_t __pyx_t_2;
+  int __pyx_t_3;
+  PyObject *__pyx_t_4 = NULL;
+  PyObject *__pyx_t_5 = NULL;
+  int __pyx_lineno = 0;
+  const char *__pyx_filename = NULL;
+  int __pyx_clineno = 0;
+  __Pyx_RefNannySetupContext("annotations", 0);
+
+  /* "pyjls/binding.pyx":276
+ *     def annotations(self, signal_id, timestamp, cbk_fn):
+ *         cdef int32_t rc
+ *         rc = c_jls.jls_rd_annotations(self._rd, signal_id, timestamp, _annotation_cbk_fn, <void *> cbk_fn)             # <<<<<<<<<<<<<<
+ *         if rc:
+ *             raise RuntimeError(f'annotations failed {rc}')
+ */
+  __pyx_t_1 = __Pyx_PyInt_As_uint16_t(__pyx_v_signal_id); if (unlikely((__pyx_t_1 == ((uint16_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 276, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_PyInt_As_int64_t(__pyx_v_timestamp); if (unlikely((__pyx_t_2 == ((int64_t)-1)) && PyErr_Occurred())) __PYX_ERR(0, 276, __pyx_L1_error)
+  __pyx_v_rc = jls_rd_annotations(__pyx_v_self->_rd, __pyx_t_1, __pyx_t_2, __pyx_f_5pyjls_7binding__annotation_cbk_fn, ((void *)__pyx_v_cbk_fn));
+
+  /* "pyjls/binding.pyx":277
+ *         cdef int32_t rc
+ *         rc = c_jls.jls_rd_annotations(self._rd, signal_id, timestamp, _annotation_cbk_fn, <void *> cbk_fn)
+ *         if rc:             # <<<<<<<<<<<<<<
+ *             raise RuntimeError(f'annotations failed {rc}')
+ * 
+ */
+  __pyx_t_3 = (__pyx_v_rc != 0);
+  if (unlikely(__pyx_t_3)) {
+
+    /* "pyjls/binding.pyx":278
+ *         rc = c_jls.jls_rd_annotations(self._rd, signal_id, timestamp, _annotation_cbk_fn, <void *> cbk_fn)
+ *         if rc:
+ *             raise RuntimeError(f'annotations failed {rc}')             # <<<<<<<<<<<<<<
+ * 
+ *     def user_data(self, cbk_fn):
+ */
+    __pyx_t_4 = __Pyx_PyInt_From_int32_t(__pyx_v_rc); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 278, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_4);
+    __pyx_t_5 = __Pyx_PyObject_FormatSimple(__pyx_t_4, __pyx_empty_unicode); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 278, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_5);
+    __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
+    __pyx_t_4 = __Pyx_PyUnicode_Concat(__pyx_kp_u_annotations_failed, __pyx_t_5); if (unlikely(!__pyx_t_4)) __PYX_ERR(0, 278, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_4);
+    __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+    __pyx_t_5 = __Pyx_PyObject_CallOneArg(__pyx_builtin_RuntimeError, __pyx_t_4); if (unlikely(!__pyx_t_5)) __PYX_ERR(0, 278, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_5);
+    __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
+    __Pyx_Raise(__pyx_t_5, 0, 0, 0);
+    __Pyx_DECREF(__pyx_t_5); __pyx_t_5 = 0;
+    __PYX_ERR(0, 278, __pyx_L1_error)
+
+    /* "pyjls/binding.pyx":277
+ *         cdef int32_t rc
+ *         rc = c_jls.jls_rd_annotations(self._rd, signal_id, timestamp, _annotation_cbk_fn, <void *> cbk_fn)
+ *         if rc:             # <<<<<<<<<<<<<<
+ *             raise RuntimeError(f'annotations failed {rc}')
+ * 
+ */
+  }
+
+  /* "pyjls/binding.pyx":274
+ *         return data
+ * 
+ *     def annotations(self, signal_id, timestamp, cbk_fn):             # <<<<<<<<<<<<<<
+ *         cdef int32_t rc
+ *         rc = c_jls.jls_rd_annotations(self._rd, signal_id, timestamp, _annotation_cbk_fn, <void *> cbk_fn)
+ */
+
+  /* function exit code */
+  __pyx_r = Py_None; __Pyx_INCREF(Py_None);
+  goto __pyx_L0;
+  __pyx_L1_error:;
+  __Pyx_XDECREF(__pyx_t_4);
+  __Pyx_XDECREF(__pyx_t_5);
+  __Pyx_AddTraceback("pyjls.binding.Reader.annotations", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __pyx_r = NULL;
+  __pyx_L0:;
+  __Pyx_XGIVEREF(__pyx_r);
+  __Pyx_RefNannyFinishContext();
+  return __pyx_r;
+}
+
+/* "pyjls/binding.pyx":280
+ *             raise RuntimeError(f'annotations failed {rc}')
+ * 
+ *     def user_data(self, cbk_fn):             # <<<<<<<<<<<<<<
+ *         cdef int32_t rc
+ *         rc = c_jls.jls_rd_user_data(self._rd, _user_data_cbk_fn, <void *> cbk_fn)
+ */
+
+/* Python wrapper */
+static PyObject *__pyx_pw_5pyjls_7binding_6Reader_15user_data(PyObject *__pyx_v_self, PyObject *__pyx_v_cbk_fn); /*proto*/
+static PyObject *__pyx_pw_5pyjls_7binding_6Reader_15user_data(PyObject *__pyx_v_self, PyObject *__pyx_v_cbk_fn) {
+  PyObject *__pyx_r = 0;
+  __Pyx_RefNannyDeclarations
+  __Pyx_RefNannySetupContext("user_data (wrapper)", 0);
+  __pyx_r = __pyx_pf_5pyjls_7binding_6Reader_14user_data(((struct __pyx_obj_5pyjls_7binding_Reader *)__pyx_v_self), ((PyObject *)__pyx_v_cbk_fn));
+
+  /* function exit code */
+  __Pyx_RefNannyFinishContext();
+  return __pyx_r;
+}
+
+static PyObject *__pyx_pf_5pyjls_7binding_6Reader_14user_data(struct __pyx_obj_5pyjls_7binding_Reader *__pyx_v_self, PyObject *__pyx_v_cbk_fn) {
+  int32_t __pyx_v_rc;
+  PyObject *__pyx_r = NULL;
+  __Pyx_RefNannyDeclarations
+  int __pyx_t_1;
+  PyObject *__pyx_t_2 = NULL;
+  PyObject *__pyx_t_3 = NULL;
+  int __pyx_lineno = 0;
+  const char *__pyx_filename = NULL;
+  int __pyx_clineno = 0;
+  __Pyx_RefNannySetupContext("user_data", 0);
+
+  /* "pyjls/binding.pyx":282
+ *     def user_data(self, cbk_fn):
+ *         cdef int32_t rc
+ *         rc = c_jls.jls_rd_user_data(self._rd, _user_data_cbk_fn, <void *> cbk_fn)             # <<<<<<<<<<<<<<
+ *         if rc:
+ *             raise RuntimeError(f'annotations failed {rc}')
+ */
+  __pyx_v_rc = jls_rd_user_data(__pyx_v_self->_rd, __pyx_f_5pyjls_7binding__user_data_cbk_fn, ((void *)__pyx_v_cbk_fn));
+
+  /* "pyjls/binding.pyx":283
+ *         cdef int32_t rc
+ *         rc = c_jls.jls_rd_user_data(self._rd, _user_data_cbk_fn, <void *> cbk_fn)
+ *         if rc:             # <<<<<<<<<<<<<<
+ *             raise RuntimeError(f'annotations failed {rc}')
+ * 
+ */
+  __pyx_t_1 = (__pyx_v_rc != 0);
+  if (unlikely(__pyx_t_1)) {
+
+    /* "pyjls/binding.pyx":284
+ *         rc = c_jls.jls_rd_user_data(self._rd, _user_data_cbk_fn, <void *> cbk_fn)
+ *         if rc:
+ *             raise RuntimeError(f'annotations failed {rc}')             # <<<<<<<<<<<<<<
+ * 
+ * 
+ */
+    __pyx_t_2 = __Pyx_PyInt_From_int32_t(__pyx_v_rc); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 284, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_2);
+    __pyx_t_3 = __Pyx_PyObject_FormatSimple(__pyx_t_2, __pyx_empty_unicode); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 284, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_3);
+    __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+    __pyx_t_2 = __Pyx_PyUnicode_Concat(__pyx_kp_u_annotations_failed, __pyx_t_3); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 284, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_2);
+    __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
+    __pyx_t_3 = __Pyx_PyObject_CallOneArg(__pyx_builtin_RuntimeError, __pyx_t_2); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 284, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_3);
+    __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+    __Pyx_Raise(__pyx_t_3, 0, 0, 0);
+    __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
+    __PYX_ERR(0, 284, __pyx_L1_error)
+
+    /* "pyjls/binding.pyx":283
+ *         cdef int32_t rc
+ *         rc = c_jls.jls_rd_user_data(self._rd, _user_data_cbk_fn, <void *> cbk_fn)
+ *         if rc:             # <<<<<<<<<<<<<<
+ *             raise RuntimeError(f'annotations failed {rc}')
+ * 
+ */
+  }
+
+  /* "pyjls/binding.pyx":280
+ *             raise RuntimeError(f'annotations failed {rc}')
+ * 
+ *     def user_data(self, cbk_fn):             # <<<<<<<<<<<<<<
+ *         cdef int32_t rc
+ *         rc = c_jls.jls_rd_user_data(self._rd, _user_data_cbk_fn, <void *> cbk_fn)
+ */
+
+  /* function exit code */
+  __pyx_r = Py_None; __Pyx_INCREF(Py_None);
+  goto __pyx_L0;
+  __pyx_L1_error:;
+  __Pyx_XDECREF(__pyx_t_2);
+  __Pyx_XDECREF(__pyx_t_3);
+  __Pyx_AddTraceback("pyjls.binding.Reader.user_data", __pyx_clineno, __pyx_lineno, __pyx_filename);
+  __pyx_r = NULL;
+  __pyx_L0:;
+  __Pyx_XGIVEREF(__pyx_r);
+  __Pyx_RefNannyFinishContext();
+  return __pyx_r;
+}
+
 /* "(tree fragment)":1
  * def __reduce_cython__(self):             # <<<<<<<<<<<<<<
  *     raise TypeError("self._rd cannot be converted to a Python object for pickling")
@@ -7328,19 +7832,19 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Reader_10fsr_statistics(struct __pyx_
  */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_5pyjls_7binding_6Reader_13__reduce_cython__(PyObject *__pyx_v_self, CYTHON_UNUSED PyObject *unused); /*proto*/
-static PyObject *__pyx_pw_5pyjls_7binding_6Reader_13__reduce_cython__(PyObject *__pyx_v_self, CYTHON_UNUSED PyObject *unused) {
+static PyObject *__pyx_pw_5pyjls_7binding_6Reader_17__reduce_cython__(PyObject *__pyx_v_self, CYTHON_UNUSED PyObject *unused); /*proto*/
+static PyObject *__pyx_pw_5pyjls_7binding_6Reader_17__reduce_cython__(PyObject *__pyx_v_self, CYTHON_UNUSED PyObject *unused) {
   PyObject *__pyx_r = 0;
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("__reduce_cython__ (wrapper)", 0);
-  __pyx_r = __pyx_pf_5pyjls_7binding_6Reader_12__reduce_cython__(((struct __pyx_obj_5pyjls_7binding_Reader *)__pyx_v_self));
+  __pyx_r = __pyx_pf_5pyjls_7binding_6Reader_16__reduce_cython__(((struct __pyx_obj_5pyjls_7binding_Reader *)__pyx_v_self));
 
   /* function exit code */
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_5pyjls_7binding_6Reader_12__reduce_cython__(CYTHON_UNUSED struct __pyx_obj_5pyjls_7binding_Reader *__pyx_v_self) {
+static PyObject *__pyx_pf_5pyjls_7binding_6Reader_16__reduce_cython__(CYTHON_UNUSED struct __pyx_obj_5pyjls_7binding_Reader *__pyx_v_self) {
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
@@ -7385,19 +7889,19 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Reader_12__reduce_cython__(CYTHON_UNU
  */
 
 /* Python wrapper */
-static PyObject *__pyx_pw_5pyjls_7binding_6Reader_15__setstate_cython__(PyObject *__pyx_v_self, PyObject *__pyx_v___pyx_state); /*proto*/
-static PyObject *__pyx_pw_5pyjls_7binding_6Reader_15__setstate_cython__(PyObject *__pyx_v_self, PyObject *__pyx_v___pyx_state) {
+static PyObject *__pyx_pw_5pyjls_7binding_6Reader_19__setstate_cython__(PyObject *__pyx_v_self, PyObject *__pyx_v___pyx_state); /*proto*/
+static PyObject *__pyx_pw_5pyjls_7binding_6Reader_19__setstate_cython__(PyObject *__pyx_v_self, PyObject *__pyx_v___pyx_state) {
   PyObject *__pyx_r = 0;
   __Pyx_RefNannyDeclarations
   __Pyx_RefNannySetupContext("__setstate_cython__ (wrapper)", 0);
-  __pyx_r = __pyx_pf_5pyjls_7binding_6Reader_14__setstate_cython__(((struct __pyx_obj_5pyjls_7binding_Reader *)__pyx_v_self), ((PyObject *)__pyx_v___pyx_state));
+  __pyx_r = __pyx_pf_5pyjls_7binding_6Reader_18__setstate_cython__(((struct __pyx_obj_5pyjls_7binding_Reader *)__pyx_v_self), ((PyObject *)__pyx_v___pyx_state));
 
   /* function exit code */
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
 
-static PyObject *__pyx_pf_5pyjls_7binding_6Reader_14__setstate_cython__(CYTHON_UNUSED struct __pyx_obj_5pyjls_7binding_Reader *__pyx_v_self, CYTHON_UNUSED PyObject *__pyx_v___pyx_state) {
+static PyObject *__pyx_pf_5pyjls_7binding_6Reader_18__setstate_cython__(CYTHON_UNUSED struct __pyx_obj_5pyjls_7binding_Reader *__pyx_v_self, CYTHON_UNUSED PyObject *__pyx_v___pyx_state) {
   PyObject *__pyx_r = NULL;
   __Pyx_RefNannyDeclarations
   PyObject *__pyx_t_1 = NULL;
@@ -7430,6 +7934,316 @@ static PyObject *__pyx_pf_5pyjls_7binding_6Reader_14__setstate_cython__(CYTHON_U
   __Pyx_AddTraceback("pyjls.binding.Reader.__setstate_cython__", __pyx_clineno, __pyx_lineno, __pyx_filename);
   __pyx_r = NULL;
   __Pyx_XGIVEREF(__pyx_r);
+  __Pyx_RefNannyFinishContext();
+  return __pyx_r;
+}
+
+/* "pyjls/binding.pyx":287
+ * 
+ * 
+ * cdef int32_t _annotation_cbk_fn(void * user_data, const c_jls.jls_annotation_s * annotation):             # <<<<<<<<<<<<<<
+ *     cbk_fn = <object> user_data
+ *     data = _storage_unpack(annotation[0].storage_type, annotation[0].data, annotation[0].data_size)
+ */
+
+static int32_t __pyx_f_5pyjls_7binding__annotation_cbk_fn(void *__pyx_v_user_data, struct jls_annotation_s const *__pyx_v_annotation) {
+  PyObject *__pyx_v_cbk_fn = NULL;
+  PyObject *__pyx_v_data = NULL;
+  PyObject *__pyx_v_rc = NULL;
+  int32_t __pyx_r;
+  __Pyx_RefNannyDeclarations
+  PyObject *__pyx_t_1 = NULL;
+  PyObject *__pyx_t_2 = NULL;
+  PyObject *__pyx_t_3 = NULL;
+  PyObject *__pyx_t_4 = NULL;
+  PyObject *__pyx_t_5 = NULL;
+  int __pyx_t_6;
+  PyObject *__pyx_t_7 = NULL;
+  int32_t __pyx_t_8;
+  int __pyx_t_9;
+  int __pyx_lineno = 0;
+  const char *__pyx_filename = NULL;
+  int __pyx_clineno = 0;
+  __Pyx_RefNannySetupContext("_annotation_cbk_fn", 0);
+
+  /* "pyjls/binding.pyx":288
+ * 
+ * cdef int32_t _annotation_cbk_fn(void * user_data, const c_jls.jls_annotation_s * annotation):
+ *     cbk_fn = <object> user_data             # <<<<<<<<<<<<<<
+ *     data = _storage_unpack(annotation[0].storage_type, annotation[0].data, annotation[0].data_size)
+ *     rc = cbk_fn(annotation[0].timestamp, annotation[0].annotation_type, data)
+ */
+  __pyx_t_1 = ((PyObject *)__pyx_v_user_data);
+  __Pyx_INCREF(__pyx_t_1);
+  __pyx_v_cbk_fn = __pyx_t_1;
+  __pyx_t_1 = 0;
+
+  /* "pyjls/binding.pyx":289
+ * cdef int32_t _annotation_cbk_fn(void * user_data, const c_jls.jls_annotation_s * annotation):
+ *     cbk_fn = <object> user_data
+ *     data = _storage_unpack(annotation[0].storage_type, annotation[0].data, annotation[0].data_size)             # <<<<<<<<<<<<<<
+ *     rc = cbk_fn(annotation[0].timestamp, annotation[0].annotation_type, data)
+ *     return 1 if bool(rc) else 0
+ */
+  __pyx_t_1 = __pyx_f_5pyjls_7binding__storage_unpack((__pyx_v_annotation[0]).storage_type, (__pyx_v_annotation[0]).data, (__pyx_v_annotation[0]).data_size); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 289, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_1);
+  __pyx_v_data = __pyx_t_1;
+  __pyx_t_1 = 0;
+
+  /* "pyjls/binding.pyx":290
+ *     cbk_fn = <object> user_data
+ *     data = _storage_unpack(annotation[0].storage_type, annotation[0].data, annotation[0].data_size)
+ *     rc = cbk_fn(annotation[0].timestamp, annotation[0].annotation_type, data)             # <<<<<<<<<<<<<<
+ *     return 1 if bool(rc) else 0
+ * 
+ */
+  __pyx_t_2 = __Pyx_PyInt_From_int64_t((__pyx_v_annotation[0]).timestamp); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 290, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_2);
+  __pyx_t_3 = __Pyx_PyInt_From_uint8_t((__pyx_v_annotation[0]).annotation_type); if (unlikely(!__pyx_t_3)) __PYX_ERR(0, 290, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_3);
+  __Pyx_INCREF(__pyx_v_cbk_fn);
+  __pyx_t_4 = __pyx_v_cbk_fn; __pyx_t_5 = NULL;
+  __pyx_t_6 = 0;
+  if (CYTHON_UNPACK_METHODS && unlikely(PyMethod_Check(__pyx_t_4))) {
+    __pyx_t_5 = PyMethod_GET_SELF(__pyx_t_4);
+    if (likely(__pyx_t_5)) {
+      PyObject* function = PyMethod_GET_FUNCTION(__pyx_t_4);
+      __Pyx_INCREF(__pyx_t_5);
+      __Pyx_INCREF(function);
+      __Pyx_DECREF_SET(__pyx_t_4, function);
+      __pyx_t_6 = 1;
+    }
+  }
+  #if CYTHON_FAST_PYCALL
+  if (PyFunction_Check(__pyx_t_4)) {
+    PyObject *__pyx_temp[4] = {__pyx_t_5, __pyx_t_2, __pyx_t_3, __pyx_v_data};
+    __pyx_t_1 = __Pyx_PyFunction_FastCall(__pyx_t_4, __pyx_temp+1-__pyx_t_6, 3+__pyx_t_6); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 290, __pyx_L1_error)
+    __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
+    __Pyx_GOTREF(__pyx_t_1);
+    __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+    __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
+  } else
+  #endif
+  #if CYTHON_FAST_PYCCALL
+  if (__Pyx_PyFastCFunction_Check(__pyx_t_4)) {
+    PyObject *__pyx_temp[4] = {__pyx_t_5, __pyx_t_2, __pyx_t_3, __pyx_v_data};
+    __pyx_t_1 = __Pyx_PyCFunction_FastCall(__pyx_t_4, __pyx_temp+1-__pyx_t_6, 3+__pyx_t_6); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 290, __pyx_L1_error)
+    __Pyx_XDECREF(__pyx_t_5); __pyx_t_5 = 0;
+    __Pyx_GOTREF(__pyx_t_1);
+    __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+    __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
+  } else
+  #endif
+  {
+    __pyx_t_7 = PyTuple_New(3+__pyx_t_6); if (unlikely(!__pyx_t_7)) __PYX_ERR(0, 290, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_7);
+    if (__pyx_t_5) {
+      __Pyx_GIVEREF(__pyx_t_5); PyTuple_SET_ITEM(__pyx_t_7, 0, __pyx_t_5); __pyx_t_5 = NULL;
+    }
+    __Pyx_GIVEREF(__pyx_t_2);
+    PyTuple_SET_ITEM(__pyx_t_7, 0+__pyx_t_6, __pyx_t_2);
+    __Pyx_GIVEREF(__pyx_t_3);
+    PyTuple_SET_ITEM(__pyx_t_7, 1+__pyx_t_6, __pyx_t_3);
+    __Pyx_INCREF(__pyx_v_data);
+    __Pyx_GIVEREF(__pyx_v_data);
+    PyTuple_SET_ITEM(__pyx_t_7, 2+__pyx_t_6, __pyx_v_data);
+    __pyx_t_2 = 0;
+    __pyx_t_3 = 0;
+    __pyx_t_1 = __Pyx_PyObject_Call(__pyx_t_4, __pyx_t_7, NULL); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 290, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_1);
+    __Pyx_DECREF(__pyx_t_7); __pyx_t_7 = 0;
+  }
+  __Pyx_DECREF(__pyx_t_4); __pyx_t_4 = 0;
+  __pyx_v_rc = __pyx_t_1;
+  __pyx_t_1 = 0;
+
+  /* "pyjls/binding.pyx":291
+ *     data = _storage_unpack(annotation[0].storage_type, annotation[0].data, annotation[0].data_size)
+ *     rc = cbk_fn(annotation[0].timestamp, annotation[0].annotation_type, data)
+ *     return 1 if bool(rc) else 0             # <<<<<<<<<<<<<<
+ * 
+ * 
+ */
+  __pyx_t_9 = __Pyx_PyObject_IsTrue(__pyx_v_rc); if (unlikely(__pyx_t_9 < 0)) __PYX_ERR(0, 291, __pyx_L1_error)
+  if (((!(!__pyx_t_9)) != 0)) {
+    __pyx_t_8 = 1;
+  } else {
+    __pyx_t_8 = 0;
+  }
+  __pyx_r = __pyx_t_8;
+  goto __pyx_L0;
+
+  /* "pyjls/binding.pyx":287
+ * 
+ * 
+ * cdef int32_t _annotation_cbk_fn(void * user_data, const c_jls.jls_annotation_s * annotation):             # <<<<<<<<<<<<<<
+ *     cbk_fn = <object> user_data
+ *     data = _storage_unpack(annotation[0].storage_type, annotation[0].data, annotation[0].data_size)
+ */
+
+  /* function exit code */
+  __pyx_L1_error:;
+  __Pyx_XDECREF(__pyx_t_1);
+  __Pyx_XDECREF(__pyx_t_2);
+  __Pyx_XDECREF(__pyx_t_3);
+  __Pyx_XDECREF(__pyx_t_4);
+  __Pyx_XDECREF(__pyx_t_5);
+  __Pyx_XDECREF(__pyx_t_7);
+  __Pyx_WriteUnraisable("pyjls.binding._annotation_cbk_fn", __pyx_clineno, __pyx_lineno, __pyx_filename, 1, 0);
+  __pyx_r = 0;
+  __pyx_L0:;
+  __Pyx_XDECREF(__pyx_v_cbk_fn);
+  __Pyx_XDECREF(__pyx_v_data);
+  __Pyx_XDECREF(__pyx_v_rc);
+  __Pyx_RefNannyFinishContext();
+  return __pyx_r;
+}
+
+/* "pyjls/binding.pyx":294
+ * 
+ * 
+ * cdef int32_t _user_data_cbk_fn(void * user_data, uint16_t chunk_meta, c_jls.jls_storage_type_e storage_type,             # <<<<<<<<<<<<<<
+ *         uint8_t * data, uint32_t data_size):
+ *     cbk_fn = <object> user_data
+ */
+
+static int32_t __pyx_f_5pyjls_7binding__user_data_cbk_fn(void *__pyx_v_user_data, uint16_t __pyx_v_chunk_meta, enum jls_storage_type_e __pyx_v_storage_type, uint8_t *__pyx_v_data, uint32_t __pyx_v_data_size) {
+  PyObject *__pyx_v_cbk_fn = NULL;
+  PyObject *__pyx_v_d = NULL;
+  PyObject *__pyx_v_rc = NULL;
+  int32_t __pyx_r;
+  __Pyx_RefNannyDeclarations
+  PyObject *__pyx_t_1 = NULL;
+  PyObject *__pyx_t_2 = NULL;
+  PyObject *__pyx_t_3 = NULL;
+  PyObject *__pyx_t_4 = NULL;
+  int __pyx_t_5;
+  PyObject *__pyx_t_6 = NULL;
+  int32_t __pyx_t_7;
+  int __pyx_t_8;
+  int __pyx_lineno = 0;
+  const char *__pyx_filename = NULL;
+  int __pyx_clineno = 0;
+  __Pyx_RefNannySetupContext("_user_data_cbk_fn", 0);
+
+  /* "pyjls/binding.pyx":296
+ * cdef int32_t _user_data_cbk_fn(void * user_data, uint16_t chunk_meta, c_jls.jls_storage_type_e storage_type,
+ *         uint8_t * data, uint32_t data_size):
+ *     cbk_fn = <object> user_data             # <<<<<<<<<<<<<<
+ *     d = _storage_unpack(storage_type, data, data_size)
+ *     rc = cbk_fn(chunk_meta, d)
+ */
+  __pyx_t_1 = ((PyObject *)__pyx_v_user_data);
+  __Pyx_INCREF(__pyx_t_1);
+  __pyx_v_cbk_fn = __pyx_t_1;
+  __pyx_t_1 = 0;
+
+  /* "pyjls/binding.pyx":297
+ *         uint8_t * data, uint32_t data_size):
+ *     cbk_fn = <object> user_data
+ *     d = _storage_unpack(storage_type, data, data_size)             # <<<<<<<<<<<<<<
+ *     rc = cbk_fn(chunk_meta, d)
+ *     return 1 if bool(rc) else 0
+ */
+  __pyx_t_1 = __pyx_f_5pyjls_7binding__storage_unpack(__pyx_v_storage_type, __pyx_v_data, __pyx_v_data_size); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 297, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_1);
+  __pyx_v_d = __pyx_t_1;
+  __pyx_t_1 = 0;
+
+  /* "pyjls/binding.pyx":298
+ *     cbk_fn = <object> user_data
+ *     d = _storage_unpack(storage_type, data, data_size)
+ *     rc = cbk_fn(chunk_meta, d)             # <<<<<<<<<<<<<<
+ *     return 1 if bool(rc) else 0
+ */
+  __pyx_t_2 = __Pyx_PyInt_From_uint16_t(__pyx_v_chunk_meta); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 298, __pyx_L1_error)
+  __Pyx_GOTREF(__pyx_t_2);
+  __Pyx_INCREF(__pyx_v_cbk_fn);
+  __pyx_t_3 = __pyx_v_cbk_fn; __pyx_t_4 = NULL;
+  __pyx_t_5 = 0;
+  if (CYTHON_UNPACK_METHODS && unlikely(PyMethod_Check(__pyx_t_3))) {
+    __pyx_t_4 = PyMethod_GET_SELF(__pyx_t_3);
+    if (likely(__pyx_t_4)) {
+      PyObject* function = PyMethod_GET_FUNCTION(__pyx_t_3);
+      __Pyx_INCREF(__pyx_t_4);
+      __Pyx_INCREF(function);
+      __Pyx_DECREF_SET(__pyx_t_3, function);
+      __pyx_t_5 = 1;
+    }
+  }
+  #if CYTHON_FAST_PYCALL
+  if (PyFunction_Check(__pyx_t_3)) {
+    PyObject *__pyx_temp[3] = {__pyx_t_4, __pyx_t_2, __pyx_v_d};
+    __pyx_t_1 = __Pyx_PyFunction_FastCall(__pyx_t_3, __pyx_temp+1-__pyx_t_5, 2+__pyx_t_5); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 298, __pyx_L1_error)
+    __Pyx_XDECREF(__pyx_t_4); __pyx_t_4 = 0;
+    __Pyx_GOTREF(__pyx_t_1);
+    __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+  } else
+  #endif
+  #if CYTHON_FAST_PYCCALL
+  if (__Pyx_PyFastCFunction_Check(__pyx_t_3)) {
+    PyObject *__pyx_temp[3] = {__pyx_t_4, __pyx_t_2, __pyx_v_d};
+    __pyx_t_1 = __Pyx_PyCFunction_FastCall(__pyx_t_3, __pyx_temp+1-__pyx_t_5, 2+__pyx_t_5); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 298, __pyx_L1_error)
+    __Pyx_XDECREF(__pyx_t_4); __pyx_t_4 = 0;
+    __Pyx_GOTREF(__pyx_t_1);
+    __Pyx_DECREF(__pyx_t_2); __pyx_t_2 = 0;
+  } else
+  #endif
+  {
+    __pyx_t_6 = PyTuple_New(2+__pyx_t_5); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 298, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_6);
+    if (__pyx_t_4) {
+      __Pyx_GIVEREF(__pyx_t_4); PyTuple_SET_ITEM(__pyx_t_6, 0, __pyx_t_4); __pyx_t_4 = NULL;
+    }
+    __Pyx_GIVEREF(__pyx_t_2);
+    PyTuple_SET_ITEM(__pyx_t_6, 0+__pyx_t_5, __pyx_t_2);
+    __Pyx_INCREF(__pyx_v_d);
+    __Pyx_GIVEREF(__pyx_v_d);
+    PyTuple_SET_ITEM(__pyx_t_6, 1+__pyx_t_5, __pyx_v_d);
+    __pyx_t_2 = 0;
+    __pyx_t_1 = __Pyx_PyObject_Call(__pyx_t_3, __pyx_t_6, NULL); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 298, __pyx_L1_error)
+    __Pyx_GOTREF(__pyx_t_1);
+    __Pyx_DECREF(__pyx_t_6); __pyx_t_6 = 0;
+  }
+  __Pyx_DECREF(__pyx_t_3); __pyx_t_3 = 0;
+  __pyx_v_rc = __pyx_t_1;
+  __pyx_t_1 = 0;
+
+  /* "pyjls/binding.pyx":299
+ *     d = _storage_unpack(storage_type, data, data_size)
+ *     rc = cbk_fn(chunk_meta, d)
+ *     return 1 if bool(rc) else 0             # <<<<<<<<<<<<<<
+ */
+  __pyx_t_8 = __Pyx_PyObject_IsTrue(__pyx_v_rc); if (unlikely(__pyx_t_8 < 0)) __PYX_ERR(0, 299, __pyx_L1_error)
+  if (((!(!__pyx_t_8)) != 0)) {
+    __pyx_t_7 = 1;
+  } else {
+    __pyx_t_7 = 0;
+  }
+  __pyx_r = __pyx_t_7;
+  goto __pyx_L0;
+
+  /* "pyjls/binding.pyx":294
+ * 
+ * 
+ * cdef int32_t _user_data_cbk_fn(void * user_data, uint16_t chunk_meta, c_jls.jls_storage_type_e storage_type,             # <<<<<<<<<<<<<<
+ *         uint8_t * data, uint32_t data_size):
+ *     cbk_fn = <object> user_data
+ */
+
+  /* function exit code */
+  __pyx_L1_error:;
+  __Pyx_XDECREF(__pyx_t_1);
+  __Pyx_XDECREF(__pyx_t_2);
+  __Pyx_XDECREF(__pyx_t_3);
+  __Pyx_XDECREF(__pyx_t_4);
+  __Pyx_XDECREF(__pyx_t_6);
+  __Pyx_WriteUnraisable("pyjls.binding._user_data_cbk_fn", __pyx_clineno, __pyx_lineno, __pyx_filename, 1, 0);
+  __pyx_r = 0;
+  __pyx_L0:;
+  __Pyx_XDECREF(__pyx_v_cbk_fn);
+  __Pyx_XDECREF(__pyx_v_d);
+  __Pyx_XDECREF(__pyx_v_rc);
   __Pyx_RefNannyFinishContext();
   return __pyx_r;
 }
@@ -21464,8 +22278,10 @@ static PyMethodDef __pyx_methods_5pyjls_7binding_Reader[] = {
   {"close", (PyCFunction)__pyx_pw_5pyjls_7binding_6Reader_7close, METH_NOARGS, 0},
   {"fsr", (PyCFunction)(void*)(PyCFunctionWithKeywords)__pyx_pw_5pyjls_7binding_6Reader_9fsr, METH_VARARGS|METH_KEYWORDS, 0},
   {"fsr_statistics", (PyCFunction)(void*)(PyCFunctionWithKeywords)__pyx_pw_5pyjls_7binding_6Reader_11fsr_statistics, METH_VARARGS|METH_KEYWORDS, 0},
-  {"__reduce_cython__", (PyCFunction)__pyx_pw_5pyjls_7binding_6Reader_13__reduce_cython__, METH_NOARGS, 0},
-  {"__setstate_cython__", (PyCFunction)__pyx_pw_5pyjls_7binding_6Reader_15__setstate_cython__, METH_O, 0},
+  {"annotations", (PyCFunction)(void*)(PyCFunctionWithKeywords)__pyx_pw_5pyjls_7binding_6Reader_13annotations, METH_VARARGS|METH_KEYWORDS, 0},
+  {"user_data", (PyCFunction)__pyx_pw_5pyjls_7binding_6Reader_15user_data, METH_O, 0},
+  {"__reduce_cython__", (PyCFunction)__pyx_pw_5pyjls_7binding_6Reader_17__reduce_cython__, METH_NOARGS, 0},
+  {"__setstate_cython__", (PyCFunction)__pyx_pw_5pyjls_7binding_6Reader_19__setstate_cython__, METH_O, 0},
   {0, 0, 0, 0}
 };
 
@@ -22350,10 +23166,12 @@ static __Pyx_StringTabEntry __pyx_string_tab[] = {
   {&__pyx_kp_u_annotation_failed, __pyx_k_annotation_failed, sizeof(__pyx_k_annotation_failed), 0, 1, 0, 0},
   {&__pyx_n_s_annotation_map, __pyx_k_annotation_map, sizeof(__pyx_k_annotation_map), 0, 0, 1, 1},
   {&__pyx_n_s_annotation_type, __pyx_k_annotation_type, sizeof(__pyx_k_annotation_type), 0, 0, 1, 1},
+  {&__pyx_kp_u_annotations_failed, __pyx_k_annotations_failed, sizeof(__pyx_k_annotations_failed), 0, 1, 0, 0},
   {&__pyx_n_s_base, __pyx_k_base, sizeof(__pyx_k_base), 0, 0, 1, 1},
   {&__pyx_n_s_basetype, __pyx_k_basetype, sizeof(__pyx_k_basetype), 0, 0, 1, 1},
   {&__pyx_n_s_c, __pyx_k_c, sizeof(__pyx_k_c), 0, 0, 1, 1},
   {&__pyx_n_u_c, __pyx_k_c, sizeof(__pyx_k_c), 0, 1, 0, 1},
+  {&__pyx_n_s_cbk_fn, __pyx_k_cbk_fn, sizeof(__pyx_k_cbk_fn), 0, 0, 1, 1},
   {&__pyx_n_s_chunk_meta, __pyx_k_chunk_meta, sizeof(__pyx_k_chunk_meta), 0, 0, 1, 1},
   {&__pyx_n_s_class, __pyx_k_class, sizeof(__pyx_k_class), 0, 0, 1, 1},
   {&__pyx_n_s_cline_in_traceback, __pyx_k_cline_in_traceback, sizeof(__pyx_k_cline_in_traceback), 0, 0, 1, 1},
@@ -22392,6 +23210,7 @@ static __Pyx_StringTabEntry __pyx_string_tab[] = {
   {&__pyx_kp_s_itemsize_0_for_cython_array, __pyx_k_itemsize_0_for_cython_array, sizeof(__pyx_k_itemsize_0_for_cython_array), 0, 0, 1, 0},
   {&__pyx_n_s_json, __pyx_k_json, sizeof(__pyx_k_json), 0, 0, 1, 1},
   {&__pyx_n_s_length, __pyx_k_length, sizeof(__pyx_k_length), 0, 0, 1, 1},
+  {&__pyx_n_s_loads, __pyx_k_loads, sizeof(__pyx_k_loads), 0, 0, 1, 1},
   {&__pyx_n_s_logging, __pyx_k_logging, sizeof(__pyx_k_logging), 0, 0, 1, 1},
   {&__pyx_n_s_lower, __pyx_k_lower, sizeof(__pyx_k_lower), 0, 0, 1, 1},
   {&__pyx_n_s_main, __pyx_k_main, sizeof(__pyx_k_main), 0, 0, 1, 1},
@@ -22487,9 +23306,9 @@ static __Pyx_StringTabEntry __pyx_string_tab[] = {
   {0, 0, 0, 0, 0, 0, 0}
 };
 static CYTHON_SMALL_CODE int __Pyx_InitCachedBuiltins(void) {
-  __pyx_builtin_RuntimeError = __Pyx_GetBuiltinName(__pyx_n_s_RuntimeError); if (!__pyx_builtin_RuntimeError) __PYX_ERR(0, 91, __pyx_L1_error)
+  __pyx_builtin_RuntimeError = __Pyx_GetBuiltinName(__pyx_n_s_RuntimeError); if (!__pyx_builtin_RuntimeError) __PYX_ERR(0, 102, __pyx_L1_error)
   __pyx_builtin_TypeError = __Pyx_GetBuiltinName(__pyx_n_s_TypeError); if (!__pyx_builtin_TypeError) __PYX_ERR(1, 2, __pyx_L1_error)
-  __pyx_builtin_range = __Pyx_GetBuiltinName(__pyx_n_s_range); if (!__pyx_builtin_range) __PYX_ERR(0, 190, __pyx_L1_error)
+  __pyx_builtin_range = __Pyx_GetBuiltinName(__pyx_n_s_range); if (!__pyx_builtin_range) __PYX_ERR(0, 201, __pyx_L1_error)
   __pyx_builtin_ImportError = __Pyx_GetBuiltinName(__pyx_n_s_ImportError); if (!__pyx_builtin_ImportError) __PYX_ERR(2, 884, __pyx_L1_error)
   __pyx_builtin_ValueError = __Pyx_GetBuiltinName(__pyx_n_s_ValueError); if (!__pyx_builtin_ValueError) __PYX_ERR(1, 133, __pyx_L1_error)
   __pyx_builtin_MemoryError = __Pyx_GetBuiltinName(__pyx_n_s_MemoryError); if (!__pyx_builtin_MemoryError) __PYX_ERR(1, 148, __pyx_L1_error)
@@ -22787,12 +23606,12 @@ static CYTHON_SMALL_CODE int __Pyx_InitCachedConstants(void) {
  * 
  * def _storage_pack(data):             # <<<<<<<<<<<<<<
  *     if isinstance(data, str):
- *         return c_jls.JLS_STORAGE_TYPE_STRING, _encode_str(data)
+ *         s = _encode_str(data)
  */
-  __pyx_tuple__29 = PyTuple_Pack(1, __pyx_n_s_data); if (unlikely(!__pyx_tuple__29)) __PYX_ERR(0, 74, __pyx_L1_error)
+  __pyx_tuple__29 = PyTuple_Pack(2, __pyx_n_s_data, __pyx_n_s_s); if (unlikely(!__pyx_tuple__29)) __PYX_ERR(0, 74, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_tuple__29);
   __Pyx_GIVEREF(__pyx_tuple__29);
-  __pyx_codeobj__30 = (PyObject*)__Pyx_PyCode_New(1, 0, 1, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__29, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_pyjls_binding_pyx, __pyx_n_s_storage_pack, 74, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__30)) __PYX_ERR(0, 74, __pyx_L1_error)
+  __pyx_codeobj__30 = (PyObject*)__Pyx_PyCode_New(1, 0, 2, 0, CO_OPTIMIZED|CO_NEWLOCALS, __pyx_empty_bytes, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_tuple__29, __pyx_empty_tuple, __pyx_empty_tuple, __pyx_kp_s_pyjls_binding_pyx, __pyx_n_s_storage_pack, 74, __pyx_empty_bytes); if (unlikely(!__pyx_codeobj__30)) __PYX_ERR(0, 74, __pyx_L1_error)
 
   /* "View.MemoryView":286
  *         return self.name
@@ -22928,25 +23747,25 @@ static int __Pyx_modinit_type_init_code(void) {
   int __pyx_clineno = 0;
   __Pyx_RefNannySetupContext("__Pyx_modinit_type_init_code", 0);
   /*--- Type init code ---*/
-  if (PyType_Ready(&__pyx_type_5pyjls_7binding_Writer) < 0) __PYX_ERR(0, 84, __pyx_L1_error)
+  if (PyType_Ready(&__pyx_type_5pyjls_7binding_Writer) < 0) __PYX_ERR(0, 95, __pyx_L1_error)
   #if PY_VERSION_HEX < 0x030800B1
   __pyx_type_5pyjls_7binding_Writer.tp_print = 0;
   #endif
   if ((CYTHON_USE_TYPE_SLOTS && CYTHON_USE_PYTYPE_LOOKUP) && likely(!__pyx_type_5pyjls_7binding_Writer.tp_dictoffset && __pyx_type_5pyjls_7binding_Writer.tp_getattro == PyObject_GenericGetAttr)) {
     __pyx_type_5pyjls_7binding_Writer.tp_getattro = __Pyx_PyObject_GenericGetAttr;
   }
-  if (PyObject_SetAttr(__pyx_m, __pyx_n_s_Writer, (PyObject *)&__pyx_type_5pyjls_7binding_Writer) < 0) __PYX_ERR(0, 84, __pyx_L1_error)
-  if (__Pyx_setup_reduce((PyObject*)&__pyx_type_5pyjls_7binding_Writer) < 0) __PYX_ERR(0, 84, __pyx_L1_error)
+  if (PyObject_SetAttr(__pyx_m, __pyx_n_s_Writer, (PyObject *)&__pyx_type_5pyjls_7binding_Writer) < 0) __PYX_ERR(0, 95, __pyx_L1_error)
+  if (__Pyx_setup_reduce((PyObject*)&__pyx_type_5pyjls_7binding_Writer) < 0) __PYX_ERR(0, 95, __pyx_L1_error)
   __pyx_ptype_5pyjls_7binding_Writer = &__pyx_type_5pyjls_7binding_Writer;
-  if (PyType_Ready(&__pyx_type_5pyjls_7binding_Reader) < 0) __PYX_ERR(0, 170, __pyx_L1_error)
+  if (PyType_Ready(&__pyx_type_5pyjls_7binding_Reader) < 0) __PYX_ERR(0, 181, __pyx_L1_error)
   #if PY_VERSION_HEX < 0x030800B1
   __pyx_type_5pyjls_7binding_Reader.tp_print = 0;
   #endif
   if ((CYTHON_USE_TYPE_SLOTS && CYTHON_USE_PYTYPE_LOOKUP) && likely(!__pyx_type_5pyjls_7binding_Reader.tp_dictoffset && __pyx_type_5pyjls_7binding_Reader.tp_getattro == PyObject_GenericGetAttr)) {
     __pyx_type_5pyjls_7binding_Reader.tp_getattro = __Pyx_PyObject_GenericGetAttr;
   }
-  if (PyObject_SetAttr(__pyx_m, __pyx_n_s_Reader, (PyObject *)&__pyx_type_5pyjls_7binding_Reader) < 0) __PYX_ERR(0, 170, __pyx_L1_error)
-  if (__Pyx_setup_reduce((PyObject*)&__pyx_type_5pyjls_7binding_Reader) < 0) __PYX_ERR(0, 170, __pyx_L1_error)
+  if (PyObject_SetAttr(__pyx_m, __pyx_n_s_Reader, (PyObject *)&__pyx_type_5pyjls_7binding_Reader) < 0) __PYX_ERR(0, 181, __pyx_L1_error)
+  if (__Pyx_setup_reduce((PyObject*)&__pyx_type_5pyjls_7binding_Reader) < 0) __PYX_ERR(0, 181, __pyx_L1_error)
   __pyx_ptype_5pyjls_7binding_Reader = &__pyx_type_5pyjls_7binding_Reader;
   __pyx_vtabptr_array = &__pyx_vtable_array;
   __pyx_vtable_array.get_memview = (PyObject *(*)(struct __pyx_array_obj *))__pyx_array_get_memview;
@@ -23681,7 +24500,7 @@ if (!__Pyx_RefNanny) {
  * 
  * def _storage_pack(data):             # <<<<<<<<<<<<<<
  *     if isinstance(data, str):
- *         return c_jls.JLS_STORAGE_TYPE_STRING, _encode_str(data)
+ *         s = _encode_str(data)
  */
   __pyx_t_2 = PyCFunction_NewEx(&__pyx_mdef_5pyjls_7binding_5_storage_pack, NULL, __pyx_n_s_pyjls_binding); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 74, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
@@ -24613,6 +25432,39 @@ static CYTHON_INLINE PyObject *__Pyx__GetModuleGlobalName(PyObject *name)
     return __Pyx_GetBuiltinName(name);
 }
 
+/* decode_c_string */
+static CYTHON_INLINE PyObject* __Pyx_decode_c_string(
+         const char* cstring, Py_ssize_t start, Py_ssize_t stop,
+         const char* encoding, const char* errors,
+         PyObject* (*decode_func)(const char *s, Py_ssize_t size, const char *errors)) {
+    Py_ssize_t length;
+    if (unlikely((start < 0) | (stop < 0))) {
+        size_t slen = strlen(cstring);
+        if (unlikely(slen > (size_t) PY_SSIZE_T_MAX)) {
+            PyErr_SetString(PyExc_OverflowError,
+                            "c-string too long to convert to Python");
+            return NULL;
+        }
+        length = (Py_ssize_t) slen;
+        if (start < 0) {
+            start += length;
+            if (start < 0)
+                start = 0;
+        }
+        if (stop < 0)
+            stop += length;
+    }
+    if (unlikely(stop <= start))
+        return __Pyx_NewRef(__pyx_empty_unicode);
+    length = stop - start;
+    cstring += start;
+    if (decode_func) {
+        return decode_func(cstring, length, errors);
+    } else {
+        return PyUnicode_Decode(cstring, length, encoding, errors);
+    }
+}
+
 /* ArgTypeTest */
 static int __Pyx__ArgTypeTest(PyObject *obj, PyTypeObject *type, const char *name, int exact)
 {
@@ -25153,39 +26005,6 @@ static PyObject *__Pyx_PyObject_GetItem(PyObject *obj, PyObject* key) {
 }
 #endif
 
-/* decode_c_string */
-static CYTHON_INLINE PyObject* __Pyx_decode_c_string(
-         const char* cstring, Py_ssize_t start, Py_ssize_t stop,
-         const char* encoding, const char* errors,
-         PyObject* (*decode_func)(const char *s, Py_ssize_t size, const char *errors)) {
-    Py_ssize_t length;
-    if (unlikely((start < 0) | (stop < 0))) {
-        size_t slen = strlen(cstring);
-        if (unlikely(slen > (size_t) PY_SSIZE_T_MAX)) {
-            PyErr_SetString(PyExc_OverflowError,
-                            "c-string too long to convert to Python");
-            return NULL;
-        }
-        length = (Py_ssize_t) slen;
-        if (start < 0) {
-            start += length;
-            if (start < 0)
-                start = 0;
-        }
-        if (stop < 0)
-            stop += length;
-    }
-    if (unlikely(stop <= start))
-        return __Pyx_NewRef(__pyx_empty_unicode);
-    length = stop - start;
-    cstring += start;
-    if (decode_func) {
-        return decode_func(cstring, length, errors);
-    } else {
-        return PyUnicode_Decode(cstring, length, encoding, errors);
-    }
-}
-
 /* SetItemInt */
 static int __Pyx_SetItemInt_Generic(PyObject *o, PyObject *j, PyObject *v) {
     int r;
@@ -25315,6 +26134,48 @@ static CYTHON_INLINE int __Pyx_PyObject_SetAttrStr(PyObject* obj, PyObject* attr
     return PyObject_SetAttr(obj, attr_name, value);
 }
 #endif
+
+/* WriteUnraisableException */
+static void __Pyx_WriteUnraisable(const char *name, CYTHON_UNUSED int clineno,
+                                  CYTHON_UNUSED int lineno, CYTHON_UNUSED const char *filename,
+                                  int full_traceback, CYTHON_UNUSED int nogil) {
+    PyObject *old_exc, *old_val, *old_tb;
+    PyObject *ctx;
+    __Pyx_PyThreadState_declare
+#ifdef WITH_THREAD
+    PyGILState_STATE state;
+    if (nogil)
+        state = PyGILState_Ensure();
+#ifdef _MSC_VER
+    else state = (PyGILState_STATE)-1;
+#endif
+#endif
+    __Pyx_PyThreadState_assign
+    __Pyx_ErrFetch(&old_exc, &old_val, &old_tb);
+    if (full_traceback) {
+        Py_XINCREF(old_exc);
+        Py_XINCREF(old_val);
+        Py_XINCREF(old_tb);
+        __Pyx_ErrRestore(old_exc, old_val, old_tb);
+        PyErr_PrintEx(1);
+    }
+    #if PY_MAJOR_VERSION < 3
+    ctx = PyString_FromString(name);
+    #else
+    ctx = PyUnicode_FromString(name);
+    #endif
+    __Pyx_ErrRestore(old_exc, old_val, old_tb);
+    if (!ctx) {
+        PyErr_WriteUnraisable(Py_None);
+    } else {
+        PyErr_WriteUnraisable(ctx);
+        Py_DECREF(ctx);
+    }
+#ifdef WITH_THREAD
+    if (nogil)
+        PyGILState_Release(state);
+#endif
+}
 
 /* GetTopmostException */
 #if CYTHON_USE_EXC_INFO_STACK

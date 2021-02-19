@@ -73,12 +73,23 @@ def _encode_str(s):
 
 def _storage_pack(data):
     if isinstance(data, str):
-        return c_jls.JLS_STORAGE_TYPE_STRING, _encode_str(data)
+        s = _encode_str(data)
+        return c_jls.JLS_STORAGE_TYPE_STRING, s, len(s) + 1
     elif isinstance(data, bytes):
-        return c_jls.JLS_STORAGE_TYPE_BINARY, data
+        return c_jls.JLS_STORAGE_TYPE_BINARY, data, len(data)
     else:
-        return c_jls.JLS_STORAGE_TYPE_JSON, _encode_str(json.dumps(data))
+        s = _encode_str(json.dumps(data))
+        return c_jls.JLS_STORAGE_TYPE_JSON, s, len(s) + 1
 
+
+cdef _storage_unpack(uint8_t storage_type, const uint8_t * data, uint32_t data_size):
+    cdef const char * str = <const char *> data
+    if storage_type == c_jls.JLS_STORAGE_TYPE_STRING:
+        return str[:data_size - 1].decode('utf-8')
+    elif storage_type == c_jls.JLS_STORAGE_TYPE_BINARY:
+        return data[:data_size]
+    else:
+        return json.loads(str[:data_size - 1].decode('utf-8'))
 
 
 cdef class Writer:
@@ -144,8 +155,8 @@ cdef class Writer:
 
     def user_data(self, chunk_meta, data):
         cdef int32_t rc
-        storage_type, payload = _storage_pack(data)
-        rc = c_jls.jls_twr_user_data(self._wr, chunk_meta, storage_type, payload, len(payload))
+        storage_type, payload, payload_length = _storage_pack(data)
+        rc = c_jls.jls_twr_user_data(self._wr, chunk_meta, storage_type, payload, payload_length)
         if rc:
             raise RuntimeError(f'user_data failed {rc}')
 
@@ -160,9 +171,9 @@ cdef class Writer:
         cdef int32_t rc
         if isinstance(annotation_type, str):
             annotation_type = _annotation_map[annotation_type.lower()]
-        storage_type, payload = _storage_pack(data)
+        storage_type, payload, payload_length = _storage_pack(data)
         rc = c_jls.jls_twr_annotation(self._wr, signal_id, timestamp, annotation_type,
-            storage_type, payload, len(payload))
+            storage_type, payload, payload_length)
         if rc:
             raise RuntimeError(f'annotation failed {rc}')
 
@@ -260,10 +271,29 @@ cdef class Reader:
             raise RuntimeError(f'fsr_statistics failed {rc}')
         return data
 
-    #ctypedef int32_t (*jls_rd_annotation_cbk_fn)(void * user_data, const jls_annotation_s * annotation)
-    #int32_t jls_rd_annotations(jls_rd_s * self, uint16_t signal_id,
-    #    int64_t timestamp, jls_rd_annotation_cbk_fn cbk_fn, void * cbk_user_data)
-    #ctypedef int32_t (*jls_rd_user_data_cbk_fn)(void * user_data,
-    #    uint16_t chunk_meta, jls_storage_type_e storage_type,
-    #    uint8_t * data, uint32_t data_size)
-    #int32_t jls_rd_user_data(jls_rd_s * self, jls_rd_user_data_cbk_fn cbk_fn, void * cbk_user_data)
+    def annotations(self, signal_id, timestamp, cbk_fn):
+        cdef int32_t rc
+        rc = c_jls.jls_rd_annotations(self._rd, signal_id, timestamp, _annotation_cbk_fn, <void *> cbk_fn)
+        if rc:
+            raise RuntimeError(f'annotations failed {rc}')
+
+    def user_data(self, cbk_fn):
+        cdef int32_t rc
+        rc = c_jls.jls_rd_user_data(self._rd, _user_data_cbk_fn, <void *> cbk_fn)
+        if rc:
+            raise RuntimeError(f'annotations failed {rc}')
+
+
+cdef int32_t _annotation_cbk_fn(void * user_data, const c_jls.jls_annotation_s * annotation):
+    cbk_fn = <object> user_data
+    data = _storage_unpack(annotation[0].storage_type, annotation[0].data, annotation[0].data_size)
+    rc = cbk_fn(annotation[0].timestamp, annotation[0].annotation_type, data)
+    return 1 if bool(rc) else 0
+
+
+cdef int32_t _user_data_cbk_fn(void * user_data, uint16_t chunk_meta, c_jls.jls_storage_type_e storage_type,
+        uint8_t * data, uint32_t data_size):
+    cbk_fn = <object> user_data
+    d = _storage_unpack(storage_type, data, data_size)
+    rc = cbk_fn(chunk_meta, d)
+    return 1 if bool(rc) else 0
