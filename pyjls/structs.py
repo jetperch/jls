@@ -40,7 +40,7 @@ class SignalDef:
     data_type: int = 0
     sample_rate: int = 0
     samples_per_data: int = 100000
-    sample_decimate_factor: int = 100
+    sample_decimate_factor: int = 1000
     entries_per_summary: int = 20000
     summary_decimate_factor: int = 100
     annotation_decimate_factor: int = 100
