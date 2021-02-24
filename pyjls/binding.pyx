@@ -24,12 +24,16 @@ from libc.stdint cimport uint8_t, uint16_t, uint32_t, uint64_t, int32_t, int64_t
 from libc.float cimport DBL_MAX
 from libc.math cimport isfinite, NAN
 
+from collections.abc import Mapping
 import json
 import logging
 import numpy as np
 cimport numpy as np
 from . cimport c_jls
 from .structs import SourceDef, SignalDef
+
+
+__all__ = ['DataType', 'AnnotationType', 'SignalType', 'Writer', 'Reader', 'SourceDef', 'SignalDef', 'SummaryFSR']
 
 
 def _data_type_def(basetype, size, q):
@@ -62,6 +66,19 @@ _annotation_map = {
     'string': AnnotationType.TEXT,
     'marker': AnnotationType.MARKER,
 }
+
+
+class SignalType:
+    FSR = c_jls.JLS_SIGNAL_TYPE_FSR
+    VSR = c_jls.JLS_SIGNAL_TYPE_VSR
+
+
+class SummaryFSR:
+    MEAN = c_jls.JLS_SUMMARY_FSR_MEAN
+    STD = c_jls.JLS_SUMMARY_FSR_STD
+    MIN = c_jls.JLS_SUMMARY_FSR_MIN
+    MAX = c_jls.JLS_SUMMARY_FSR_MAX
+    COUNT = c_jls.JLS_SUMMARY_FSR_COUNT
 
 
 def _encode_str(s):
@@ -189,8 +206,8 @@ cdef class Reader:
         cdef c_jls.jls_signal_def_s * signals
         cdef uint16_t count
         cdef int64_t samples
-        self._sources = {}
-        self._signals = {}
+        self._sources: Mapping[int, SourceDef] = {}
+        self._signals: Mapping[int, SignalDef] = {}
         rc = c_jls.jls_rd_open(&self._rd, path.encode('utf-8'))
         if rc:
             raise RuntimeError(f'open failed {rc}')
@@ -262,6 +279,15 @@ cdef class Reader:
         return data
 
     def fsr_statistics(self, signal_id, start_sample_id, increment, length):
+        """Read FSR statistics.
+
+        :param signal_id: The signal id.
+        :param start_sample_id: The starting sample id to read.
+        :param increment: The number of samples represented per return value.
+        :param length: The number of return values to generate.
+        :return The 2-D array[summary][stat] where the stat column is defined by SummaryFSR.
+        """
+
         cdef int32_t rc
         cdef np.float32_t [:, :] c_data
         data = np.empty((length, 4), dtype=np.float32)

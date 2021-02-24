@@ -129,6 +129,10 @@ int32_t jls_wr_annotation(struct jls_wr_s * self, uint16_t signal_id, int64_t ti
                           enum jls_annotation_type_e annotation_type,
                           enum jls_storage_type_e storage_type, const uint8_t * data, uint32_t data_size);
 
+// todo jls_wr_fsr_int
+// int32_t jls_wr_fsr_f32(struct jls_wr_s * self, uint16_t signal_id,
+//        int64_t sample_id, const void * data, uint32_t data_length);
+
 // todo jls_wr_fsr_utc
 //int32_t jls_wr_fsr_utc(struct jls_wr_s * self, uint16_t signal_id, int64_t sample_id, int64_t utc);
 

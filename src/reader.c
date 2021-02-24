@@ -101,9 +101,9 @@ struct f32_buf_s {
 struct signal_s {
     int64_t timestamp_start;
     int64_t timestamp_end;
-    int64_t track_defs[4];
-    int64_t track_head_offsets[4];
-    int64_t track_head_data[4][JLS_SUMMARY_LEVEL_COUNT];
+    int64_t track_defs[JLS_TRACK_TYPE_COUNT];
+    int64_t track_head_offsets[JLS_TRACK_TYPE_COUNT];
+    int64_t track_head_data[JLS_TRACK_TYPE_COUNT][JLS_SUMMARY_LEVEL_COUNT];
 };
 
 struct jls_rd_s {
@@ -768,21 +768,21 @@ static int64_t round_up_to_multiple_i64(int64_t x, int64_t m) {
 
 static inline void floats_to_stats(struct jls_statistics_s * stats, float * data, int64_t count) {
     stats->k = count;
-    stats->mean = data[0];
-    stats->min = data[1];
-    stats->max = data[2];
+    stats->mean = data[JLS_SUMMARY_FSR_MEAN];
+    stats->min = data[JLS_SUMMARY_FSR_MIN];
+    stats->max = data[JLS_SUMMARY_FSR_MAX];
     if (count > 1) {
-        stats->s = ((double) data[3]) * data[3] * (count - 1);
+        stats->s = ((double) data[JLS_SUMMARY_FSR_STD]) * data[JLS_SUMMARY_FSR_STD] * (count - 1);
     } else {
         stats->s = 0.0;
     }
 }
 
 static inline void stats_to_float(float * data, struct jls_statistics_s * stats) {
-    data[0] = (float) stats->mean;
-    data[1] = (float) stats->min;
-    data[2] = (float) stats->max;
-    data[3] = (float) sqrt(jls_statistics_var(stats));
+    data[JLS_SUMMARY_FSR_MEAN] = (float) stats->mean;
+    data[JLS_SUMMARY_FSR_MIN] = (float) stats->min;
+    data[JLS_SUMMARY_FSR_MAX] = (float) stats->max;
+    data[JLS_SUMMARY_FSR_STD] = (float) sqrt(jls_statistics_var(stats));
 }
 
 static int32_t rd_stats_chunk(struct jls_rd_s * self, uint16_t signal_id, uint8_t level) {
@@ -803,7 +803,11 @@ static int32_t rd_stats_chunk(struct jls_rd_s * self, uint16_t signal_id, uint8_
     JLS_LOGI("stats chunk: sample_id=%" PRIi64 ", entries=%" PRIi64, i64[0], i64[1]);
     float * d = (float *) &i64[2];
     for (int64_t i = 0; i < i64[1] * 4; i += 4) {
-        JLS_LOGI("stats: %f %f %f %f", d[i + 0], d[i + 1], d[i + 2], d[i + 3]);
+        JLS_LOGI("stats: mean=%f min=%f max=%f std=%f",
+            d[i + JLS_SUMMARY_FSR_MEAN],
+            d[i + JLS_SUMMARY_FSR_MIN],
+            d[i + JLS_SUMMARY_FSR_MAX],
+            d[i + JLS_SUMMARY_FSR_STD]);
     }
     */
     return 0;
@@ -830,6 +834,10 @@ static int32_t fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
     int64_t entry_offset = ((start_sample_id - chunk_sample_id + step_size - 1) / step_size);
     int64_t entry_sample_id = entry_offset * step_size + chunk_sample_id;
 
+    if (level >= 2) {
+        JLS_LOGI("%d: %f %f %f %f", (int) level, src[0], src[1], src[2], src[3]);
+    }
+
     struct jls_statistics_s stats_accum;
     jls_statistics_reset(&stats_accum);
     struct jls_statistics_s stats_next;
@@ -855,13 +863,13 @@ static int32_t fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
                 i64 = ((int64_t*) self->payload.start);
                 // chunk_sample_id = i64[0];
                 src = (float *) &i64[2];
-                src_end = src + i64[1] * 4;
+                src_end = src + i64[1] * JLS_SUMMARY_FSR_COUNT;
             } else {
                 if ((incr_remaining <= step_size) && (data_length == 1)) {
                     // not a problem, will fetch from lower statistics
                 } else {
                     JLS_LOGW("cannot get final %" PRIi64 " samples", data_length);
-                    for (int64_t idx = 0; idx < (4 * data_length); ++idx) {
+                    for (int64_t idx = 0; idx < (JLS_SUMMARY_FSR_COUNT * data_length); ++idx) {
                         data[idx] = NAN;
                     }
                     return JLS_ERROR_PARAMETER_INVALID;
@@ -878,7 +886,7 @@ static int32_t fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
             }
             jls_statistics_combine(&stats_accum, &stats_accum, &stats_next);
             stats_to_float(data, &stats_accum);
-            data += 4;
+            data += JLS_SUMMARY_FSR_COUNT;
             --data_length;
             int64_t incr = step_size - incr_remaining;
             if (incr) {
@@ -894,7 +902,7 @@ static int32_t fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
             incr_remaining -= step_size;
         }
         start_sample_id += step_size;
-        src += 4;
+        src += JLS_SUMMARY_FSR_COUNT;
     }
     return 0;
 }
@@ -978,17 +986,16 @@ int32_t jls_rd_fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
             }
             v_var *= var_scale;
 
-            data[0] = (float) v_mean;
-            data[1] = v_min;
-            data[2] = v_max;
-            data[3] = (float) sqrt(v_var);
-            data += 4;
+            data[JLS_SUMMARY_FSR_MEAN] = (float) v_mean;
+            data[JLS_SUMMARY_FSR_MIN] = v_min;
+            data[JLS_SUMMARY_FSR_MAX] = v_max;
+            data[JLS_SUMMARY_FSR_STD] = (float) sqrt(v_var);
+            data += JLS_SUMMARY_FSR_COUNT;
 
             buf_offset = 0;
             v_mean = 0.0;
             v_min = FLT_MAX;
             v_max = -FLT_MAX;
-            v_var = 0.0;
             --data_length;
         }
     }

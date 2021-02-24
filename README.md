@@ -16,9 +16,9 @@
 
 # JLS
 
-Welcome to the [Joulescope®](https://www.joulescope.com) File Format project.  The goal of this project is to
-provide performant data storage for huge, simultaneous, one-dimensional 
-signals. This repository contains:
+Welcome to the [Joulescope®](https://www.joulescope.com) File Format project.
+The goal of this project is to provide performant data storage for huge, 
+simultaneous, one-dimensional signals. This repository contains:
 
 * The JLS file format specification
 * The implementation in C
@@ -33,39 +33,45 @@ signals. This repository contains:
 
 * Support for multiple, simultaneous data sources
 * Support for multiple, simultaneous signal waveforms
-  * Fixed sample rate data
-  * Handles missing samples gracefully (interpolate)
+* Fixed sample rate signals (FSR)
+  * Handles missing samples gracefully (interpolate) 🔜
   * Multiple data types including:
-    - Floating point: f32, f64
-    - Unsigned integers in nibble (4 bit) increments. 
-    - Signed integers in nibble (4 bit) increments.
-    - Fixed-point, signed integers in nibble (4 bit) increments.
-    - Boolean (digital) 1-bit signals.
-* Support for variable sample rate (timestamped) data
-  * Additional support for binary and text, such as for UTF-8 UART data.
-* Fast read performance.
+    - Floating point: f32
+     - Floating point: f64 🔜 
+    - Unsigned integers in nibble (4 bit) increments 🔜 
+    - Signed integers in nibble (4 bit) increments 🔜
+    - Fixed-point, signed integers in nibble (4 bit) increments 🔜
+    - Boolean (digital) 1-bit signals 🔜
+* Variable sample rate (VSR) signals 🔜
+* Fast read performance
   * Signal Summaries
     * "Zoomed out" view with mean, min, max, standard deviation
     * Provides fast waveform load without any additional processing steps
   * Automatic load by summary level
   * Fast seek, next, previous access
-* Wall-clock time (UTC) to sample id
+* Sample ID to Wall-clock time (UTC) for FSR signals 🔜
 * Annotations
-  * Global (UTC time)
-  * Attached to signals
-  * Support for text, marker, binary, and JSON.
+  * Global VSR annotations
+  * Signal annotations, timestamped to sample_id for FSR and UTC time for VSR
+  * Support for text, marker, and user-defined (text, binary, JSON)
 * User data
-  * Arbitrary data included in the same file.
-  * Support for text, binary, and JSON.
+  * Arbitrary data included in the same file
+  * Support for text, binary, and JSON
 * Reliability
-  * File data still accessible in the case of improper program termination.
-  * In case of file corruption, uncorrupted data is still accessible.
-  * On write, avoid changing already written data.  The only exception is
-    updating indices and the doubly-linked list next pointer.
-* Compression options
-  * lossless
-  * lossy
-  * lossy with downsampling below threshold
+  * Integrated integrity checks using CRC32C
+  * File data still accessible in the case of improper program termination 🔜
+  * Uncorrupted data is still accessible in presence of file corruption 🔜
+  * Write once, except for indices and the doubly-linked list pointers
+* Compression options 🔜
+  * lossless 🔜
+  * lossy 🔜
+  * lossy with downsampling below threshold 🔜
+
+Items marked with 🔜 are under development and coming soon.
+As of Feb 2021, the JLS v2 file structure is well-defined.
+However, the datatype and compression storage formats are not 
+yet defined, and the software still needs to grow to support 
+the target feature set.
 
 
 ## Why JLS?

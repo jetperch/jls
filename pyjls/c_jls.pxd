@@ -16,6 +16,11 @@ from libc.stdint cimport uint8_t, uint16_t, uint32_t, uint64_t, int32_t, int64_t
 
 
 cdef extern from "jls/format.h":
+
+    enum jls_signal_type_e:
+        JLS_SIGNAL_TYPE_FSR = 0
+        JLS_SIGNAL_TYPE_VSR = 1
+
     enum jls_storage_type_e:
         JLS_STORAGE_TYPE_INVALID = 0
         JLS_STORAGE_TYPE_BINARY = 1
@@ -59,6 +64,13 @@ cdef extern from "jls/format.h":
         uint8_t rsv8_1
         uint32_t data_size
         uint8_t data[0]
+
+    enum jls_summary_fsr_e:
+        JLS_SUMMARY_FSR_MEAN = 0
+        JLS_SUMMARY_FSR_STD = 1
+        JLS_SUMMARY_FSR_MIN = 2
+        JLS_SUMMARY_FSR_MAX = 3
+        JLS_SUMMARY_FSR_COUNT = 4
 
 
 cdef extern from "jls/time.h":

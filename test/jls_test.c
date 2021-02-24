@@ -363,11 +363,11 @@ static void compare_stats(float * data, float * src, size_t src_length) {
     struct jls_statistics_s s1;
     jls_statistics_reset(&s1);
     jls_statistics_compute_f32(&s1, src, src_length);
-    assert_float_equal(s1.mean, data[0], 1e-7);
-    assert_float_equal(s1.min, data[1], 1e-7);
-    assert_float_equal(s1.max, data[2], 1e-7);
+    assert_float_equal(s1.mean, data[JLS_SUMMARY_FSR_MEAN], 1e-7);
+    assert_float_equal(s1.min, data[JLS_SUMMARY_FSR_MIN], 1e-7);
+    assert_float_equal(s1.max, data[JLS_SUMMARY_FSR_MAX], 1e-7);
     float v_std = (float) sqrt(jls_statistics_var(&s1));
-    assert_float_equal(v_std, data[3], 1e-7f + 0.0005f * v_std);
+    assert_float_equal(v_std, data[JLS_SUMMARY_FSR_STD], 1e-7f + 0.0005f * v_std);
 }
 
 static void test_statistics(void **state) {

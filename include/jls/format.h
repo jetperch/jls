@@ -140,6 +140,9 @@ enum jls_track_type_e {
      * is only used for FSR signals.
      */
     JLS_TRACK_TYPE_UTC = 3,
+
+    /// The total number of track types
+    JLS_TRACK_TYPE_COUNT = 4,
 };
 
 /**
@@ -310,6 +313,15 @@ struct jls_signal_def_s {       // 0 reserved for VSR annotations
 
 struct jls_track_head_s {
     uint64_t offset[16];  // 0 = data, 1 = first summary, ...
+};
+
+/// The summary storage order for each entry
+enum jls_summary_fsr_e {
+    JLS_SUMMARY_FSR_MEAN = 0,
+    JLS_SUMMARY_FSR_STD = 1,
+    JLS_SUMMARY_FSR_MIN = 2,
+    JLS_SUMMARY_FSR_MAX = 3,
+    JLS_SUMMARY_FSR_COUNT = 4,   // must be last
 };
 
 // struct jls_track_index_s variable sized, format defined by track
