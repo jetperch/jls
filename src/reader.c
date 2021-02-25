@@ -816,6 +816,8 @@ static int32_t rd_stats_chunk(struct jls_rd_s * self, uint16_t signal_id, uint8_
 static int32_t fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
                                   int64_t start_sample_id, int64_t increment, uint8_t level,
                                   float * data, int64_t data_length) {
+    JLS_LOGD2("fsr_f32_statistics(signal_id=%d, start_id=%" PRIi64 ", incr=%" PRIi64 ", level=%d, len=%" PRIi64 ")",
+              (int) signal_id, start_sample_id, increment, (int) level, data_length);
     struct jls_signal_def_s * signal_def = &self->signal_def[signal_id];
     int64_t step_size = signal_def->sample_decimate_factor;
     for (uint8_t lvl = 2; lvl <= level; ++lvl) {
@@ -833,10 +835,6 @@ static int32_t fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
     float * src_end = src + i64[1] * 4;
     int64_t entry_offset = ((start_sample_id - chunk_sample_id + step_size - 1) / step_size);
     int64_t entry_sample_id = entry_offset * step_size + chunk_sample_id;
-
-    if (level >= 2) {
-        JLS_LOGI("%d: %f %f %f %f", (int) level, src[0], src[1], src[2], src[3]);
-    }
 
     struct jls_statistics_s stats_accum;
     jls_statistics_reset(&stats_accum);
@@ -934,6 +932,8 @@ int32_t jls_rd_fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
     if (level) {  // use summaries
         return fsr_f32_statistics(self, signal_id, start_sample_id, increment, level, data, data_length);
     }  // else, use sample data
+    JLS_LOGD2("f32(signal_id=%d, start_id=%" PRIi64 ", incr=%" PRIi64 ", level=0, len=%" PRIi64 ")",
+              (int) signal_id, start_sample_id, increment, data_length);
 
     ROE(f32_buf_alloc(self, (size_t) increment));
     struct f32_buf_s * b = self->f32_buf;
@@ -961,7 +961,14 @@ int32_t jls_rd_fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
 
     while (data_length > 0) {
         if (src >= src_end) {
+            ROE(jls_raw_chunk_seek(self->raw, self->chunk_cur.hdr.item_next));
             ROE(rd(self));
+            if (self->chunk_cur.hdr.tag != JLS_TAG_TRACK_FSR_DATA) {
+                JLS_LOGW("unexpected chunk tag: %d", (int) self->chunk_cur.hdr.tag);
+            }
+            if (self->chunk_cur.hdr.chunk_meta != signal_id) {
+                JLS_LOGW("unexpected chunk meta: %d", (int) self->chunk_cur.hdr.chunk_meta);
+            }
             i64 = ((int64_t*) self->payload.start);
             chunk_sample_id = i64[0];
             src = (float *) &i64[2];

@@ -33,26 +33,26 @@
 #define SUMMARY_DECIMATE_FACTOR_MIN     (SAMPLE_DECIMATE_FACTOR_MIN)
 
 struct sample_buffer_s {  // for a single chunk
-    uint32_t length;
-    int64_t timestamp;
-    int64_t offset;
+    uint32_t length;        // in float32 values
+    int64_t timestamp;      // in samples
+    int64_t offset;         // in float32 values
     float data[];
 };
 
 struct summary_index_s {
-    uint32_t length;
+    uint32_t length;    // in entries
     int64_t timestamp;  // starting
-    int64_t offset;    // number of valid entries
+    int64_t offset;     // number of valid entries
     int64_t data[];
 };
 
 struct summary_buffer_s {
     uint8_t level;
-    uint32_t length;
+    uint32_t length;    // in float32
     struct summary_index_s * index;
     int64_t timestamp;
-    int64_t offset;
-    float data[];    // mean, min, max, std
+    int64_t offset;     // in float32 = entries*4
+    float data[];       // 4 per entry: mean, min, max, std
 };
 
 struct jls_wf_f32_s {
