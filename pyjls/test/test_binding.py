@@ -36,7 +36,7 @@ class TestBinding(unittest.TestCase):
         with Writer(self._path) as w:
             w.source_def(source_id=1, name='name', vendor='vendor', model='model',
                          version='version', serial_number='serial_number')
-            w.signal_def(3, source_id=1, sample_rate=1000000, name='current', si_units='A')
+            w.signal_def(3, source_id=1, sample_rate=1000000, name='current', units='A')
             w.user_data(1, b'user binary')
             w.user_data(2, 'user string')
             w.user_data(3, {'user': 'json'})
@@ -70,7 +70,7 @@ class TestBinding(unittest.TestCase):
             self.assertEqual(100, s.annotation_decimate_factor)
             self.assertEqual(100, s.utc_decimate_factor)
             self.assertEqual('current', s.name)
-            self.assertEqual('A', s.si_units)
+            self.assertEqual('A', s.units)
             self.assertEqual(len(data), s.length)
 
             np.testing.assert_allclose(data, r.fsr(3, 0, len(data)))

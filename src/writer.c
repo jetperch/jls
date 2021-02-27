@@ -68,7 +68,7 @@ struct signal_info_s {
     struct chunk_s chunk_def;
     struct jls_signal_def_s signal_def;
     char name[1024];
-    char si_units[128];
+    char units[128];
     struct track_info_s tracks[4];   // index jls_track_type_e
     struct jls_wf_f32_s * signal_writer;
 
@@ -120,7 +120,7 @@ struct jls_signal_def_s SIGNAL_0 = {       // 0 reserved for VSR annotations
         .annotation_decimate_factor = 100,
         .utc_decimate_factor = 100,
         .name = "global_annotation_signal",
-        .si_units = "",
+        .units = "",
 };
 
 int32_t jls_wr_open(struct jls_wr_s ** instance, const char * path) {
@@ -412,7 +412,7 @@ int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signal_def_s 
     // copy signal def
     info->signal_def = *signal;
     snprintf(info->name, sizeof(info->name), "%s", signal->name);
-    snprintf(info->si_units, sizeof(info->si_units), "%s", signal->si_units);
+    snprintf(info->units, sizeof(info->units), "%s", signal->units);
     info->signal_def.name = info->name;
     struct jls_signal_def_s * def = &info->signal_def;
 
@@ -477,7 +477,7 @@ int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signal_def_s 
     ROE(buf_wr_u32(self, def->utc_decimate_factor));
     ROE(buf_add_zero(self, 92));  // reserve space for future use.
     ROE(buf_add_str(self, def->name));
-    ROE(buf_add_str(self, def->si_units));
+    ROE(buf_add_str(self, def->units));
     uint32_t payload_length = buf_size(self);
 
     // construct header

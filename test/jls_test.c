@@ -73,7 +73,7 @@ const struct jls_signal_def_s SIGNAL_5 = {
         .annotation_decimate_factor = 100,
         .utc_decimate_factor = 100,
         .name = "signal 5",
-        .si_units = "A",
+        .units = "A",
 };
 
 const struct jls_signal_def_s SIGNAL_6 = {
@@ -89,7 +89,7 @@ const struct jls_signal_def_s SIGNAL_6 = {
         .annotation_decimate_factor = 100,
         .utc_decimate_factor = 100,
         .name = "signal 6",
-        .si_units = "V",
+        .units = "V",
 };
 
 #if !SKIP_BASIC
@@ -264,7 +264,7 @@ static void test_signal(void **state) {
     assert_int_equal(SIGNAL_5.annotation_decimate_factor, signals[1].annotation_decimate_factor);
     assert_int_equal(SIGNAL_5.utc_decimate_factor, signals[1].utc_decimate_factor);
     assert_string_equal(SIGNAL_5.name, signals[1].name);
-    assert_string_equal(SIGNAL_5.si_units, signals[1].si_units);
+    assert_string_equal(SIGNAL_5.units, signals[1].units);
     assert_string_equal(SIGNAL_6.name, signals[2].name);
 
     jls_rd_close(rd);

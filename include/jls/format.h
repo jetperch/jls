@@ -304,8 +304,8 @@ struct jls_signal_def_s {       // 0 reserved for VSR annotations
     uint32_t annotation_decimate_factor;
     uint32_t utc_decimate_factor;
     // on disk: reserve 64 bytes as 0 for future use
-    const char * name;
-    const char * si_units;
+    const char * name;                  // The signal name
+    const char * units;                 // The units string, normally as SI with no scale prefix.
 };
 
 //  struct jls_track_def_s  // empty, only need chunk_meta for now

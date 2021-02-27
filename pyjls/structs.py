@@ -46,7 +46,7 @@ class SignalDef:
     annotation_decimate_factor: int = 100
     utc_decimate_factor: int = 100
     name: str = None
-    si_units: str = None
+    units: str = None
     length: int = 0
 
     def info(self, verbose=None) -> str:
@@ -56,6 +56,6 @@ class SignalDef:
                           'samples_per_data', 'sample_decimate_factor',
                           'entries_per_summary', 'summary_decimate_factor',
                           'annotation_decimate_factor', 'utc_decimate_factor',
-                          'si_units', 'length']:
+                          'units', 'length']:
                 strs.append(f'    {field}: {getattr(self, field)}')
         return '\n'.join(strs)

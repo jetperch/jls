@@ -368,7 +368,7 @@ static int32_t handle_signal_def(struct jls_rd_s * self) {
     ROE(payload_parse_u32(self, &s->utc_decimate_factor));
     ROE(payload_skip(self, 92));
     ROE(payload_parse_str(self, (char **) &s->name));
-    ROE(payload_parse_str(self, (char **) &s->si_units));
+    ROE(payload_parse_str(self, (char **) &s->units));
     if (0 == signal_validate(self, signal_id, s)) {  // validate passed
         s->signal_id = signal_id;  // indicate that this signal is valid
         JLS_LOGD1("Found signal %d : %s", (int) signal_id, s->name);

@@ -90,7 +90,7 @@ const struct jls_signal_def_s SIGNAL_1 = {
         .annotation_decimate_factor = 100,
         .utc_decimate_factor = 100,
         .name = "current",
-        .si_units = "A",
+        .units = "A",
 };
 
 static int _isspace(char c) {
@@ -215,7 +215,7 @@ static int32_t json_signal_def(struct jls_rd_s * rd, uint16_t signal_id, FILE * 
     fprintf(json, "\n    \"annotation_decimate_factor\": %" PRIu32 ",", signal_def.annotation_decimate_factor);
     fprintf(json, "\n    \"utc_decimate_factor\": %" PRIu32 ",", signal_def.utc_decimate_factor);
     fprintf(json, "\n    \"name\": \"%s\",", signal_def.name);
-    fprintf(json, "\n    \"si_units\": \"%s\",", signal_def.si_units);
+    fprintf(json, "\n    \"units\": \"%s\",", signal_def.units);
     fprintf(json, "\n    \"length\": %" PRIi64, length);
     fprintf(json, "\n  }");
     fflush(json);
@@ -445,7 +445,7 @@ int main(int argc, char * argv[]) {
                 signal_def.name = argv[1];
             } else if (0 == strcmp("--units", argv[0])) {
                 REQUIRE_ARGS(2);
-                signal_def.si_units = argv[1];
+                signal_def.units = argv[1];
             } else if (0 == strcmp("--sample_rate", argv[0])) {
                 REQUIRE_ARGS(2);
                 RPE(cstr_to_u32(argv[1], &signal_def.sample_rate));
