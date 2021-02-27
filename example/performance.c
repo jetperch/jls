@@ -38,6 +38,8 @@ static const char usage_str[] =
 "Generate a JLS file.\n"
 "  generate <filename> [--<opt1> <value> ...]\n"
 "    <filename>                     The output file path.\n"
+"    --name                         The signal name.\n"
+"    --units                        The SI units.\n"
 "    --sample_rate                  The sample rate in Hz.\n"
 "    --length                       The JLS file length in samples.\n"
 "    --samples_per_data             The samples per data chunk.\n"
@@ -87,7 +89,7 @@ const struct jls_signal_def_s SIGNAL_1 = {
         .summary_decimate_factor = 100,
         .annotation_decimate_factor = 100,
         .utc_decimate_factor = 100,
-        .name = "performance_1",
+        .name = "current",
         .si_units = "A",
 };
 
@@ -438,6 +440,12 @@ int main(int argc, char * argv[]) {
             } else if (0 == strcmp("--filename", argv[0])) {
                 REQUIRE_ARGS(2);
                 filename = argv[1];
+            } else if (0 == strcmp("--name", argv[0])) {
+                REQUIRE_ARGS(2);
+                signal_def.name = argv[1];
+            } else if (0 == strcmp("--units", argv[0])) {
+                REQUIRE_ARGS(2);
+                signal_def.si_units = argv[1];
             } else if (0 == strcmp("--sample_rate", argv[0])) {
                 REQUIRE_ARGS(2);
                 RPE(cstr_to_u32(argv[1], &signal_def.sample_rate));

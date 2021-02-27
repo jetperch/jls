@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""embc command-line utility."""
+"""jls command-line utility."""
 
 
 import os

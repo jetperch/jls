@@ -145,6 +145,14 @@ cdef class Writer:
         if rc:
             raise RuntimeError(f'source_def failed {rc}')
 
+    def source_def_from_struct(self, s: SourceDef):
+        return self.source_def(s.source_id,
+                               name=s.name,
+                               vendor=s.vendor,
+                               model=s.model,
+                               version=s.version,
+                               serial_number=s.serial_number)
+
     def signal_def(self, signal_id, source_id, signal_type=None, data_type=None, sample_rate=None,
                    samples_per_data=None, sample_decimate_factor=None, entries_per_summary=None,
                    summary_decimate_factor=None, annotation_decimate_factor=None, utc_decimate_factor=None,
@@ -169,6 +177,21 @@ cdef class Writer:
         rc = c_jls.jls_twr_signal_def(self._wr, &s)
         if rc:
             raise RuntimeError(f'signal_def failed {rc}')
+
+    def signal_def_from_struct(self, s: SignalDef):
+        return self.signal_def(s.signal_id,
+                               s.source_id,
+                               signal_type=s.signal_type,
+                               data_type=s.data_type,
+                               sample_rate=s.sample_rate,
+                               samples_per_data=s.samples_per_data,
+                               sample_decimate_factor=s.sample_decimate_factor,
+                               entries_per_summary=s.entries_per_summary,
+                               summary_decimate_factor=s.summary_decimate_factor,
+                               annotation_decimate_factor=s.annotation_decimate_factor,
+                               utc_decimate_factor=s.utc_decimate_factor,
+                               name=s.name,
+                               si_units=s.si_units)
 
     def user_data(self, chunk_meta, data):
         cdef int32_t rc
@@ -261,11 +284,11 @@ cdef class Reader:
         c_jls.jls_rd_close(self._rd)
 
     @property
-    def sources(self):
+    def sources(self) -> Mapping[int, SourceDef]:
         return self._sources
 
     @property
-    def signals(self):
+    def signals(self) -> Mapping[int, SignalDef]:
         return self._signals
 
     def fsr(self, signal_id, start_sample_id, length):
