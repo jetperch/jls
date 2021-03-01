@@ -119,12 +119,15 @@ def run():
     with Writer(args.filename) as wr:
         wr.source_def_from_struct(source)
         wr.signal_def_from_struct(signal)
+        wr.user_data(0, 'string user data at start')
         length = args.length
         while length > 0:
             iter_len = y_len if y_len < length else length
             wr.fsr_f32(1, sample_id, y[:iter_len])
             sample_id += iter_len
             length -= iter_len
+        wr.user_data(42, b'binary data')
+        wr.user_data(43, {'my': 'data', 'json': [1, 2, 3]})
 
 
 if __name__ == "__main__":

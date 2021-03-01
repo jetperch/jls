@@ -29,6 +29,14 @@ def parser_config(p):
     return on_cmd
 
 
+def _user_data_cbk(chunk_meta, data):
+    suffix = ''
+    if len(data) > 64:
+        data = data[:64]
+        suffix = '...'
+    print(f'    {chunk_meta}: {data}{suffix}')
+
+
 def on_cmd(args):
     with Reader(args.filename) as r:
         print('Sources:')
@@ -39,3 +47,6 @@ def on_cmd(args):
         for signal in r.signals.values():
             s = signal.info(verbose=args.verbose)
             print(textwrap.indent(s, "    "))
+        print('User Data:')
+        r.user_data(_user_data_cbk)
+
