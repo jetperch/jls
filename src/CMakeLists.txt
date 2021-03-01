@@ -1,4 +1,4 @@
-# Copyright 2014-2017 Jetperch LLC
+# Copyright 2014-2021 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,9 +13,6 @@
 # limitations under the License.
 
 include_directories(../include_prv)
-
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/version.h.in
-        ${PROJECT_SOURCE_DIR}/include/jls/version.h)
 
 set(SOURCES
         crc32c_intel_sse4.c

@@ -1,4 +1,4 @@
-# Copyright 2014-2017 Jetperch LLC
+# Copyright 2014-2021 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,9 +15,9 @@
 cmake_minimum_required (VERSION 3.1)
 set(PARENT_PROJECT_DIR ${PROJECT_SOURCE_DIR})
 project(JLS
-        VERSION 0.0.1
+        VERSION 0.1.0
         LANGUAGES C)
-SET(PROJECT_PREFIX EMBC)
+SET(PROJECT_PREFIX JLS)
 SET(VERSION_STRING "${PROJECT_VERSION}")
 SET(VERSION_UNDERSCORE "${PROJECT_VERSION_MAJOR}_${PROJECT_VERSION_MINOR}_${PROJECT_VERSION_PATCH}")
 
@@ -76,6 +76,6 @@ if(JLS_DOCS AND JLS_TOPLEVEL)
     add_custom_target(docs ALL
                       COMMAND ${DOXYGEN_EXECUTABLE} ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile
                       SOURCES ${CMAKE_CURRENT_BINARY_DIR}/Doxyfile
-                      DEPENDS embc)
+                      DEPENDS jls)
     install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/doc/html/ DESTINATION doc)
 endif()

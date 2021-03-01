@@ -32,19 +32,49 @@
  * @{
  */
 
+// Use version_update.py to update.
+#define JLS_VERSION_MAJOR 0
+#define JLS_VERSION_MINOR 1
+#define JLS_VERSION_PATCH 0
 
-#define JLS_PLATFORM_ 1
+/**
+ * \brief Macro to encode version to uint32_t.
+ *
+ * \param major The major release number (0 to 255)
+ * \param minor The minor release number (0 to 255)
+ * \param patch The patch release number (0 to 65535)
+ * \returns The 32-bit encoded version number.
+ */
+#define JLS_VERSION_ENCODE_U32(major, minor, patch) \
+    ( (( ((uint32_t) (major)) &   0xff) << 24) | \
+      (( ((uint32_t) (minor)) &   0xff) << 16) | \
+      (( ((uint32_t) (patch)) & 0xffff) <<  0) )
 
-#define EMBC_VERSION_MAJOR   0
-#define EMBC_VERSION_MINOR   0
-#define EMBC_VERSION_PATCH   1
-#define EMBC_VERSION_U32     ((uint32_t) ( \
-    ((0 & 0xff) << 24) | \
-    ((0 & 0xff) << 16) | \
-    (1 & 0xffff) ))
-#define EMBC_VERSION_STR     "0.0.1"
+/**
+ * \brief Internal macro to convert argument to string.
+ *
+ * \param x The argument to convert to a string.
+ * \return The string version of x.
+ */
+#define JLS_VERSION__STR(x) #x
+
+/**
+ * \brief Macro to create the version string separated by "." characters.
+ *
+ * \param major The major release number (0 to 255)
+ * \param minor The minor release number (0 to 255)
+ * \param patch The patch release number (0 to 65535)
+ * \returns The firmware string.
+ */
+#define JLS_VERSION_ENCODE_STR(major, minor, patch) \
+        JLS_VERSION__STR(major) "." JLS_VERSION__STR(minor) "." JLS_VERSION__STR(patch)
+
+/// The JLS version as uint32_t
+#define JLS_VERSION_U32 JLS_VERSION_ENCODE_U32(JLS_VERSION_MAJOR, JLS_VERSION_MINOR, JLS_VERSION_PATCH)
+
+/// The JLS version as "major.minor.patch" string
+#define JLS_VERSION_STR JLS_VERSION_ENCODE_STR(JLS_VERSION_MAJOR, JLS_VERSION_MINOR, JLS_VERSION_PATCH)
 
 /** @} */
 
 #endif /* JLS_VERSION_H_ */
-

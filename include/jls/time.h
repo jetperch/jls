@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2020 Jetperch LLC
+ * Copyright 2014-2021 Jetperch LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -385,7 +385,7 @@ struct jls_time_counter_s jls_time_counter();
 /**
  * @brief Get the monotonic platform time as a 34Q30 fixed point number.
  *
- * @return The monotonic platform time based upon the embc_counter().
+ * @return The monotonic platform time based upon the jls_time_counter().
  *      The platform time has no guaranteed relationship with
  *      UTC or wall-clock calendar time.  This time has both
  *      offset and scale errors relative to UTC.

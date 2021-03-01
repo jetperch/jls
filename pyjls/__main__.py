@@ -35,7 +35,7 @@ _LOG_LEVELS = {
 }
 
 _EPILOG = f"""\
-Set the PYEMBC_LOG_LEVEL environment variable to change the logging level.
+Set the PYJLS_LOG_LEVEL environment variable to change the logging level.
 Options are [{', '.join(_LOG_LEVELS.keys())}].
 The default is WARNING.
 """

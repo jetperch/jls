@@ -4,6 +4,13 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.1.0
+
+2021 Mar 1
+
+*   Initial public release.
+
+
 ## 0.0.1
 
 2021 Feb 5  [in progress]
