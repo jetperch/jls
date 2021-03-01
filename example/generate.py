@@ -27,36 +27,6 @@ import os
 import sys
 
 
-log = logging.getLogger(__name__)
-
-
-SOURCE1 = SourceDef(
-    source_id=1,
-    name='performance',
-    vendor='',
-    model='',
-    version='',
-    serial_number='',
-)
-
-
-SIGNAL1 = SignalDef(
-    signal_id=1,
-    source_id=1,
-    signal_type=SignalType.FSR,
-    data_type=DataType.F32,
-    sample_rate=1000000,
-    samples_per_data=100000,
-    sample_decimate_factor=1000,
-    entries_per_summary=20000,
-    summary_decimate_factor=100,
-    annotation_decimate_factor=100,
-    utc_decimate_factor=100,
-    name='current',
-    units='A',
-)
-
-
 def parser():
     p = argparse.ArgumentParser(description='JLS generator.')
     p.add_argument('filename',
@@ -108,7 +78,7 @@ def run():
                 v = int(v)
             setattr(signal, key, v)
 
-    # generate signal
+    # generate waveform, 1 second chunk
     x = np.arange(signal.sample_rate)
     y = np.sin((2.0 * np.pi * 1000 / signal.sample_rate) * x)
     y = y.astype(dtype=np.float32)
@@ -121,7 +91,7 @@ def run():
         wr.signal_def_from_struct(signal)
         wr.user_data(0, 'string user data at start')
         length = args.length
-        while length > 0:
+        while length > 0:  # write data chunks
             iter_len = y_len if y_len < length else length
             wr.fsr_f32(1, sample_id, y[:iter_len])
             sample_id += iter_len
