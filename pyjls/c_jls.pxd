@@ -54,7 +54,7 @@ cdef extern from "jls/format.h":
         uint32_t annotation_decimate_factor
         uint32_t utc_decimate_factor
         const char * name
-        const char * si_units
+        const char * units
 
     struct jls_annotation_s:
         int64_t timestamp
