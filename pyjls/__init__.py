@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .binding import DataType, AnnotationType, SignalType, Writer, Reader, SourceDef, SignalDef, SummaryFSR
+from .binding import DataType, AnnotationType, SignalType, Writer, Reader, SummaryFSR
+from .structs import SourceDef, SignalDef
 from .version import *
 
 __all__ = [Writer, Reader, __version__, DataType, AnnotationType, SignalType, SourceDef, SignalDef, SummaryFSR]
