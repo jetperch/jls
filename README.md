@@ -31,6 +31,11 @@ simultaneous, one-dimensional signals. This repository contains:
 
 ## Features
 
+* Cross-platform
+  * Microsoft Windows x64
+  * Apple macOS x64 🔜
+  * Apple macOS ARM 🔜  
+  * Linux x64 🔜
 * Support for multiple, simultaneous data sources
 * Support for multiple, simultaneous signal waveforms
 * Fixed sample rate signals (FSR)
