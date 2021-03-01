@@ -28,6 +28,7 @@ from collections.abc import Mapping
 import json
 import logging
 import numpy as np
+import time
 cimport numpy as np
 from . cimport c_jls
 from .structs import SourceDef, SignalDef
@@ -156,7 +157,7 @@ cdef class Writer:
     def signal_def(self, signal_id, source_id, signal_type=None, data_type=None, sample_rate=None,
                    samples_per_data=None, sample_decimate_factor=None, entries_per_summary=None,
                    summary_decimate_factor=None, annotation_decimate_factor=None, utc_decimate_factor=None,
-                   name=None, si_units=None):
+                   name=None, units=None):
         cdef int32_t rc
         cdef c_jls.jls_signal_def_s s
         s.signal_id = signal_id
@@ -171,9 +172,9 @@ cdef class Writer:
         s.annotation_decimate_factor = 100 if annotation_decimate_factor is None else int(annotation_decimate_factor)
         s.utc_decimate_factor = 100 if utc_decimate_factor is None else int(utc_decimate_factor)
         name_b = _encode_str(name)
-        si_units_b = _encode_str(si_units)
+        units_b = _encode_str(units)
         s.name = name_b
-        s.si_units = si_units_b
+        s.units = units_b
         rc = c_jls.jls_twr_signal_def(self._wr, &s)
         if rc:
             raise RuntimeError(f'signal_def failed {rc}')
@@ -191,7 +192,7 @@ cdef class Writer:
                                annotation_decimate_factor=s.annotation_decimate_factor,
                                utc_decimate_factor=s.utc_decimate_factor,
                                name=s.name,
-                               si_units=s.si_units)
+                               units=s.units)
 
     def user_data(self, chunk_meta, data):
         cdef int32_t rc
@@ -203,9 +204,15 @@ cdef class Writer:
     def fsr_f32(self, signal_id, sample_id, data):
         cdef int32_t rc
         cdef np.float32_t [::1] f32 = data
-        rc = c_jls.jls_twr_fsr_f32(self._wr, signal_id, sample_id, &f32[0], len(data))
-        if rc:
-            raise RuntimeError(f'fsr_f32 failed {rc}')
+
+        while True:
+            rc = c_jls.jls_twr_fsr_f32(self._wr, signal_id, sample_id, &f32[0], len(data))
+            if rc == 0:
+                return
+            elif rc != 2:
+                raise RuntimeError(f'fsr_f32 failed {rc}')
+            # buffer full, wait until previous disk writes complete
+            time.sleep(0.001)
 
     def annotation(self, signal_id, timestamp, annotation_type, data):
         cdef int32_t rc
@@ -266,7 +273,7 @@ cdef class Reader:
                 annotation_decimate_factor=signals[i].annotation_decimate_factor,
                 utc_decimate_factor=signals[i].utc_decimate_factor,
                 name=signals[i].name.decode('utf-8'),
-                si_units=signals[i].si_units.decode('utf-8'))
+                units=signals[i].units.decode('utf-8'))
             if signal_def.signal_type == 0:
                 rc = c_jls.jls_rd_fsr_length(self._rd, signal_id, &samples)
                 if rc:

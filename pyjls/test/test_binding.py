@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from pyjls.binding import Writer, Reader
+from pyjls.binding import Writer, Reader, SummaryFSR
 import numpy as np
 import os
 import tempfile
@@ -76,10 +76,10 @@ class TestBinding(unittest.TestCase):
             np.testing.assert_allclose(data, r.fsr(3, 0, len(data)))
             e_std = np.std(data, dtype=np.float64) * (len(data) / (len(data) - 1))
             stats = r.fsr_statistics(3, 0, len(data), 1)
-            np.testing.assert_allclose(np.mean(data, dtype=np.float64), stats[0, 0])
-            np.testing.assert_allclose(np.min(data), stats[0, 1])
-            np.testing.assert_allclose(np.max(data), stats[0, 2])
-            np.testing.assert_allclose(e_std, stats[0, 3], rtol=1e-4)
+            np.testing.assert_allclose(np.mean(data, dtype=np.float64), stats[0, SummaryFSR.MEAN])
+            np.testing.assert_allclose(np.min(data), stats[0, SummaryFSR.MIN])
+            np.testing.assert_allclose(np.max(data), stats[0, SummaryFSR.MAX])
+            np.testing.assert_allclose(e_std, stats[0, SummaryFSR.STD], rtol=1e-4)
 
             annotations = []
 
