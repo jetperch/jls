@@ -9,6 +9,7 @@ This file contains the list of changes made to the JLS project.
 2021 Mar 5 [in progress]
 
 *   Added group_id parameter to annotation.
+*   Fixed example/generate.py length argument.
 
 
 ## 0.1.0

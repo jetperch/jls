@@ -34,7 +34,7 @@ def parser():
     p.add_argument('--name', help='The signal name')
     p.add_argument('--units', help='The signal value units (SI)')
     p.add_argument('--sample_rate', help='The sample rate in Hz.')
-    p.add_argument('--length', default=1000000, help='The signal length in samples.')
+    p.add_argument('--length', type=int, default=1000000, help='The signal length in samples.')
     p.add_argument('--samples_per_data', help='The samples per data chunk.')
     p.add_argument('--sample_decimate_factor', help='The samples per summary entry.')
     p.add_argument('--entries_per_summary', help='The entries per summary chunk.')
