@@ -72,7 +72,7 @@ def run():
                         format="%(levelname)s:%(asctime)s:%(filename)s:%(lineno)d:%(name)s:%(message)s")
     parser = get_parser()
     args = parser.parse_args()
-    if args.subparser_name.lower() in ['help']:
+    if args.subparser_name is None or args.subparser_name.lower() in ['help']:
         parser.print_help()
         parser.exit()
     return args.func(args)

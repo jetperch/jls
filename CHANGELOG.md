@@ -10,6 +10,8 @@ This file contains the list of changes made to the JLS project.
 
 *   Added group_id parameter to annotation.
 *   Fixed example/generate.py length argument.
+*   Updated numpy dependency to 1.20.
+*   Fixed pyjls console_script.
 
 
 ## 0.1.0

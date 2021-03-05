@@ -173,13 +173,13 @@ setuptools.setup(
 
     setup_requires=[
         # https://developercommunity.visualstudio.com/content/problem/1207405/fmod-after-an-update-to-windows-2004-is-causing-a.html
-        'numpy>=1.18',
+        'numpy>=1.20',
         'Cython>=0.29.3',
     ],
 
     # See https://packaging.python.org/en/latest/requirements.html
     install_requires=[
-        "numpy>=1.18",
+        "numpy>=1.20",
     ] + PLATFORM_INSTALL_REQUIRES,
 
     extras_require={
@@ -188,7 +188,7 @@ setuptools.setup(
 
     entry_points={
         'console_scripts': [
-            'jls_cmd=jls.__main__:run',
+            'pyjls=pyjls.__main__:run',
         ],
     },
     
