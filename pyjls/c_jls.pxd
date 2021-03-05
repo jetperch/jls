@@ -60,7 +60,7 @@ cdef extern from "jls/format.h":
         int64_t timestamp
         uint8_t annotation_type
         uint8_t storage_type
-        uint8_t rsv8_0
+        uint8_t group_id
         uint8_t rsv8_1
         uint32_t data_size
         uint8_t data[0]
@@ -88,7 +88,7 @@ cdef extern from "jls/threaded_writer.h":
     int32_t jls_twr_fsr_f32(jls_twr_s * self, uint16_t signal_id,
             int64_t sample_id, const float * data, uint32_t data_length)
     int32_t jls_twr_annotation(jls_twr_s * self, uint16_t signal_id, int64_t timestamp,
-            jls_annotation_type_e annotation_type,
+            jls_annotation_type_e annotation_type, uint8_t group_id,
             jls_storage_type_e storage_type, const uint8_t * data, uint32_t data_size)
 
 

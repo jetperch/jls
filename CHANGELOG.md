@@ -4,6 +4,13 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.2.0
+
+2021 Mar 5 [in progress]
+
+*   Added group_id parameter to annotation.
+
+
 ## 0.1.0
 
 2021 Mar 1

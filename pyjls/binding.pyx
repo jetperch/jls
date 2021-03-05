@@ -214,13 +214,13 @@ cdef class Writer:
             # buffer full, wait until previous disk writes complete
             time.sleep(0.001)
 
-    def annotation(self, signal_id, timestamp, annotation_type, data):
+    def annotation(self, signal_id, timestamp, annotation_type, group_id, data):
         cdef int32_t rc
         if isinstance(annotation_type, str):
             annotation_type = _annotation_map[annotation_type.lower()]
         storage_type, payload, payload_length = _storage_pack(data)
         rc = c_jls.jls_twr_annotation(self._wr, signal_id, timestamp, annotation_type,
-            storage_type, payload, payload_length)
+            group_id, storage_type, payload, payload_length)
         if rc:
             raise RuntimeError(f'annotation failed {rc}')
 
@@ -328,6 +328,14 @@ cdef class Reader:
         return data
 
     def annotations(self, signal_id, timestamp, cbk_fn):
+        """Read annotations from a signal.
+
+        :param signal_id: The signal id.
+        :param timestamp: The starting timestamp.
+        :param cbk: The function(timestamp, annotation_type, group_id, data)
+            to call for each annotation.  Return True to stop iteration over
+            the annotations or False to continue iterating.
+        """
         cdef int32_t rc
         rc = c_jls.jls_rd_annotations(self._rd, signal_id, timestamp, _annotation_cbk_fn, <void *> cbk_fn)
         if rc:
@@ -343,7 +351,7 @@ cdef class Reader:
 cdef int32_t _annotation_cbk_fn(void * user_data, const c_jls.jls_annotation_s * annotation):
     cbk_fn = <object> user_data
     data = _storage_unpack(annotation[0].storage_type, annotation[0].data, annotation[0].data_size)
-    rc = cbk_fn(annotation[0].timestamp, annotation[0].annotation_type, data)
+    rc = cbk_fn(annotation[0].timestamp, annotation[0].annotation_type, annotation[0].group_id, data)
     return 1 if bool(rc) else 0
 
 

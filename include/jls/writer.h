@@ -119,15 +119,21 @@ int32_t jls_wr_fsr_f32(struct jls_wr_s * self, uint16_t signal_id,
  * @param signal_id The signal id.
  * @param timestamp The timestamp in sample_id for FSR and UTC for VSR.
  * @param annotation_type The annotation type.
+ * @param group_id The optional group identifier.  If unused, set to 0.
  * @param storage_type The storage type.
  * @param data The data for the annotation.
  * @param data_size The length of data for JLS_STORAGE_TYPE_BINARY storage_type.
  *      Set to 0 for all other storage types.
  * @return 0 or error code.
  */
-int32_t jls_wr_annotation(struct jls_wr_s * self, uint16_t signal_id, int64_t timestamp,
+int32_t jls_wr_annotation(struct jls_wr_s * self,
+                          uint16_t signal_id,
+                          int64_t timestamp,
                           enum jls_annotation_type_e annotation_type,
-                          enum jls_storage_type_e storage_type, const uint8_t * data, uint32_t data_size);
+                          uint8_t group_id,
+                          enum jls_storage_type_e storage_type,
+                          const uint8_t * data,
+                          uint32_t data_size);
 
 // todo jls_wr_fsr_int
 // int32_t jls_wr_fsr_f32(struct jls_wr_s * self, uint16_t signal_id,

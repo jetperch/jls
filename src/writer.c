@@ -698,6 +698,7 @@ int32_t jls_wr_fsr_f32(struct jls_wr_s * self, uint16_t signal_id,
 
 int32_t jls_wr_annotation(struct jls_wr_s * self, uint16_t signal_id, int64_t timestamp,
                           enum jls_annotation_type_e annotation_type,
+                          uint8_t group_id,
                           enum jls_storage_type_e storage_type, const uint8_t * data, uint32_t data_size) {
     ROE(signal_validate(self, signal_id));
     struct signal_info_s * signal_info = &self->signal_info[signal_id];
@@ -714,7 +715,8 @@ int32_t jls_wr_annotation(struct jls_wr_s * self, uint16_t signal_id, int64_t ti
     ROE(buf_wr_i64(self, timestamp));
     ROE(buf_wr_u8(self, annotation_type));
     ROE(buf_wr_u8(self, storage_type));
-    ROE(buf_add_zero(self, 2));
+    ROE(buf_wr_u8(self, group_id));
+    ROE(buf_add_zero(self, 1));
     switch (storage_type) {
         case JLS_STORAGE_TYPE_BINARY:
             ROE(buf_wr_u32(self, data_size));

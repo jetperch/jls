@@ -56,11 +56,11 @@ def on_cmd(args):
             anno_type = idx % 4
             if anno_type <= 1:
                 event_str = np.random.choice(event_strs)
-                w.annotation(signal.signal_id, timestamp, AnnotationType.TEXT, event_str)
+                w.annotation(signal.signal_id, timestamp, AnnotationType.TEXT, 0, event_str)
             elif anno_type == 2:
-                w.annotation(signal.signal_id, timestamp, AnnotationType.MARKER, str(marker_idx))
+                w.annotation(signal.signal_id, timestamp, AnnotationType.MARKER, 0, str(marker_idx))
                 marker_idx += 1
             elif anno_type == 3:
-                w.annotation(signal.signal_id, timestamp, AnnotationType.MARKER, f'{marker_idx}a')
-                w.annotation(signal.signal_id, timestamp + 100, AnnotationType.MARKER, f'{marker_idx}b')
+                w.annotation(signal.signal_id, timestamp, AnnotationType.MARKER, 0, f'{marker_idx}a')
+                w.annotation(signal.signal_id, timestamp + 100, AnnotationType.MARKER, 0, f'{marker_idx}b')
                 marker_idx += 1

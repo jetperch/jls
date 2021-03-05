@@ -494,7 +494,7 @@ struct jls_annotation_s {
     int64_t timestamp;          ///< The timestamp for this annotation.  sample_id for FSR, UTC for VSR.
     uint8_t annotation_type;    ///< The jls_annotation_type_e.
     uint8_t storage_type;       ///< The jls_storage_type_e.
-    uint8_t rsv8_0;             ///< Reserved, write to 0.
+    uint8_t group_id;           ///< The optional group identifier.  If unused, write to 0.
     uint8_t rsv8_1;             ///< Reserved, write to 0.
     uint32_t data_size;         ///< The size of data in bytes.
     uint8_t data[];             ///< The annotation data.

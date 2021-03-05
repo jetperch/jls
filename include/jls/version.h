@@ -34,7 +34,7 @@
 
 // Use version_update.py to update.
 #define JLS_VERSION_MAJOR 0
-#define JLS_VERSION_MINOR 1
+#define JLS_VERSION_MINOR 2
 #define JLS_VERSION_PATCH 0
 
 /**

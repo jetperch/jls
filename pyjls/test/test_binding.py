@@ -41,9 +41,9 @@ class TestBinding(unittest.TestCase):
             w.user_data(2, 'user string')
             w.user_data(3, {'user': 'json'})
             w.fsr_f32(3, 0, data)
-            w.annotation(3, 10, 'user', b'annotation binary')
-            w.annotation(3, 11, 'str', 'annotation str')
-            w.annotation(3, 12, 'marker', '1')
+            w.annotation(3, 10, 'user', 20, b'annotation binary')
+            w.annotation(3, 11, 'str', 21, 'annotation str')
+            w.annotation(3, 12, 'marker', 22, '1')
 
         with Reader(self._path) as r:
             self.assertEqual(2, len(r.sources))
@@ -88,9 +88,9 @@ class TestBinding(unittest.TestCase):
 
             r.annotations(3, 0, annotations_fn)
             self.assertEqual(3, len(annotations))
-            self.assertEqual((10, 0, b'annotation binary'), annotations[0])
-            self.assertEqual((11, 1, 'annotation str'), annotations[1])
-            self.assertEqual((12, 2, '1'), annotations[2])
+            self.assertEqual((10, 0, 20, b'annotation binary'), annotations[0])
+            self.assertEqual((11, 1, 21, 'annotation str'), annotations[1])
+            self.assertEqual((12, 2, 22, '1'), annotations[2])
 
             user_data = []
             def user_data_fn(*args):

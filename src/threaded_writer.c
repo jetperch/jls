@@ -54,6 +54,7 @@ struct msg_header_annotation_s {
     int64_t timestamp;
     uint8_t annotation_type;
     uint8_t storage_type;
+    uint8_t group_id;
 };
 
 struct msg_header_s {
@@ -142,7 +143,9 @@ static DWORD WINAPI task(LPVOID lpParam) {
                     break;
                 case MSG_ANNOTATION:
                     rc = jls_wr_annotation(self->wr, hdr.h.annotation.signal_id, hdr.h.annotation.timestamp,
-                                           hdr.h.annotation.annotation_type, hdr.h.annotation.storage_type,
+                                           hdr.h.annotation.annotation_type,
+                                           hdr.h.annotation.group_id,
+                                           hdr.h.annotation.storage_type,
                                            (const uint8_t *) payload, payload_sz);
                     break;
                 default:
@@ -317,6 +320,7 @@ int32_t jls_twr_fsr_f32(struct jls_twr_s * self, uint16_t signal_id,
 
 int32_t jls_twr_annotation(struct jls_twr_s * self, uint16_t signal_id, int64_t timestamp,
                            enum jls_annotation_type_e annotation_type,
+                           uint8_t group_id,
                            enum jls_storage_type_e storage_type, const uint8_t * data, uint32_t data_size) {
     struct msg_header_s hdr = {
             .msg_type = MSG_ANNOTATION,
@@ -326,6 +330,7 @@ int32_t jls_twr_annotation(struct jls_twr_s * self, uint16_t signal_id, int64_t 
                             .timestamp = timestamp,
                             .annotation_type = annotation_type,
                             .storage_type = storage_type,
+                            .group_id = group_id,
                     }
             },
             .d = 0
