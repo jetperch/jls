@@ -15,25 +15,23 @@
  */
 
 #include "jls/threaded_writer.h"
+#include "jls/msg_ring_buffer.h"
+#include "jls/wr_prv.h"
+#include "jls/backend.h"
 #include "jls/cdef.h"
 #include "jls/ec.h"
 #include "jls/log.h"
-#include "jls/msg_ring_buffer.h"
 #include "jls/writer.h"
 #include <stdlib.h>
-#include <windows.h>
+#include <string.h>
 
 
 #define MRB_BUFFER_SIZE (100000000)
-#define MSG_LOCK_TIMEOUT_MS (1000)
-#define PROCESS_LOCK_TIMEOUT_MS (1000)
+
 
 struct jls_twr_s {
+    struct jls_bkt_s * bk;
     struct jls_wr_s * wr;
-    HANDLE msg_mutex;
-    HANDLE process_mutex;
-    HANDLE msg_event;
-    HANDLE thread;
     volatile int quit;
     struct jls_mrb_s mrb;
     uint8_t mrb_buffer[];
@@ -74,50 +72,19 @@ enum message_e {
     MSG_ANNOTATION,     // hdr.annotation, data
 };
 
-void msg_lock(struct jls_twr_s * self) {
-    DWORD rc = WaitForSingleObject(self->msg_mutex, MSG_LOCK_TIMEOUT_MS);
-    if (WAIT_OBJECT_0 != rc) {
-        JLS_LOGE("msg_lock failed");
-    }
-}
-
-void msg_unlock(struct jls_twr_s * self) {
-    if (!ReleaseMutex(self->msg_mutex)) {
-        JLS_LOGE("msg_unlock failed");
-    }
-}
-
-void process_lock(struct jls_twr_s * self) {
-    DWORD rc = WaitForSingleObject(self->process_mutex, PROCESS_LOCK_TIMEOUT_MS);
-    if (WAIT_OBJECT_0 != rc) {
-        JLS_LOGE("msg_lock failed");
-    }
-}
-
-void process_unlock(struct jls_twr_s * self) {
-    if (!ReleaseMutex(self->process_mutex)) {
-        JLS_LOGE("msg_unlock failed");
-    }
-}
-
-static DWORD WINAPI task(LPVOID lpParam) {
-    HANDLE handles[16];
+int32_t jls_twr_run(struct jls_twr_s * self) {
     uint32_t msg_size;
     uint8_t * msg;
     struct msg_header_s hdr;
     uint8_t * payload;
     int32_t rc = 0;
 
-    struct jls_twr_s * self = (struct jls_twr_s *) lpParam;
-    handles[0] = self->msg_event;
-
     while (!self->quit) {
-        WaitForMultipleObjects(1, handles, FALSE, 1);
-        ResetEvent(self->msg_event);
-        msg_lock(self);
+        jls_bkt_msg_wait(self->bk);
+        jls_bkt_msg_lock(self->bk);
         while (!self->quit) {
             msg = jls_mrb_peek(&self->mrb, &msg_size);
-            msg_unlock(self);
+            jls_bkt_msg_unlock(self->bk);
             if (!msg) {
                 break;
             }
@@ -127,7 +94,7 @@ static DWORD WINAPI task(LPVOID lpParam) {
             memcpy(&hdr, msg, sizeof(hdr));
             rc = 0;
 
-            process_lock(self);
+            jls_bkt_process_lock(self->bk);
             switch (hdr.msg_type) {
                 case MSG_CLOSE:
                     self->quit = 1;
@@ -150,13 +117,13 @@ static DWORD WINAPI task(LPVOID lpParam) {
                 default:
                     break;
             }
-            process_unlock(self);
+            jls_bkt_process_unlock(self->bk);
 
             if (rc) {
                 JLS_LOGW("thread msg %d returned %d", (int) hdr.msg_type, (int) rc);
             }
 
-            msg_lock(self);
+            jls_bkt_msg_lock(self->bk);
             jls_mrb_pop(&self->mrb, &msg_size);
             // stay locked
         }
@@ -171,54 +138,18 @@ int32_t jls_twr_open(struct jls_twr_s ** instance, const char * path) {
 
     self = malloc(sizeof(struct jls_twr_s) + MRB_BUFFER_SIZE);
     if (!self) {
+        JLS_LOGE("jls_twr_open malloc failed");
         jls_wr_close(wr);
         return JLS_ERROR_NOT_ENOUGH_MEMORY;
     }
     self->quit = 0;
     self->wr = wr;
-    self->thread = NULL;
-    self->msg_event = NULL;
-    self->msg_mutex = NULL;
-    self->process_mutex = NULL;
     jls_mrb_init(&self->mrb, self->mrb_buffer, MRB_BUFFER_SIZE);
-
-    self->msg_mutex = CreateMutex(
-            NULL,                   // default security attributes
-            FALSE,                  // initially not owned
-            NULL);                  // unnamed mutex
-    if (!self->msg_mutex) {
-        jls_twr_close(self);
+    self->bk = jls_bkt_initialize(self);
+    if (!self->bk) {
+        JLS_LOGE("jls_bkt_initialize failed");
+        jls_wr_close(wr);
         return JLS_ERROR_NOT_ENOUGH_MEMORY;
-    }
-
-    self->process_mutex = CreateMutex(
-            NULL,                   // default security attributes
-            FALSE,                  // initially not owned
-            NULL);                  // unnamed mutex
-    if (!self->process_mutex) {
-        jls_twr_close(self);
-        return JLS_ERROR_NOT_ENOUGH_MEMORY;
-    }
-
-    self->msg_event = CreateEvent(NULL, TRUE, FALSE, NULL);
-    if (!self->msg_event) {
-        jls_twr_close(self);
-        return JLS_ERROR_NOT_ENOUGH_MEMORY;
-    }
-
-    self->thread = CreateThread(
-            NULL,                   // default security attributes
-            0,                      // use default stack size
-            task,                   // thread function name
-            self,                   // argument to thread function
-            0,                      // use default creation flags
-            NULL);                  // returns the thread identifier
-    if (!self->thread) {
-        jls_twr_close(self);
-        return JLS_ERROR_NOT_ENOUGH_MEMORY;
-    }
-    if (!SetThreadPriority(self->thread, THREAD_PRIORITY_BELOW_NORMAL)) {
-        JLS_LOGW("Could not reduce thread priority: %d", (int) GetLastError());
     }
 
     *instance = self;
@@ -226,46 +157,31 @@ int32_t jls_twr_open(struct jls_twr_s ** instance, const char * path) {
 }
 
 int32_t msg_send(struct jls_twr_s * self, const struct msg_header_s * hdr, const uint8_t * payload, uint32_t payload_size) {
-    int32_t rv = 0;
     uint32_t sz = sizeof(*hdr) + payload_size;
-    msg_lock(self);
-    uint8_t * msg = jls_mrb_alloc(&self->mrb, sz);
-    if (!msg) {
-        rv = JLS_ERROR_NOT_ENOUGH_MEMORY;
-    } else {
-        memcpy(msg, hdr, sizeof(*hdr));
-        if (payload_size) {
-            memcpy(msg + sizeof(*hdr), payload, payload_size);
+    for (uint32_t count = 0; count < (JLS_BK_MSG_WRITE_TIMEOUT_MS / 5); ++count) {
+        jls_bkt_msg_lock(self->bk);
+        uint8_t *msg = jls_mrb_alloc(&self->mrb, sz);
+        if (msg) {
+            memcpy(msg, hdr, sizeof(*hdr));
+            if (payload_size) {
+                memcpy(msg + sizeof(*hdr), payload, payload_size);
+            }
+            jls_bkt_msg_unlock(self->bk);
+            jls_bkt_msg_signal(self->bk);
+            return 0;
         }
+        jls_bkt_msg_unlock(self->bk);
+        jls_bkt_sleep_ms(self->bk, 5);
     }
-    msg_unlock(self);
-    SetEvent(self->msg_event);
-    return rv;
+    return JLS_ERROR_BUSY;
 }
 
 int32_t jls_twr_close(struct jls_twr_s * self) {
     int rc = 0;
     if (self) {
-        if (self->thread) {
-            struct msg_header_s hdr = { .msg_type = MSG_CLOSE};
-            msg_send(self, &hdr, NULL, 0);
-            WaitForSingleObject(self->thread, 1000);
-            //self->quit = 1;  // force, just in case.
-            CloseHandle(self->thread);
-            self->thread = NULL;
-        }
-        if (self->msg_event) {
-            CloseHandle(self->msg_event);
-            self->msg_event = NULL;
-        }
-        if (self->msg_mutex) {
-            CloseHandle(self->msg_mutex);
-            self->msg_mutex = NULL;
-        }
-        if (self->process_mutex) {
-            CloseHandle(self->process_mutex);
-            self->process_mutex = NULL;
-        }
+        struct msg_header_s hdr = { .msg_type = MSG_CLOSE };
+        msg_send(self, &hdr, NULL, 0);
+        jls_bkt_finalize(self->bk);
         rc = jls_wr_close(self->wr);
         self->wr = NULL;
         free(self);
@@ -274,16 +190,16 @@ int32_t jls_twr_close(struct jls_twr_s * self) {
 }
 
 int32_t jls_twr_source_def(struct jls_twr_s * self, const struct jls_source_def_s * source) {
-    process_lock(self);
+    jls_bkt_process_lock(self->bk);
     int32_t rv = jls_wr_source_def(self->wr, source);
-    process_unlock(self);
+    jls_bkt_process_unlock(self->bk);
     return rv;
 }
 
 int32_t jls_twr_signal_def(struct jls_twr_s * self, const struct jls_signal_def_s * signal) {
-    process_lock(self);
+    jls_bkt_process_lock(self->bk);
     int32_t rv = jls_wr_signal_def(self->wr, signal);
-    process_unlock(self);
+    jls_bkt_process_unlock(self->bk);
     return rv;
 }
 

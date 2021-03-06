@@ -55,6 +55,7 @@ extensions = [
     setuptools.Extension('pyjls.binding',
         sources=[
             'pyjls/binding' + ext,
+            'src/backend_win.c',
             'src/crc32c_intel_sse4.c',
             'src/ec.c',
             'src/log.c',

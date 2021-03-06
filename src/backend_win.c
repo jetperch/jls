@@ -15,6 +15,7 @@
  */
 
 #include "jls/backend.h"
+#include "jls/wr_prv.h"
 #include "jls/ec.h"
 #include "jls/log.h"
 #include "jls/time.h"
@@ -25,6 +26,13 @@
 #include <sys\stat.h>
 #include <share.h>
 
+
+struct jls_bkt_s {
+    HANDLE msg_mutex;
+    HANDLE process_mutex;
+    HANDLE msg_event;
+    HANDLE thread;
+};
 
 // https://docs.microsoft.com/en-us/cpp/c-runtime-library/low-level-i-o?view=msvc-160
 // The C standard library only gets in the way for JLS.
@@ -112,6 +120,120 @@ int32_t jls_bk_fseek(struct jls_bkf_s * self, int64_t offset, int origin) {
 int64_t jls_bk_ftell(struct jls_bkf_s * self) {
     return _telli64(self->fd);
 }
+
+static DWORD WINAPI task(LPVOID lpParam) {
+    struct jls_twr_s * self = (struct jls_twr_s *) lpParam;
+    return jls_twr_run(self);
+}
+
+
+struct jls_bkt_s * jls_bkt_initialize(struct jls_twr_s * wr) {
+    struct jls_bkt_s * self = calloc(1, sizeof(struct jls_bkt_s));
+    if (!self) {
+        return NULL;
+    }
+    self->msg_mutex = CreateMutex(
+            NULL,                   // default security attributes
+            FALSE,                  // initially not owned
+            NULL);                  // unnamed mutex
+    if (!self->msg_mutex) {
+        jls_bkt_finalize(self);
+        return NULL;
+    }
+
+    self->process_mutex = CreateMutex(
+            NULL,                   // default security attributes
+            FALSE,                  // initially not owned
+            NULL);                  // unnamed mutex
+    if (!self->process_mutex) {
+        jls_bkt_finalize(self);
+        return NULL;
+    }
+
+    self->msg_event = CreateEvent(NULL, TRUE, FALSE, NULL);
+    if (!self->msg_event) {
+        return NULL;
+    }
+
+    self->thread = CreateThread(
+            NULL,                   // default security attributes
+            0,                      // use default stack size
+            task,                   // thread function name
+            wr,                     // argument to thread function
+            0,                      // use default creation flags
+            NULL);                  // returns the thread identifier
+    if (!self->thread) {
+        jls_bkt_finalize(self);
+        return NULL;
+    }
+    if (!SetThreadPriority(self->thread, THREAD_PRIORITY_BELOW_NORMAL)) {
+        JLS_LOGW("Could not reduce thread priority: %d", (int) GetLastError());
+    }
+    return self;
+}
+
+void jls_bkt_finalize(struct jls_bkt_s * self) {
+    if (self) {
+        if (self->thread) {
+            WaitForSingleObject(self->thread, 1000);
+            CloseHandle(self->thread);
+            self->thread = NULL;
+        }
+        if (self->msg_event) {
+            CloseHandle(self->msg_event);
+            self->msg_event = NULL;
+        }
+        if (self->msg_mutex) {
+            CloseHandle(self->msg_mutex);
+            self->msg_mutex = NULL;
+        }
+        if (self->process_mutex) {
+            CloseHandle(self->process_mutex);
+            self->process_mutex = NULL;
+        }
+    }
+}
+
+void jls_bkt_msg_lock(struct jls_bkt_s * self) {
+    DWORD rc = WaitForSingleObject(self->msg_mutex, JLS_BK_MSG_LOCK_TIMEOUT_MS);
+    if (WAIT_OBJECT_0 != rc) {
+        JLS_LOGE("jls_bkt_msg_lock failed");
+    }
+}
+
+void jls_bkt_msg_unlock(struct jls_bkt_s * self) {
+    if (!ReleaseMutex(self->msg_mutex)) {
+        JLS_LOGE("jls_bkt_msg_unlock failed");
+    }
+}
+
+void jls_bkt_process_lock(struct jls_bkt_s * self) {
+    DWORD rc = WaitForSingleObject(self->process_mutex, JLS_BK_PROCESS_LOCK_TIMEOUT_MS);
+    if (WAIT_OBJECT_0 != rc) {
+        JLS_LOGE("jls_bkt_msg_lock failed");
+    }
+}
+
+void jls_bkt_process_unlock(struct jls_bkt_s * self) {
+    if (!ReleaseMutex(self->process_mutex)) {
+        JLS_LOGE("jls_bkt_msg_unlock failed");
+    }
+}
+
+void jls_bkt_msg_wait(struct jls_bkt_s * self) {
+    WaitForSingleObject(self->msg_event, 10);
+    ResetEvent(self->msg_event);
+}
+
+void jls_bkt_msg_signal(struct jls_bkt_s * self) {
+    SetEvent(self->msg_event);
+}
+
+void jls_bkt_sleep_ms(struct jls_bkt_s * self, uint32_t duration_ms) {
+    (void) self;
+    Sleep(duration_ms);
+}
+
 
 int64_t jls_now() {
     // Contains a 64-bit value representing the number of 100-nanosecond intervals since January 1, 1601 (UTC).

@@ -204,15 +204,9 @@ cdef class Writer:
     def fsr_f32(self, signal_id, sample_id, data):
         cdef int32_t rc
         cdef np.float32_t [::1] f32 = data
-
-        while True:
-            rc = c_jls.jls_twr_fsr_f32(self._wr, signal_id, sample_id, &f32[0], len(data))
-            if rc == 0:
-                return
-            elif rc != 2:
-                raise RuntimeError(f'fsr_f32 failed {rc}')
-            # buffer full, wait until previous disk writes complete
-            time.sleep(0.001)
+        rc = c_jls.jls_twr_fsr_f32(self._wr, signal_id, sample_id, &f32[0], len(data))
+        if rc:
+            raise RuntimeError(f'fsr_f32 failed {rc}')
 
     def annotation(self, signal_id, timestamp, annotation_type, group_id, data):
         cdef int32_t rc

@@ -39,6 +39,10 @@ extern "C" {
  * @{
  */
 
+#define JLS_BK_MSG_WRITE_TIMEOUT_MS (5000)
+#define JLS_BK_MSG_LOCK_TIMEOUT_MS (1000)
+#define JLS_BK_PROCESS_LOCK_TIMEOUT_MS (1000)
+
 struct jls_bkf_s {
     int64_t fpos;                   // the current file position, to reduce ftell calls.
     int64_t fend;                   // the file end offset.
@@ -51,6 +55,17 @@ int32_t jls_bk_fwrite(struct jls_bkf_s * self, const void * buffer, unsigned int
 int32_t jls_bk_fread(struct jls_bkf_s * self, void * const buffer, unsigned const buffer_size);
 int32_t jls_bk_fseek(struct jls_bkf_s * self, int64_t offset, int origin);
 int64_t jls_bk_ftell(struct jls_bkf_s * self);
+
+struct jls_bkt_s * jls_bkt_initialize(struct jls_twr_s * wr);
+void jls_bkt_finalize(struct jls_bkt_s * self);
+void jls_bkt_msg_lock(struct jls_bkt_s * self);
+void jls_bkt_msg_unlock(struct jls_bkt_s * self);
+void jls_bkt_process_lock(struct jls_bkt_s * self);
+void jls_bkt_process_unlock(struct jls_bkt_s * self);
+void jls_bkt_msg_wait(struct jls_bkt_s * self);
+void jls_bkt_msg_signal(struct jls_bkt_s * self);
+void jls_bkt_sleep_ms(struct jls_bkt_s * self, uint32_t duration_ms);
+
 
 int64_t jls_now();
 struct jls_time_counter_s jls_time_counter();
