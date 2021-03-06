@@ -67,7 +67,6 @@ struct msg_header_s {
     uint64_t d;
 };
 
-
 enum message_e {
     MSG_CLOSE,          // no header data, no args
     MSG_USER_DATA,      // hdr.user_data, user_data

@@ -20,6 +20,7 @@ set(SOURCES
         log.c
         msg_ring_buffer.c
         raw.c
+        raw_backend_win.c
         reader.c
         statistics.c
         threaded_writer.c
