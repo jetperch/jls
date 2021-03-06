@@ -39,18 +39,19 @@ extern "C" {
  * @{
  */
 
-struct jls_rawbk_s {
+struct jls_bkf_s {
     int64_t fpos;                   // the current file position, to reduce ftell calls.
     int64_t fend;                   // the file end offset.
-    int fd;
+    int fd;                         // The file descriptor
 };
 
-int32_t jls_rawbk_fopen(struct jls_rawbk_s * self, const char * filename, const char * mode);
-int32_t jls_rawbk_fclose(struct jls_rawbk_s * self);
-int32_t jls_rawbk_fwrite(struct jls_rawbk_s * self, const void * buffer, unsigned int count);
-int32_t jls_rawbk_fread(struct jls_rawbk_s * self, void * const buffer, unsigned const buffer_size);
-int32_t jls_rawbk_fseek(struct jls_rawbk_s * self, int64_t offset, int origin);
-int64_t jls_rawbk_ftell(struct jls_rawbk_s * self);
+int32_t jls_bk_fopen(struct jls_bkf_s * self, const char * filename, const char * mode);
+int32_t jls_bk_fclose(struct jls_bkf_s * self);
+int32_t jls_bk_fwrite(struct jls_bkf_s * self, const void * buffer, unsigned int count);
+int32_t jls_bk_fread(struct jls_bkf_s * self, void * const buffer, unsigned const buffer_size);
+int32_t jls_bk_fseek(struct jls_bkf_s * self, int64_t offset, int origin);
+int64_t jls_bk_ftell(struct jls_bkf_s * self);
+
 int64_t jls_now();
 struct jls_time_counter_s jls_time_counter();
 

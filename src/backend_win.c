@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "jls/raw_backend.h"
+#include "jls/backend.h"
 #include "jls/ec.h"
 #include "jls/log.h"
 #include "jls/time.h"
@@ -28,7 +28,7 @@
 
 // https://docs.microsoft.com/en-us/cpp/c-runtime-library/low-level-i-o?view=msvc-160
 // The C standard library only gets in the way for JLS.
-int32_t jls_rawbk_fopen(struct jls_rawbk_s * self, const char * filename, const char * mode) {
+int32_t jls_bk_fopen(struct jls_bkf_s * self, const char * filename, const char * mode) {
     int oflag;
     int shflag;
 
@@ -56,7 +56,7 @@ int32_t jls_rawbk_fopen(struct jls_rawbk_s * self, const char * filename, const 
     return 0;
 }
 
-int32_t jls_rawbk_fclose(struct jls_rawbk_s * self) {
+int32_t jls_bk_fclose(struct jls_bkf_s * self) {
     if (self->fd != -1) {
         _close(self->fd);
         self->fd = -1;
@@ -64,7 +64,7 @@ int32_t jls_rawbk_fclose(struct jls_rawbk_s * self) {
     return 0;
 }
 
-int32_t jls_rawbk_fwrite(struct jls_rawbk_s * self, const void * buffer, unsigned int count) {
+int32_t jls_bk_fwrite(struct jls_bkf_s * self, const void * buffer, unsigned int count) {
     int sz = _write(self->fd, buffer, count);
     if (sz < 0) {
         JLS_LOGE("write failed %d", errno);
@@ -81,7 +81,7 @@ int32_t jls_rawbk_fwrite(struct jls_rawbk_s * self, const void * buffer, unsigne
     return 0;
 }
 
-int32_t jls_rawbk_fread(struct jls_rawbk_s * self, void * const buffer, unsigned const buffer_size) {
+int32_t jls_bk_fread(struct jls_bkf_s * self, void * const buffer, unsigned const buffer_size) {
     int sz = _read(self->fd, buffer, buffer_size);
     if (sz < 0) {
         JLS_LOGE("read failed %d", errno);
@@ -95,7 +95,7 @@ int32_t jls_rawbk_fread(struct jls_rawbk_s * self, void * const buffer, unsigned
     return 0;
 }
 
-int32_t jls_rawbk_fseek(struct jls_rawbk_s * self, int64_t offset, int origin) {
+int32_t jls_bk_fseek(struct jls_bkf_s * self, int64_t offset, int origin) {
     int64_t pos = _lseeki64(self->fd, offset, origin);
     if (pos < 0) {
         JLS_LOGE("seek fail %d", errno);
@@ -109,7 +109,7 @@ int32_t jls_rawbk_fseek(struct jls_rawbk_s * self, int64_t offset, int origin) {
     return 0;
 }
 
-int64_t jls_rawbk_ftell(struct jls_rawbk_s * self) {
+int64_t jls_bk_ftell(struct jls_bkf_s * self) {
     return _telli64(self->fd);
 }
 

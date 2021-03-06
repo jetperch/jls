@@ -15,12 +15,12 @@
 include_directories(../include_prv)
 
 set(SOURCES
+        backend_win.c
         crc32c_intel_sse4.c
         ec.c
         log.c
         msg_ring_buffer.c
         raw.c
-        raw_backend_win.c
         reader.c
         statistics.c
         threaded_writer.c
