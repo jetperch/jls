@@ -15,8 +15,6 @@
 include_directories(../include_prv)
 
 set(SOURCES
-        backend_win.c
-        crc32c_intel_sse4.c
         ec.c
         log.c
         msg_ring_buffer.c
@@ -27,6 +25,17 @@ set(SOURCES
         wf_f32.c
         writer.c
 )
+
+if (WIN32)
+    set(SOURCES ${SOURCES} backend_win.c crc32c_intel_sse4.c)
+elseif (APPLE)
+    # todo handle arm
+    set(SOURCES ${SOURCES} backend_posix.c crc32c_intel_sse4.c)
+elseif (UNIX)
+    set(SOURCES ${SOURCES} backend_posix.c crc32c_intel_sse4.c)
+else()
+    message(FATAL_ERROR "Unsupported platform")
+endif()
 
 foreach(f IN LISTS SOURCES)
     SET_FILENAME("${f}")
