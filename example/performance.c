@@ -19,12 +19,12 @@
 #include "jls/reader.h"
 #include "jls/raw.h"
 #include "jls/time.h"
+#include "jls/backend.h"
 
 #include <inttypes.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <windows.h>
 
 
 #define ARRAY_SIZE(x) ( sizeof(x) / sizeof((x)[0]) )
@@ -182,7 +182,7 @@ static int32_t generate_jls(const char * filename, const struct jls_signal_def_s
             if (rc != JLS_ERROR_NOT_ENOUGH_MEMORY) {
                 break;
             }
-            Sleep(1);
+            jls_bkt_sleep_ms(1);
         }
         sample_id += data_length;
         duration -= data_length;

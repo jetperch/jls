@@ -25,11 +25,8 @@
 #define JLS_WRITER_H__
 
 #include <stdint.h>
+#include "jls/statistics.h"
 #include "jls/format.h"
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /**
  * @ingroup jls
@@ -40,6 +37,7 @@ extern "C" {
  * @{
  */
 
+JLS_CPP_GUARD_START
 
 /// Opaque JLS writer object.
 struct jls_wr_s;
@@ -53,7 +51,7 @@ struct jls_wr_s;
  *
  * Call jls_wr_close() when done.
  */
-int32_t jls_wr_open(struct jls_wr_s ** instance, const char * path);
+JLS_API int32_t jls_wr_open(struct jls_wr_s ** instance, const char * path);
 
 /**
  * @brief Close a JLS file.
@@ -61,7 +59,7 @@ int32_t jls_wr_open(struct jls_wr_s ** instance, const char * path);
  * @param self The JLS writer instance from jls_wr_open().
  * @return 0 or error code.
  */
-int32_t jls_wr_close(struct jls_wr_s * self);
+JLS_API int32_t jls_wr_close(struct jls_wr_s * self);
 
 /**
  * @brief Define a new source.
@@ -73,7 +71,7 @@ int32_t jls_wr_close(struct jls_wr_s * self);
  * This JLS file format supports multiple sources, which are usually different
  * instruments.  Each source can provide multiple signals.
  */
-int32_t jls_wr_source_def(struct jls_wr_s * self, const struct jls_source_def_s * source);
+JLS_API int32_t jls_wr_source_def(struct jls_wr_s * self, const struct jls_source_def_s * source);
 
 /**
  * @brief Define a new signal.
@@ -82,7 +80,7 @@ int32_t jls_wr_source_def(struct jls_wr_s * self, const struct jls_source_def_s 
  * @param signal The signal definition.
  * @return 0 or error code.
  */
-int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signal_def_s * signal);
+JLS_API int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signal_def_s * signal);
 
 /**
  * @brief Add arbitrary user data.
@@ -96,7 +94,7 @@ int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signal_def_s 
  *      for all other storage types.
  * @return 0 or error code.
  */
-int32_t jls_wr_user_data(struct jls_wr_s * self, uint16_t chunk_meta,
+JLS_API int32_t jls_wr_user_data(struct jls_wr_s * self, uint16_t chunk_meta,
         enum jls_storage_type_e storage_type, const uint8_t * data, uint32_t data_size);
 
 /**
@@ -109,7 +107,7 @@ int32_t jls_wr_user_data(struct jls_wr_s * self, uint16_t chunk_meta,
  * @param data_length The length of data in floats (bytes / 4).
  * @return 0 or error code
  */
-int32_t jls_wr_fsr_f32(struct jls_wr_s * self, uint16_t signal_id,
+JLS_API int32_t jls_wr_fsr_f32(struct jls_wr_s * self, uint16_t signal_id,
         int64_t sample_id, const float * data, uint32_t data_length);
 
 /**
@@ -126,31 +124,27 @@ int32_t jls_wr_fsr_f32(struct jls_wr_s * self, uint16_t signal_id,
  *      Set to 0 for all other storage types.
  * @return 0 or error code.
  */
-int32_t jls_wr_annotation(struct jls_wr_s * self,
-                          uint16_t signal_id,
-                          int64_t timestamp,
-                          enum jls_annotation_type_e annotation_type,
-                          uint8_t group_id,
-                          enum jls_storage_type_e storage_type,
-                          const uint8_t * data,
-                          uint32_t data_size);
+JLS_API int32_t jls_wr_annotation(struct jls_wr_s * self,
+                                  uint16_t signal_id,
+                                  int64_t timestamp,
+                                  enum jls_annotation_type_e annotation_type,
+                                  uint8_t group_id,
+                                  enum jls_storage_type_e storage_type,
+                                  const uint8_t * data,
+                                  uint32_t data_size);
 
 // todo jls_wr_fsr_int
-// int32_t jls_wr_fsr_f32(struct jls_wr_s * self, uint16_t signal_id,
+// JLS_API int32_t jls_wr_fsr_f32(struct jls_wr_s * self, uint16_t signal_id,
 //        int64_t sample_id, const void * data, uint32_t data_length);
 
 // todo jls_wr_fsr_utc
-//int32_t jls_wr_fsr_utc(struct jls_wr_s * self, uint16_t signal_id, int64_t sample_id, int64_t utc);
+// JLS_API int32_t jls_wr_fsr_utc(struct jls_wr_s * self, uint16_t signal_id, int64_t sample_id, int64_t utc);
 
 // todo jls_wr_vsr_f32
-//int32_t jls_wr_vsr_f32(struct jls_wr_s * self, uint16_t ts_id, int64_t timestamp, uint32_t data, uint32_t size);
+// JLS_API int32_t jls_wr_vsr_f32(struct jls_wr_s * self, uint16_t ts_id, int64_t timestamp, uint32_t data, uint32_t size);
 
-
+JLS_CPP_GUARD_END
 
 /** @} */
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif  /* JLS_WRITER_H__ */

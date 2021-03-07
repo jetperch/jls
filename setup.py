@@ -27,6 +27,7 @@ import setuptools.dist
 import distutils.cmd
 from distutils.errors import DistutilsExecError
 import os
+import platform
 import sys
 
 setuptools.dist.Distribution().fetch_build_eggs(['Cython>=0.20.1', 'numpy>=1.18'])
@@ -50,12 +51,21 @@ with open(VERSION_PATH, 'r', encoding='utf-8') as f:
     exec(f.read(), about)
 
 
+if platform.system == 'Windows':
+    sources = ['src/backend_win.c']
+    libraries = []
+    extra_compile_args = []
+else:
+    sources = ['src/backend_posix.c']
+    libraries = ['pthread', 'm']
+    extra_compile_args = ['-msse4']
+
+
 ext = '.pyx' if USE_CYTHON else '.c'
 extensions = [
     setuptools.Extension('pyjls.binding',
         sources=[
             'pyjls/binding' + ext,
-            'src/backend_win.c',
             'src/crc32c_intel_sse4.c',
             'src/ec.c',
             'src/log.c',
@@ -66,8 +76,10 @@ extensions = [
             'src/threaded_writer.c',
             'src/wf_f32.c',
             'src/writer.c',
-        ],
+        ] + sources,
         include_dirs=['include', 'include_prv', np.get_include()],
+        libraries = libraries,
+        extra_compile_args=[] + extra_compile_args,
     ),
 ]
 

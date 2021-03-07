@@ -24,11 +24,8 @@
 #ifndef JLS_FORMAT_H__
 #define JLS_FORMAT_H__
 
+#include "jls/cmacro.h"
 #include <stdint.h>
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /**
  * @ingroup jls
@@ -39,6 +36,7 @@ extern "C" {
  * @{
  */
 
+JLS_CPP_GUARD_START
 
 #define JLS_FORMAT_VERSION_MAJOR  (0)
 #define JLS_FORMAT_VERSION_MINOR  (1)
@@ -506,12 +504,8 @@ struct jls_utc_s {
     uint64_t timestamp;         ///< The timestamp in UTC.
 };
 
-
+JLS_CPP_GUARD_END
 
 /** @} */
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif  /* JLS_FORMAT_H__ */

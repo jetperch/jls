@@ -762,10 +762,6 @@ int32_t jls_rd_fsr_f32(struct jls_rd_s * self, uint16_t signal_id, int64_t start
     return 0;
 }
 
-static int64_t round_up_to_multiple_i64(int64_t x, int64_t m) {
-    return ((x + m - 1) / m) * m;
-}
-
 static inline void floats_to_stats(struct jls_statistics_s * stats, float * data, int64_t count) {
     stats->k = count;
     stats->mean = data[JLS_SUMMARY_FSR_MEAN];
@@ -919,13 +915,11 @@ int32_t jls_rd_fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
     }
     struct jls_signal_def_s * signal_def = &self->signal_def[signal_id];
     uint8_t level = 0;
-    int64_t sample_multiple = 1;
     int64_t sample_multiple_next = signal_def->sample_decimate_factor;
     int64_t duration = increment * data_length;
     while ((increment >= sample_multiple_next)
             && (duration >= (DECIMATE_PER_DURATION * sample_multiple_next))) {
         ++level;
-        sample_multiple = sample_multiple_next;
         sample_multiple_next *= signal_def->summary_decimate_factor;
     }
 

@@ -17,8 +17,19 @@
 #ifndef JLS_STATISTICS_H
 #define JLS_STATISTICS_H
 
+#include "jls/cmacro.h"
 #include <stdint.h>
 
+/**
+ * @ingroup jls
+ * @defgroup jls_statistics Statistics
+ *
+ * @brief JLS statistics.
+ *
+ * @{
+ */
+
+JLS_CPP_GUARD_START
 
 /**
  * @brief The statistics instance for a single variable.
@@ -116,5 +127,8 @@ void jls_statistics_combine(struct jls_statistics_s * tgt,
                             struct jls_statistics_s const * a,
                             struct jls_statistics_s const * b);
 
+JLS_CPP_GUARD_END
+
+/** @} */
 
 #endif  // JLS_STATISTICS_H

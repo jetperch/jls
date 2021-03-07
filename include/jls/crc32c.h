@@ -23,11 +23,10 @@
 #ifndef JLS_CRC32C_H__
 #define JLS_CRC32C_H__
 
+#include "jls/cmacro.h"
 #include <stdint.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+JLS_CPP_GUARD_START
 
 /**
  * @ingroup jls
@@ -37,6 +36,9 @@ extern "C" {
  *
  * @{
  */
+
+// Forward declaration for format.h
+struct jls_chunk_header_s;
 
 /**
  * @brief Compute the CRC-32C over a chunk header.
@@ -57,9 +59,7 @@ uint32_t jls_crc32c_hdr(const struct jls_chunk_header_s * hdr);
  */
 uint32_t jls_crc32c(uint8_t const *data, uint32_t length);
 
-#ifdef __cplusplus
-}
-#endif
+JLS_CPP_GUARD_END
 
 /** @} */
 

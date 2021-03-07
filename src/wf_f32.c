@@ -69,7 +69,7 @@ static int32_t summary1(struct jls_wf_f32_s * self, int64_t pos);
 static int32_t sample_buffer_alloc(struct jls_wf_f32_s * self) {
     size_t sample_buffer_sz = sizeof(struct sample_buffer_s) + sizeof(float) * self->def.samples_per_data;
     self->sample_buffer = malloc(sample_buffer_sz);
-    JLS_LOGD1("%d sample_buffer alloc %p", self->def.signal_id, self->sample_buffer);
+    JLS_LOGD1("%d sample_buffer alloc %p", self->def.signal_id, (void *) self->sample_buffer);
     if (!self->sample_buffer) {
         jls_wf_f32_close(self);
         return JLS_ERROR_NOT_ENOUGH_MEMORY;
@@ -274,7 +274,7 @@ int32_t jls_wf_f32_close(struct jls_wf_f32_s * self) {
     if (self) {
         if (self->sample_buffer) {
             wr_data(self);  // write remaining sample data
-            JLS_LOGD1("%d sample_buffer free %p", (int) self->def.signal_id, self->sample_buffer);
+            JLS_LOGD1("%d sample_buffer free %p", (int) self->def.signal_id, (void *) self->sample_buffer);
             sample_buffer_free(self);
         }
 

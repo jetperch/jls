@@ -28,11 +28,14 @@ set(SOURCES
 
 if (WIN32)
     set(SOURCES ${SOURCES} backend_win.c crc32c_intel_sse4.c)
+    set(JLS_LIBS jls PARENT_SCOPE)
 elseif (APPLE)
     # todo handle arm
     set(SOURCES ${SOURCES} backend_posix.c crc32c_intel_sse4.c)
+    set(JLS_LIBS jls m pthread PARENT_SCOPE)
 elseif (UNIX)
     set(SOURCES ${SOURCES} backend_posix.c crc32c_intel_sse4.c)
+    set(JLS_LIBS jls m pthread PARENT_SCOPE)
 else()
     message(FATAL_ERROR "Unsupported platform")
 endif()

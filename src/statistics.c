@@ -24,7 +24,7 @@ void jls_statistics_reset(struct jls_statistics_s *s) {
     s->s = 0.0;
     s->min = DBL_MAX;
     s->max = -DBL_MAX;
-};
+}
 
 void jls_statistics_invalid(struct jls_statistics_s *s) {
     s->mean = NAN;
@@ -129,7 +129,7 @@ void jls_statistics_copy(struct jls_statistics_s *tgt,
     tgt->s = src->s;
     tgt->min = src->min;
     tgt->max = src->max;
-};
+}
 
 void jls_statistics_combine(struct jls_statistics_s *tgt,
                             const struct jls_statistics_s *a,

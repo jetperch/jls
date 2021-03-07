@@ -229,8 +229,7 @@ void jls_bkt_msg_signal(struct jls_bkt_s * self) {
     SetEvent(self->msg_event);
 }
 
-void jls_bkt_sleep_ms(struct jls_bkt_s * self, uint32_t duration_ms) {
-    (void) self;
+void jls_bkt_sleep_ms(uint32_t duration_ms) {
     Sleep(duration_ms);
 }
 

@@ -23,6 +23,8 @@
 #ifndef JLS_EC_H_
 #define JLS_EC_H_
 
+#include "jls/cmacro.h"
+
 /**
  * @ingroup jls
  * @defgroup jls_ec Error codes
@@ -34,6 +36,7 @@
  * @{
  */
 
+JLS_CPP_GUARD_START
 
 /**
  * @brief The list of error codes for use by X macros.
@@ -84,11 +87,6 @@ enum jls_error_code_e {
 /// A shorter, less confusing alias for success.
 #define JLS_SUCCESS JLS_ERROR_SUCCESS
 
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /**
  * @brief Convert an error code into its short name.
  *
@@ -105,10 +103,8 @@ const char * jls_error_code_name(int ec);
  */
 const char * jls_error_code_description(int ec);
 
+JLS_CPP_GUARD_END
 
-#ifdef __cplusplus
-}
-#endif
 /** @} */
 
 #endif /* JLS_EC_H_ */

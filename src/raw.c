@@ -20,6 +20,7 @@
 #include "jls/ec.h"
 #include "jls/log.h"
 #include "jls/crc32c.h"
+#include "jls/version.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -267,7 +268,7 @@ int32_t jls_raw_rd_header(struct jls_raw_s * self, struct jls_chunk_header_s * h
     }
     if (self->hdr.tag == JLS_TAG_INVALID) {
         if (self->backend.fpos >= self->backend.fend) {
-            JLS_LOGE("fpos %" PRIi64 " > end %" PRIi64, self->backend.fpos, self->backend.fend);
+            JLS_LOGE("fpos %" PRIi64 " >= end %" PRIi64, self->backend.fpos, self->backend.fend);
             invalidate_current_chunk(self);
             return JLS_ERROR_EMPTY;
         }
@@ -378,7 +379,7 @@ int32_t jls_raw_chunk_prev(struct jls_raw_s * self) {
     int64_t offset = self->offset;
     int64_t pos = offset;
     pos -= sizeof(struct jls_chunk_header_s) + payload_size_on_disk(self->hdr.payload_prev_length);
-    if (pos < sizeof(struct jls_file_header_s)) {
+    if (pos < (int64_t) sizeof(struct jls_file_header_s)) {
         return JLS_ERROR_EMPTY;
     }
     if (pos != self->backend.fpos) {
@@ -424,7 +425,7 @@ int32_t jls_raw_item_prev(struct jls_raw_s * self) {
 int64_t jls_raw_chunk_tell_end(struct jls_raw_s * self) {
     int64_t starting_pos = jls_raw_chunk_tell(self);
     int64_t end_pos = self->backend.fend - sizeof(struct jls_chunk_header_s);
-    if (end_pos < sizeof(struct jls_file_header_s)) {
+    if (end_pos < (int64_t) sizeof(struct jls_file_header_s)) {
         return 0;
     }
     if (jls_raw_chunk_seek(self, end_pos)) {
@@ -473,3 +474,10 @@ const char * jls_tag_to_name(uint8_t tag) {
     }
 }
 
+const char * jls_version_str() {
+    return JLS_VERSION_STR;
+}
+
+uint32_t jls_version_u32() {
+    return JLS_VERSION_U32;
+}

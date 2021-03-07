@@ -171,7 +171,7 @@ int32_t msg_send(struct jls_twr_s * self, const struct msg_header_s * hdr, const
             return 0;
         }
         jls_bkt_msg_unlock(self->bk);
-        jls_bkt_sleep_ms(self->bk, 5);
+        jls_bkt_sleep_ms(5);
     }
     return JLS_ERROR_BUSY;
 }

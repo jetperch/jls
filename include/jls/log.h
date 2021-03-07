@@ -23,10 +23,7 @@
 #ifndef JLS_LOG_H_
 #define JLS_LOG_H_
 
-
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include "jls/cmacro.h"
 
 /**
  * @ingroup jls
@@ -39,6 +36,8 @@ extern "C" {
  *
  * @{
  */
+
+JLS_CPP_GUARD_START
 
 /**
  * @def JLS_LOG_GLOBAL_LEVEL
@@ -292,9 +291,6 @@ extern char const jls_log_level_char[JLS_LOG_LEVEL_ALL + 1];
 /** Log a detailed debug message using printf-style arguments.  Alias for JLS_LOG_DEBUG1. */
 #define JLS_LOG_DBG JLS_LOG_DEBUG1
 
-
-
-
 #define JLS_LOGE JLS_LOG_ERROR
 #define JLS_LOGW JLS_LOG_WARNING
 #define JLS_LOGN JLS_LOG_NOTICE
@@ -304,10 +300,8 @@ extern char const jls_log_level_char[JLS_LOG_LEVEL_ALL + 1];
 #define JLS_LOGD2 JLS_LOG_DEBUG2
 #define JLS_LOGD3 JLS_LOG_DEBUG3
 
-/** @} */
+JLS_CPP_GUARD_END
 
-#ifdef __cplusplus
-}
-#endif
+/** @} */
 
 #endif /* JLS_LOG_H_ */

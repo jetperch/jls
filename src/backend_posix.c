@@ -20,26 +20,29 @@
 #include "jls/log.h"
 #include "jls/time.h"
 
-#define _LARGEFILE64_SOURCE     /* See feature_test_macros(7) */
+#define _FILE_OFFSET_BITS
 #include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include <time.h>
+#include <pthread.h>
+#include <stdlib.h>
+#include <errno.h>
 
 
 // https://stackoverflow.com/questions/8883512/pthread-condition-variables-vs-win32-events-linux-vs-windows-ce
-struct event_flag
-{
+struct event_flag {
     pthread_mutex_t mutex;
     pthread_cond_t  condition;
     unsigned int    flag;
 };
 
-
 struct jls_bkt_s {
     pthread_mutex_t msg_mutex;
     pthread_mutex_t process_mutex;
-    struct event_flag msg_event;
-    HANDLE thread;
+    struct event_flag * msg_event;
+    pthread_t thread;
 };
 
 static struct event_flag* eventflag_create() {
@@ -54,7 +57,7 @@ static struct event_flag* eventflag_create() {
 static void eventflag_destroy(struct event_flag * ev) {
     if (ev) {
         pthread_mutex_destroy(&ev->mutex);
-        pthread_cond_destory(&ev->condition);
+        pthread_cond_destroy(&ev->condition);
         free(ev);
     }
 }
@@ -83,13 +86,13 @@ int32_t jls_bk_fopen(struct jls_bkf_s * self, const char * filename, const char 
 
     switch (mode[0]) {
         case 'w':
-            oflag = O_RDWR | O_CREAT | O_TRUNC | O_LARGEFILE;
+            oflag = O_RDWR | O_CREAT | O_TRUNC;
             break;
         case 'r':
-            oflag = O_RDONLY | O_LARGEFILE;
+            oflag = O_RDONLY;
             break;
         case 'a':
-            oflag = O_RDWR | O_LARGEFILE;
+            oflag = O_RDWR;
             break;
         default:
             return JLS_ERROR_PARAMETER_INVALID;
@@ -121,7 +124,7 @@ int32_t jls_bk_fwrite(struct jls_bkf_s * self, const void * buffer, unsigned int
         self->fend = self->fpos;
     }
     if ((unsigned int) sz != count) {
-        JLS_LOGE("write mismatch %d != %d", sz, count);
+        JLS_LOGE("write mismatch %zd != %u", sz, count);
         return JLS_ERROR_IO;
     }
     return 0;
@@ -142,7 +145,7 @@ int32_t jls_bk_fread(struct jls_bkf_s * self, void * const buffer, unsigned cons
 }
 
 int32_t jls_bk_fseek(struct jls_bkf_s * self, int64_t offset, int origin) {
-    int64_t pos = lseek64(self->fd, offset, origin);
+    int64_t pos = lseek(self->fd, offset, origin);
     if (pos < 0) {
         JLS_LOGE("seek fail %d", errno);
         return JLS_ERROR_IO;
@@ -156,7 +159,7 @@ int32_t jls_bk_fseek(struct jls_bkf_s * self, int64_t offset, int origin) {
 }
 
 int64_t jls_bk_ftell(struct jls_bkf_s * self) {
-    return tell64(self->fd);
+    return lseek(self->fd, 0, SEEK_CUR);
 }
 
 static void * task(void * user_data) {
@@ -170,11 +173,11 @@ struct jls_bkt_s * jls_bkt_initialize(struct jls_twr_s * wr) {
     if (!self) {
         return NULL;
     }
-    if (!pthread_mutex_init(&self->msg_mutex)) {
+    if (pthread_mutex_init(&self->msg_mutex, NULL)) {
         jls_bkt_finalize(self);
         return NULL;
     }
-    if (!pthread_mutex_init(&self->process_mutex)) {
+    if (pthread_mutex_init(&self->process_mutex, NULL)) {
         jls_bkt_finalize(self);
         return NULL;
     }
@@ -199,39 +202,32 @@ void jls_bkt_finalize(struct jls_bkt_s * self) {
             void * rv = NULL;
             int rc = pthread_join(self->thread, &rv);
             if (rc) {
-                JLS_LOGE("jls_bkt_finalize join failed with %d", rc)
+                JLS_LOGE("jls_bkt_finalize join failed with %d", rc);
             }
-            self->thread = NULL;
         }
         if (self->msg_event) {
             eventflag_destroy(self->msg_event);
             self->msg_event = NULL;
         }
-        if (self->msg_mutex) {
-            pthread_mutex_destroy(self->msg_mutex);
-            self->msg_mutex = NULL;
-        }
-        if (self->process_mutex) {
-            pthread_mutex_destroy(self->process_mutex);
-            self->process_mutex = NULL;
-        }
+        pthread_mutex_destroy(&self->msg_mutex);
+        pthread_mutex_destroy(&self->process_mutex);
     }
 }
 
 void jls_bkt_msg_lock(struct jls_bkt_s * self) {
-    pthread_mutex_lock(self->msg_mutex);
+    pthread_mutex_lock(&self->msg_mutex);
 }
 
 void jls_bkt_msg_unlock(struct jls_bkt_s * self) {
-    pthread_mutex_unlock(self->msg_mutex);
+    pthread_mutex_unlock(&self->msg_mutex);
 }
 
 void jls_bkt_process_lock(struct jls_bkt_s * self) {
-    pthread_mutex_lock(self->process_mutex);
+    pthread_mutex_lock(&self->process_mutex);
 }
 
 void jls_bkt_process_unlock(struct jls_bkt_s * self) {
-    pthread_mutex_unlock(self->process_mutex);
+    pthread_mutex_unlock(&self->process_mutex);
 }
 
 void jls_bkt_msg_wait(struct jls_bkt_s * self) {
@@ -242,8 +238,7 @@ void jls_bkt_msg_signal(struct jls_bkt_s * self) {
     eventflag_set(self->msg_event);
 }
 
-void jls_bkt_sleep_ms(struct jls_bkt_s * self, uint32_t duration_ms) {
-    (void) self;
+void jls_bkt_sleep_ms(uint32_t duration_ms) {
     struct timespec ts;
     int rv;
     ts.tv_sec = duration_ms / 1000;

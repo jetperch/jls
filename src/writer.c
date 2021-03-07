@@ -37,11 +37,6 @@ struct chunk_s {
     int64_t offset;
 };
 
-struct timestamped_idx_s {
-    uint32_t entry_length;
-    struct jls_timestamped_index_s data;
-};
-
 struct utc_data_s {
     uint32_t entry_length;
     struct jls_utc_s data;
@@ -60,8 +55,7 @@ struct track_info_s {
     struct chunk_s data;
     struct chunk_s summary[JLS_SUMMARY_LEVEL_COUNT];
 
-    // The index entries for VSR, ANNOTATION, and UTC tracks
-    struct timestamped_idx_s * index_array[JLS_SUMMARY_LEVEL_COUNT - 1];
+    // todo The index entries for VSR, ANNOTATION, and UTC tracks
 };
 
 struct signal_info_s {
@@ -648,7 +642,7 @@ int32_t jls_wr_summary_prv(struct jls_wr_s * self, uint16_t signal_id, uint8_t l
     return 0;
 }
 
-static inline update_track(struct jls_wr_s * self, struct track_info_s * track, uint8_t level, int64_t pos) {
+static inline int32_t update_track(struct jls_wr_s * self, struct track_info_s * track, uint8_t level, int64_t pos) {
     if (!track->head_offsets[level]) {
         track->head_offsets[level] = pos;
         ROE(track_wr_head(self, track));
@@ -723,11 +717,11 @@ int32_t jls_wr_annotation(struct jls_wr_s * self, uint16_t signal_id, int64_t ti
             ROE(buf_add_bin(self, data, data_size));
             break;
         case JLS_STORAGE_TYPE_STRING:
-            ROE(buf_wr_u32(self, (uint32_t) (strlen(data) + 1)));
+            ROE(buf_wr_u32(self, (uint32_t) (strlen((const char *) data) + 1)));
             ROE(buf_add_str(self, (const char *) data));
             break;
         case JLS_STORAGE_TYPE_JSON:
-            ROE(buf_wr_u32(self, (uint32_t) (strlen(data) + 1)));
+            ROE(buf_wr_u32(self, (uint32_t) (strlen((const char *) data) + 1)));
             ROE(buf_add_str(self, (const char *) data));
             break;
         default:

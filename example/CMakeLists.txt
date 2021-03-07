@@ -20,10 +20,10 @@ set(dependencies
         jls_objlib)
 
 function (ADD_EXAMPLE _testName)
-    set(TARGET ${_testName})
     SET_FILENAME("${_testName}.c")
     add_executable(${_testName} "${_testName}.c" ${objects})
-    add_dependencies(${TARGET} ${dependencies})
+    add_dependencies(${_testName} ${dependencies})
+    target_link_libraries(${_testName} ${JLS_LIBS})
 endfunction (ADD_EXAMPLE)
 
 ADD_EXAMPLE(performance)

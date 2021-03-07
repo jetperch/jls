@@ -25,11 +25,8 @@
 #define JLS_READER_H__
 
 #include <stdint.h>
+#include "jls/cmacro.h"
 #include "jls/format.h"
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /**
  * @ingroup jls
@@ -40,6 +37,7 @@ extern "C" {
  * @{
  */
 
+JLS_CPP_GUARD_START
 
 /// The opaque JLS reader object.
 struct jls_rd_s;
@@ -53,13 +51,13 @@ struct jls_rd_s;
  *
  * Call jls_rd_close() when done.
  */
-int32_t jls_rd_open(struct jls_rd_s ** instance, const char * path);
+JLS_API int32_t jls_rd_open(struct jls_rd_s ** instance, const char * path);
 
 /**
  * @brief Close a JLS file opened with jls_rd_open().
  * @param self The JLS read instance.
  */
-void jls_rd_close(struct jls_rd_s * self);
+JLS_API void jls_rd_close(struct jls_rd_s * self);
 
 /**
  * @brief Get the array of sources in the file.
@@ -69,7 +67,7 @@ void jls_rd_close(struct jls_rd_s * self);
  * @param count[out] The number of items in sources.
  * @return 0 or error code.
  */
-int32_t jls_rd_sources(struct jls_rd_s * self, struct jls_source_def_s ** sources, uint16_t * count);
+JLS_API int32_t jls_rd_sources(struct jls_rd_s * self, struct jls_source_def_s ** sources, uint16_t * count);
 
 /**
  * @brief Get the array of signals in the file.
@@ -79,7 +77,7 @@ int32_t jls_rd_sources(struct jls_rd_s * self, struct jls_source_def_s ** source
  * @param count[out] The number of items in signals.
  * @return 0 or error code.
  */
-int32_t jls_rd_signals(struct jls_rd_s * self, struct jls_signal_def_s ** signals, uint16_t * count);
+JLS_API int32_t jls_rd_signals(struct jls_rd_s * self, struct jls_signal_def_s ** signals, uint16_t * count);
 
 /**
  * @brief Get the signal by signal_id.
@@ -89,7 +87,7 @@ int32_t jls_rd_signals(struct jls_rd_s * self, struct jls_signal_def_s ** signal
  * @param signal[out] The signal definition.
  * @return 0 or error code.
  */
-int32_t jls_rd_signal(struct jls_rd_s * self, uint16_t signal_id, struct jls_signal_def_s * signal);
+JLS_API int32_t jls_rd_signal(struct jls_rd_s * self, uint16_t signal_id, struct jls_signal_def_s * signal);
 
 /**
  * @brief Get the number of samples in an FSR signal.
@@ -99,7 +97,7 @@ int32_t jls_rd_signal(struct jls_rd_s * self, uint16_t signal_id, struct jls_sig
  * @param samples[out] The number of samples in the signal.
  * @return 0 or error code.
  */
-int32_t jls_rd_fsr_length(struct jls_rd_s * self, uint16_t signal_id, int64_t * samples);
+JLS_API int32_t jls_rd_fsr_length(struct jls_rd_s * self, uint16_t signal_id, int64_t * samples);
 
 /**
  * @brief Read float32 sample data.
@@ -112,8 +110,8 @@ int32_t jls_rd_fsr_length(struct jls_rd_s * self, uint16_t signal_id, int64_t * 
  *      also at least this many entries (4 * data_length bytes).
  * @return 0 or error code
  */
-int32_t jls_rd_fsr_f32(struct jls_rd_s * self, uint16_t signal_id, int64_t start_sample_id,
-                       float * data, int64_t data_length);
+JLS_API int32_t jls_rd_fsr_f32(struct jls_rd_s * self, uint16_t signal_id, int64_t start_sample_id,
+                               float * data, int64_t data_length);
 
 /**
  * @brief Read float32 and provide statistics data.
@@ -138,9 +136,9 @@ int32_t jls_rd_fsr_f32(struct jls_rd_s * self, uint16_t signal_id, int64_t start
  * cases.  If you need sample accurate statistics over multiple
  * increments, all this function repeatedly with data_length 1.
  */
-int32_t jls_rd_fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
-                                  int64_t start_sample_id, int64_t increment,
-                                  float * data, int64_t data_length);
+JLS_API int32_t jls_rd_fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
+                                          int64_t start_sample_id, int64_t increment,
+                                          float * data, int64_t data_length);
 
 /**
  * @brief The function called for each annotation.
@@ -165,8 +163,8 @@ typedef int32_t (*jls_rd_annotation_cbk_fn)(void * user_data, const struct jls_a
  * @param cbk_user_data The arbitrary data provided to cbk_fn.
  * @return 0 or error code.
  */
-int32_t jls_rd_annotations(struct jls_rd_s * self, uint16_t signal_id, int64_t timestamp,
-                           jls_rd_annotation_cbk_fn cbk_fn, void * cbk_user_data);
+JLS_API int32_t jls_rd_annotations(struct jls_rd_s * self, uint16_t signal_id, int64_t timestamp,
+                                   jls_rd_annotation_cbk_fn cbk_fn, void * cbk_user_data);
 
 /**
  * @brief The function called for each user data entry.
@@ -193,12 +191,10 @@ typedef int32_t (*jls_rd_user_data_cbk_fn)(void * user_data,
  * @param cbk_user_data The arbitrary data provided to cbk_fn.
  * @return 0 or error code.
  */
-int32_t jls_rd_user_data(struct jls_rd_s * self, jls_rd_user_data_cbk_fn cbk_fn, void * cbk_user_data);
+JLS_API int32_t jls_rd_user_data(struct jls_rd_s * self, jls_rd_user_data_cbk_fn cbk_fn, void * cbk_user_data);
+
+JLS_CPP_GUARD_END
 
 /** @} */
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif  /* JLS_READER_H__ */

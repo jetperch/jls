@@ -25,10 +25,9 @@
 #define JLS_PRIV_RAW_BACKEND_H__
 
 #include <stdint.h>
+#include "jls/cmacro.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+JLS_CPP_GUARD_START
 
 /**
  * @ingroup jls
@@ -56,6 +55,8 @@ int32_t jls_bk_fread(struct jls_bkf_s * self, void * const buffer, unsigned cons
 int32_t jls_bk_fseek(struct jls_bkf_s * self, int64_t offset, int origin);
 int64_t jls_bk_ftell(struct jls_bkf_s * self);
 
+// forward declaration for "threaded_writer.h"
+struct jls_twr_s;
 struct jls_bkt_s * jls_bkt_initialize(struct jls_twr_s * wr);
 void jls_bkt_finalize(struct jls_bkt_s * self);
 void jls_bkt_msg_lock(struct jls_bkt_s * self);
@@ -64,7 +65,7 @@ void jls_bkt_process_lock(struct jls_bkt_s * self);
 void jls_bkt_process_unlock(struct jls_bkt_s * self);
 void jls_bkt_msg_wait(struct jls_bkt_s * self);
 void jls_bkt_msg_signal(struct jls_bkt_s * self);
-void jls_bkt_sleep_ms(struct jls_bkt_s * self, uint32_t duration_ms);
+void jls_bkt_sleep_ms(uint32_t duration_ms);
 
 
 int64_t jls_now();
@@ -72,8 +73,6 @@ struct jls_time_counter_s jls_time_counter();
 
 /** @} */
 
-#ifdef __cplusplus
-}
-#endif
+JLS_CPP_GUARD_END
 
 #endif  /* JLS_PRIV_RAW_BACKEND_H__ */

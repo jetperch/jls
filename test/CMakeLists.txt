@@ -22,11 +22,10 @@ set(dependencies
 include_directories(${CMOCKA_INCLUDE})
 
 function (ADD_CMOCKA_TEST _testName)
-    set(TARGET ${_testName})
     SET_FILENAME("${_testName}.c")
     add_executable(${_testName} "${_testName}.c" ${objects})
-    add_dependencies(${TARGET} ${dependencies})
-    target_link_libraries(${_testName} cmocka)
+    add_dependencies(${_testName} ${dependencies})
+    target_link_libraries(${_testName} ${JLS_LIBS} cmocka)
     add_test(${_testName} ${CMAKE_CURRENT_BINARY_DIR}/${_testName})
 endfunction (ADD_CMOCKA_TEST)
 

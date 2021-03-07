@@ -23,6 +23,9 @@
 #ifndef JLS_VERSION_H_
 #define JLS_VERSION_H_
 
+#include "jls/cmacro.h"
+#include <stdint.h>
+
 /**
  * @ingroup jls
  * @defgroup jls_version Version
@@ -31,6 +34,8 @@
  *
  * @{
  */
+
+JLS_CPP_GUARD_START
 
 // Use version_update.py to update.
 #define JLS_VERSION_MAJOR 0
@@ -74,6 +79,22 @@
 
 /// The JLS version as "major.minor.patch" string
 #define JLS_VERSION_STR JLS_VERSION_ENCODE_STR(JLS_VERSION_MAJOR, JLS_VERSION_MINOR, JLS_VERSION_PATCH)
+
+/**
+ * @brief Get the JLS version string.
+ * 
+ * @return The JLS version string.
+ */
+JLS_API const char * jls_version_str();
+
+/**
+ * @brief Get the JLS version u32.
+ * 
+ * @return The JLS version u32 value.
+ */
+JLS_API uint32_t jls_version_u32();
+
+JLS_CPP_GUARD_END
 
 /** @} */
 

@@ -23,6 +23,9 @@
 #ifndef JLS_TIME_H__
 #define JLS_TIME_H__
 
+#include "jls/cmacro.h"
+#include <stdint.h>
+
 /**
  * @ingroup jls
  * @defgroup jls_time Time representation
@@ -50,13 +53,7 @@
  * @{
  */
 
-#include <stdint.h>
-
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
+JLS_CPP_GUARD_START
 
 /**
  * @brief The number of fractional bits in the 64-bit time representation.
@@ -350,7 +347,7 @@ static inline int64_t JLS_TIME_ABS(int64_t t) {
  *      epoch = dateutil.parser.parse('2018-01-01T00:00:00Z').timestamp()
  *      datetime.datetime.fromtimestamp((my_time >> 30) + epoch)
  */
-int64_t jls_now();
+JLS_API int64_t jls_now();
 
 /**
  * @brief The platform counter structure.
@@ -380,7 +377,7 @@ struct jls_time_counter_s {
  * The JLS authors recommend this counter starts at 0 when the
  * system powers up.
  */
-struct jls_time_counter_s jls_time_counter();
+JLS_API struct jls_time_counter_s jls_time_counter();
 
 /**
  * @brief Get the monotonic platform time as a 34Q30 fixed point number.
@@ -395,10 +392,7 @@ static inline int64_t jls_time_rel() {
     return JLS_COUNTER_TO_TIME(counter.value, counter.frequency);
 }
 
-
-#ifdef __cplusplus
-}
-#endif
+JLS_CPP_GUARD_END
 
 /** @} */
 

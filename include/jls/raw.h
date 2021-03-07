@@ -25,11 +25,8 @@
 
 #include <stdio.h>
 #include <stdint.h>
+#include "jls/cmacro.h"
 #include "jls/format.h"
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /**
  * @ingroup jls
@@ -43,6 +40,8 @@ extern "C" {
  *
  * @{
  */
+
+JLS_CPP_GUARD_START
 
 /**
  * @brief The opaque JLS raw object.
@@ -202,10 +201,8 @@ int64_t jls_raw_chunk_tell_end(struct jls_raw_s * self);
  */
 const char * jls_tag_to_name(uint8_t tag);
 
-/** @} */
+JLS_CPP_GUARD_END
 
-#ifdef __cplusplus
-}
-#endif
+/** @} */
 
 #endif  /* JLS_RAW_H__ */
