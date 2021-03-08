@@ -16,6 +16,9 @@
 
 # JLS
 
+main: [![Build Status](https://travis-ci.org/jetperch/jls.svg?branch=main)](https://travis-ci.org/jetperch/jls)
+develop: [![Build Status](https://travis-ci.org/jetperch/jls.svg?branch=develop)](https://travis-ci.org/jetperch/jls)
+
 Welcome to the [Joulescope®](https://www.joulescope.com) File Format project.
 The goal of this project is to provide performant data storage for huge, 
 simultaneous, one-dimensional signals. This repository contains:

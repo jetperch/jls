@@ -13,7 +13,6 @@ matrix:
       - |
         # brew update
         brew unlink python@2
-        brew install libusb
         brew outdated python@3 || brew upgrade python@3
     - name: "Python 3.8 on Windows"
       os: windows

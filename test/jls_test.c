@@ -18,12 +18,8 @@
 #include <stddef.h>
 #include <setjmp.h>
 #include <cmocka.h>
-#include "jls/reader.h"
+#include "jls.h"
 #include "jls/writer.h"
-#include "jls/format.h"
-#include "jls/statistics.h"
-#include "jls/time.h"
-#include "jls/ec.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
