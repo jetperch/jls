@@ -36,9 +36,9 @@ simultaneous, one-dimensional signals. This repository contains:
 
 * Cross-platform
   * Microsoft Windows x64
-  * Apple macOS x64 🔜
+  * Apple macOS x64
   * Apple macOS ARM 🔜  
-  * Linux x64 🔜
+  * Linux x64
 * Support for multiple, simultaneous data sources
 * Support for multiple, simultaneous signal waveforms
 * Fixed sample rate signals (FSR)
@@ -76,7 +76,7 @@ simultaneous, one-dimensional signals. This repository contains:
   * lossy with downsampling below threshold 🔜
 
 Items marked with 🔜 are under development and coming soon.
-As of Feb 2021, the JLS v2 file structure is well-defined.
+As of Mar 2021, the JLS v2 file structure is well-defined.
 However, the datatype and compression storage formats are not 
 yet defined, and the software still needs to grow to support 
 the target feature set.
@@ -92,7 +92,7 @@ The [Saleae binary export file format v2](https://support.saleae.com/faq/technic
 is also not suitable since it buffers stores single, contiguous blocks.
 [Sigrok v2](https://sigrok.org/wiki/File_format:Sigrok/v2) is similar.
 The [Sigrok v3](https://sigrok.org/wiki/File_format:Sigrok/v3) format
-(under development as of Feb 2021) is better in that it stores sequences of
+(under development as of Mar 2021) is better in that it stores sequences of
 "packets" containing data blocks, but it still will does not allow for
 fast seek or summaries.
 
