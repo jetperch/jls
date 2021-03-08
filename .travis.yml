@@ -1,0 +1,40 @@
+language: python
+matrix:
+  include:
+    - name: "Python 3.8 on Focal Ubuntu Linux"
+      os: linux
+      dist: focal   # required for Python >= 3.7
+      python: 3.8
+    - name: "Python 3 Homebrew on macOS"
+      os: osx
+      osx_image: xcode12.2
+      language: shell  # 'language: python' is an error on Travis CI macOS
+      before_install:
+      - |
+        # brew update
+        brew unlink python@2
+        brew install libusb
+        brew outdated python@3 || brew upgrade python@3
+    - name: "Python 3.8 on Windows"
+      os: windows
+      language: shell  # 'language: python' is an error on Travis CI windows 
+      env: >-
+        PATH=/c/Python38:/c/Python38/Scripts:$PATH
+      before_install:
+        - choco install python --version=3.8.8
+        - cp /c/Python38/python.exe /c/Python38/python3.exe
+    - name: "Python 3.9 on Windows"
+      os: windows
+      language: shell  # 'language: python' is an error on Travis CI windows 
+      env: >-
+        PATH=/c/Python39:/c/Python39/Scripts:$PATH      
+      before_install:
+        - choco install python --version=3.9.2
+        - cp /c/Python39/python.exe /c/Python39/python3.exe
+install:
+  - pip3 install -U -r requirements.txt
+  - python3 setup.py build_ext --inplace
+script:
+  - python3 -m unittest
+  - python3 setup.py sdist
+  - if [ "$TRAVIS_OS_NAME" = "windows" ]; then python3 setup.py bdist_wheel; fi
