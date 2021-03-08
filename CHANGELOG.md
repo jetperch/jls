@@ -6,12 +6,13 @@ This file contains the list of changes made to the JLS project.
 
 ## 0.2.0
 
-2021 Mar 5 [in progress]
+2021 Mar 8 [in progress]
 
 *   Added group_id parameter to annotation.
 *   Fixed example/generate.py length argument.
 *   Updated numpy dependency to 1.20.
 *   Fixed pyjls console_script.
+*   Changed logging interface and connected natvie to python logging.
 
 
 ## 0.1.0

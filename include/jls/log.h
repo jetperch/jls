@@ -89,10 +89,10 @@ JLS_CPP_GUARD_START
 #endif
 
 /**
- * @brief The printf-style function.
+ * @brief The printf-style function call for each log message.
  *
  * @param format The print-style formatting string.
- * The remaining parameters are arguments for the formatting string.
+ *     The remaining parameters are arguments for the formatting string.
  * @return The number of characters printed.
  *
  * For PC-based applications, a common implementation is::
@@ -109,31 +109,38 @@ JLS_CPP_GUARD_START
  *
  * If your application calls the LOG* macros from multiple threads, then
  * the jls_log_printf implementation must be thread-safe and reentrant.
+ *
+ * This function is exposed to allow for unit testing.
  */
-typedef void(*jls_log_printf)(const char * format, ...) JLS_LOG_PRINTF_FORMAT;
-
-extern volatile jls_log_printf jls_log_printf_;
+JLS_API void jls_log_printf(const char * format, ...) JLS_LOG_PRINTF_FORMAT;
 
 /**
- * @brief Initialize the logging feature.
+ * @brief The callback for log messages.
  *
- * @param handler The log handler.  Pass NULL or call jls_log_finalize() to
+ * @param msg The log message.
+ */
+typedef void (*jls_log_cbk)(const char * msg);
+
+/**
+ * @brief Register a logging handler
+ *
+ * @param handler The log handler.  Pass NULL or call jls_log_unregister() to
  *      restore the default log handler.
  *
  * @return 0 or error code.
  *
  * The library initializes with a default null log handler so that logging
- * which occurs before jls_log_initialize will not cause a fault.  This function
+ * which occurs before jls_log_register will not cause a fault.  This function
  * may be safely called at any time, even without finalize.
  */
-int jls_log_initialize(jls_log_printf handler);
+JLS_API void jls_log_register(jls_log_cbk handler);
 
 /**
  * @brief Finalize the logging feature.
  *
  * This is equivalent to calling jls_log_initialize(0).
  */
-void jls_log_finalize();
+JLS_API void jls_log_unregister();
 
 /**
  * @def JLS_LOG_PRINTF
@@ -145,7 +152,7 @@ void jls_log_finalize();
  */
 #ifndef JLS_LOG_PRINTF
 #define JLS_LOG_PRINTF(level, format, ...) \
-    jls_log_printf_("%c %s:%d: " format "\n", jls_log_level_char[level], __FILENAME__, __LINE__, __VA_ARGS__);
+    jls_log_printf("%c %s:%d: " format "\n", jls_log_level_char[level], __FILENAME__, __LINE__, __VA_ARGS__);
 #endif
 
 /**

@@ -34,7 +34,12 @@ from . cimport c_jls
 from .structs import SourceDef, SignalDef
 
 
-__all__ = ['DataType', 'AnnotationType', 'SignalType', 'Writer', 'Reader', 'SourceDef', 'SignalDef', 'SummaryFSR']
+__all__ = ['DataType', 'AnnotationType', 'SignalType', 'Writer', 'Reader',
+           'SourceDef', 'SignalDef', 'SummaryFSR', 'jls_inject_log']
+
+
+_log_c_name = 'pyjls.c'
+_log_c = logging.getLogger(_log_c_name)
 
 
 def _data_type_def(basetype, size, q):
@@ -68,6 +73,19 @@ _annotation_map = {
     'marker': AnnotationType.MARKER,
 }
 
+_log_level_map = {
+    '!': logging.CRITICAL,
+    'A': logging.CRITICAL,
+    'C': logging.CRITICAL,
+    'E': logging.ERROR,
+    'W': logging.WARNING,
+    'N': logging.INFO,
+    'I': logging.INFO,
+    'D': logging.DEBUG,
+    'D': logging.DEBUG,
+    'D': logging.DEBUG,
+}
+
 
 class SignalType:
     FSR = c_jls.JLS_SIGNAL_TYPE_FSR
@@ -80,6 +98,26 @@ class SummaryFSR:
     MIN = c_jls.JLS_SUMMARY_FSR_MIN
     MAX = c_jls.JLS_SUMMARY_FSR_MAX
     COUNT = c_jls.JLS_SUMMARY_FSR_COUNT
+
+
+cdef void _log_cbk(const char * msg):
+    m = msg.decode('utf-8').strip()
+    level, location, s = m.split(' ', 2)
+    lvl = _log_level_map.get(level, logging.DEBUG)
+    filename, line, _ = location.split(':')
+    record = logging.LogRecord(_log_c_name, lvl, filename, int(line), s, None, None)
+    _log_c.handle(record)
+
+
+c_jls.jls_log_register(_log_cbk)
+
+
+def jls_inject_log(level, filename, line, msg):
+    cdef char * c_msg
+    location = ':'.join([filename, str(line), ''])
+    msg = ' '.join([level, location, msg]).encode('utf-8')
+    c_msg = msg
+    c_jls.jls_log_printf('%s\n'.encode('utf-8'), c_msg)
 
 
 def _encode_str(s):

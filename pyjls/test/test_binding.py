@@ -12,7 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from pyjls.binding import Writer, Reader, SummaryFSR
+from pyjls.binding import Writer, Reader, SummaryFSR, jls_inject_log
+import io
+import logging
+from logging import StreamHandler
 import numpy as np
 import os
 import tempfile
@@ -101,3 +104,17 @@ class TestBinding(unittest.TestCase):
             self.assertEqual((1, b'user binary'), user_data[0])
             self.assertEqual((2, 'user string'), user_data[1])
             self.assertEqual((3, {'user': 'json'}), user_data[2])
+
+    def test_log(self):
+        log = logging.getLogger('pyjls.c')
+        formatter = logging.Formatter("%(levelname)s:%(filename)s:%(lineno)d:%(name)s:%(message)s")
+        stream = io.StringIO()
+        stream_handler = StreamHandler(stream)
+        stream_handler.setFormatter(formatter)
+        log.addHandler(stream_handler)
+        jls_inject_log('I', 'hello', 10, 'world')
+        jls_inject_log('D', 'debug', 11, 'debug1')
+        stream_handler.setLevel(logging.INFO)
+        jls_inject_log('D', 'debug', 12, 'debug2')
+        expect = ['INFO:hello:10:pyjls.c:world', 'DEBUG:debug:11:pyjls.c:debug1', '']
+        self.assertEqual('\n'.join(expect), stream.getvalue())

@@ -36,26 +36,29 @@ char const jls_log_level_char[JLS_LOG_LEVEL_ALL + 1] = {
         '!', 'A', 'C', 'E', 'W', 'N', 'I', 'D', 'D', 'D', '.'
 };
 
-void jls_log_printf_default(const char * fmt, ...) {
-    // todo remove
+static void cbk_default(const char * msg) {
+    (void) msg;
+}
+
+static jls_log_cbk cbk_ = cbk_default;
+
+void jls_log_printf(const char * fmt, ...) {
+    char buffer[1024];
     va_list arg;
     va_start(arg, fmt);
-    vprintf(fmt, arg);
+    vsnprintf(buffer, sizeof(buffer), fmt, arg);
     va_end(arg);
-    fflush(stdout);
+    cbk_(buffer);
 }
 
-volatile jls_log_printf jls_log_printf_ = jls_log_printf_default;
-
-int jls_log_initialize(jls_log_printf handler) {
+JLS_API void jls_log_register(jls_log_cbk handler) {
     if (NULL == handler) {
-        jls_log_printf_ = jls_log_printf_default;
+        cbk_ = cbk_default;
     } else {
-        jls_log_printf_ = handler;
+        cbk_ = handler;
     }
-    return 0;
 }
 
-void jls_log_finalize() {
-    jls_log_initialize(0);
+JLS_API void jls_log_unregister() {
+    jls_log_register(NULL);
 }

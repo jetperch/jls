@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
 
 def parser_config(p):
     """JLS file info."""
-    p.add_argument('--verbose',
+    p.add_argument('--verbose', '-v',
                    action='store_true',
                    help='Display verbose information.')
     p.add_argument('filename',

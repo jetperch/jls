@@ -51,7 +51,7 @@ with open(VERSION_PATH, 'r', encoding='utf-8') as f:
     exec(f.read(), about)
 
 
-if platform.system == 'Windows':
+if platform.system() == 'Windows':
     sources = ['src/backend_win.c']
     libraries = []
     extra_compile_args = []

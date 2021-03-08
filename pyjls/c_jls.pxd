@@ -73,6 +73,13 @@ cdef extern from "jls/format.h":
         JLS_SUMMARY_FSR_COUNT = 4
 
 
+cdef extern from "jls/log.h":
+    void jls_log_printf(const char * format, ...)
+    ctypedef void (*jls_log_cbk)(const char * msg)
+    void jls_log_register(jls_log_cbk handler)
+    void jls_log_unregister()
+
+
 cdef extern from "jls/time.h":
     int64_t jls_now()
 
