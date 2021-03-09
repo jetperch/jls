@@ -121,6 +121,10 @@ int64_t jls_bk_ftell(struct jls_bkf_s * self) {
     return _telli64(self->fd);
 }
 
+int32_t jls_bk_fflush(struct jls_bkf_s * self) {
+    return _commit(self->fd);
+}
+
 static DWORD WINAPI task(LPVOID lpParam) {
     struct jls_twr_s * self = (struct jls_twr_s *) lpParam;
     return jls_twr_run(self);
@@ -175,7 +179,10 @@ struct jls_bkt_s * jls_bkt_initialize(struct jls_twr_s * wr) {
 void jls_bkt_finalize(struct jls_bkt_s * self) {
     if (self) {
         if (self->thread) {
-            WaitForSingleObject(self->thread, 1000);
+            DWORD rc = WaitForSingleObject(self->thread, JLS_BK_CLOSE_TIMEOUT_MS);
+            if (WAIT_OBJECT_0 != rc) {
+                JLS_LOGE("thread close wait failed %d", (int) rc);
+            }
             CloseHandle(self->thread);
             self->thread = NULL;
         }
@@ -194,30 +201,38 @@ void jls_bkt_finalize(struct jls_bkt_s * self) {
     }
 }
 
-void jls_bkt_msg_lock(struct jls_bkt_s * self) {
+int jls_bkt_msg_lock(struct jls_bkt_s * self) {
     DWORD rc = WaitForSingleObject(self->msg_mutex, JLS_BK_MSG_LOCK_TIMEOUT_MS);
     if (WAIT_OBJECT_0 != rc) {
-        JLS_LOGE("jls_bkt_msg_lock failed");
+        JLS_LOGE("jls_bkt_msg_lock failed %d", (int) rc);
+        return rc;
     }
+    return 0;
 }
 
-void jls_bkt_msg_unlock(struct jls_bkt_s * self) {
+int jls_bkt_msg_unlock(struct jls_bkt_s * self) {
     if (!ReleaseMutex(self->msg_mutex)) {
         JLS_LOGE("jls_bkt_msg_unlock failed");
+        return 1;
     }
+    return 0;
 }
 
-void jls_bkt_process_lock(struct jls_bkt_s * self) {
+int jls_bkt_process_lock(struct jls_bkt_s * self) {
     DWORD rc = WaitForSingleObject(self->process_mutex, JLS_BK_PROCESS_LOCK_TIMEOUT_MS);
     if (WAIT_OBJECT_0 != rc) {
-        JLS_LOGE("jls_bkt_msg_lock failed");
+        JLS_LOGE("jls_bkt_msg_lock failed %d", (int) rc);
+        return rc;
     }
+    return 0;
 }
 
-void jls_bkt_process_unlock(struct jls_bkt_s * self) {
+int jls_bkt_process_unlock(struct jls_bkt_s * self) {
     if (!ReleaseMutex(self->process_mutex)) {
         JLS_LOGE("jls_bkt_msg_unlock failed");
+        return 1;
     }
+    return 0;
 }
 
 void jls_bkt_msg_wait(struct jls_bkt_s * self) {

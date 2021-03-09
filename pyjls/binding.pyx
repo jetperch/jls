@@ -166,6 +166,9 @@ cdef class Writer:
     def close(self):
         c_jls.jls_twr_close(self._wr)
 
+    def flush(self):
+        c_jls.jls_twr_flush(self._wr)
+
     def source_def(self, source_id, name=None, vendor=None, model=None, version=None, serial_number=None):
         cdef int32_t rc
         cdef c_jls.jls_source_def_s s

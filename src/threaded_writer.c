@@ -21,6 +21,7 @@
 #include "jls/cdef.h"
 #include "jls/ec.h"
 #include "jls/log.h"
+#include "jls/time.h"
 #include "jls/writer.h"
 #include <stdlib.h>
 #include <string.h>
@@ -33,6 +34,8 @@ struct jls_twr_s {
     struct jls_bkt_s * bk;
     struct jls_wr_s * wr;
     volatile int quit;
+    volatile uint64_t flush_send_id;
+    volatile uint64_t flush_processed_id;
     struct jls_mrb_s mrb;
     uint8_t mrb_buffer[];
 };
@@ -67,6 +70,7 @@ struct msg_header_s {
 
 enum message_e {
     MSG_CLOSE,          // no header data, no args
+    MSG_FLUSH,          // no header data, no args
     MSG_USER_DATA,      // hdr.user_data, user_data
     MSG_FSR_F32,        // hdr.fsr_f32, data
     MSG_ANNOTATION,     // hdr.annotation, data
@@ -81,7 +85,9 @@ int32_t jls_twr_run(struct jls_twr_s * self) {
 
     while (!self->quit) {
         jls_bkt_msg_wait(self->bk);
-        jls_bkt_msg_lock(self->bk);
+        if (jls_bkt_msg_lock(self->bk)) {
+            continue;
+        }
         while (!self->quit) {
             msg = jls_mrb_peek(&self->mrb, &msg_size);
             jls_bkt_msg_unlock(self->bk);
@@ -98,6 +104,10 @@ int32_t jls_twr_run(struct jls_twr_s * self) {
             switch (hdr.msg_type) {
                 case MSG_CLOSE:
                     self->quit = 1;
+                    break;
+                case MSG_FLUSH:
+                    jls_wr_flush(self->wr);
+                    self->flush_processed_id = hdr.d > self->flush_processed_id ? hdr.d : self->flush_processed_id;
                     break;
                 case MSG_USER_DATA:
                     rc = jls_wr_user_data(self->wr, hdr.h.user_data.chunk_meta, hdr.h.user_data.storage_type,
@@ -123,7 +133,9 @@ int32_t jls_twr_run(struct jls_twr_s * self) {
                 JLS_LOGW("thread msg %d returned %d", (int) hdr.msg_type, (int) rc);
             }
 
-            jls_bkt_msg_lock(self->bk);
+            while (!self->quit && jls_bkt_msg_lock(self->bk)) {
+                // retry
+            }
             jls_mrb_pop(&self->mrb, &msg_size);
             // stay locked
         }
@@ -176,10 +188,33 @@ int32_t msg_send(struct jls_twr_s * self, const struct msg_header_s * hdr, const
     return JLS_ERROR_BUSY;
 }
 
+int32_t jls_twr_flush(struct jls_twr_s * self) {
+    uint64_t flush_id;
+    struct msg_header_s hdr = { .msg_type = MSG_FLUSH };
+    jls_bkt_msg_lock(self->bk);
+    flush_id = self->flush_send_id + 1;
+    self->flush_send_id = flush_id;
+    jls_bkt_msg_unlock(self->bk);
+    hdr.d = flush_id;
+    msg_send(self, &hdr, NULL, 0);
+
+    int64_t t_start = jls_now();
+    int64_t t_stop = t_start + JLS_TIME_MILLISECOND * (int64_t) JLS_BK_FLUSH_TIMEOUT_MS;
+    while (self->flush_processed_id < flush_id) {
+        jls_bkt_sleep_ms(10);
+        if (jls_now() >= t_stop) {
+            JLS_LOGE("flush timed out");
+            return JLS_ERROR_TIMED_OUT;
+        }
+    }
+    return 0;
+}
+
 int32_t jls_twr_close(struct jls_twr_s * self) {
     int rc = 0;
     if (self) {
         struct msg_header_s hdr = { .msg_type = MSG_CLOSE };
+        jls_twr_flush(self);
         msg_send(self, &hdr, NULL, 0);
         jls_bkt_finalize(self->bk);
         rc = jls_wr_close(self->wr);

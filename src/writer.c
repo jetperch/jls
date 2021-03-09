@@ -182,6 +182,10 @@ int32_t jls_wr_close(struct jls_wr_s * self) {
     return 0;
 }
 
+JLS_API int32_t jls_wr_flush(struct jls_wr_s * self) {
+    return jls_raw_flush(self->raw);
+}
+
 static void buf_reset(struct jls_wr_s * self) {
     self->buf.start = self->buffer;
     self->buf.cur = self->buffer;

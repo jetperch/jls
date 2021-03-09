@@ -39,8 +39,10 @@ JLS_CPP_GUARD_START
  */
 
 #define JLS_BK_MSG_WRITE_TIMEOUT_MS (5000)
-#define JLS_BK_MSG_LOCK_TIMEOUT_MS (1000)
-#define JLS_BK_PROCESS_LOCK_TIMEOUT_MS (1000)
+#define JLS_BK_MSG_LOCK_TIMEOUT_MS (5000)
+#define JLS_BK_PROCESS_LOCK_TIMEOUT_MS (2500)
+#define JLS_BK_FLUSH_TIMEOUT_MS (20000)
+#define JLS_BK_CLOSE_TIMEOUT_MS (1000)
 
 struct jls_bkf_s {
     int64_t fpos;                   // the current file position, to reduce ftell calls.
@@ -54,15 +56,16 @@ int32_t jls_bk_fwrite(struct jls_bkf_s * self, const void * buffer, unsigned int
 int32_t jls_bk_fread(struct jls_bkf_s * self, void * const buffer, unsigned const buffer_size);
 int32_t jls_bk_fseek(struct jls_bkf_s * self, int64_t offset, int origin);
 int64_t jls_bk_ftell(struct jls_bkf_s * self);
+int32_t jls_bk_fflush(struct jls_bkf_s * self);
 
 // forward declaration for "threaded_writer.h"
 struct jls_twr_s;
 struct jls_bkt_s * jls_bkt_initialize(struct jls_twr_s * wr);
 void jls_bkt_finalize(struct jls_bkt_s * self);
-void jls_bkt_msg_lock(struct jls_bkt_s * self);
-void jls_bkt_msg_unlock(struct jls_bkt_s * self);
-void jls_bkt_process_lock(struct jls_bkt_s * self);
-void jls_bkt_process_unlock(struct jls_bkt_s * self);
+int jls_bkt_msg_lock(struct jls_bkt_s * self);          // 0 on success or error code
+int jls_bkt_msg_unlock(struct jls_bkt_s * self);        // 0 on success or error code
+int jls_bkt_process_lock(struct jls_bkt_s * self);      // 0 on success or error code
+int jls_bkt_process_unlock(struct jls_bkt_s * self);    // 0 on success or error code
 void jls_bkt_msg_wait(struct jls_bkt_s * self);
 void jls_bkt_msg_signal(struct jls_bkt_s * self);
 void jls_bkt_sleep_ms(uint32_t duration_ms);

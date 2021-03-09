@@ -350,6 +350,10 @@ int64_t jls_raw_chunk_tell(struct jls_raw_s * self) {
     return self->offset;
 }
 
+int32_t jls_raw_flush(struct jls_raw_s * self) {
+    return jls_bk_fflush(&self->backend);
+}
+
 int32_t jls_raw_chunk_next(struct jls_raw_s * self) {
     RLE(jls_raw_rd_header(self, NULL));  // ensure that we have the header
     invalidate_current_chunk(self);

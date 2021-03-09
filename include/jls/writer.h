@@ -62,6 +62,14 @@ JLS_API int32_t jls_wr_open(struct jls_wr_s ** instance, const char * path);
 JLS_API int32_t jls_wr_close(struct jls_wr_s * self);
 
 /**
+ * @brief Flush a JLS file to disk.
+ *
+ * @param self The JLS writer instance from jls_wr_open().
+ * @return 0 or error code.
+ */
+JLS_API int32_t jls_wr_flush(struct jls_wr_s * self);
+
+/**
  * @brief Define a new source.
  *
  * @param self The JLS writer instance.

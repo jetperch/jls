@@ -147,6 +147,14 @@ int32_t jls_raw_chunk_seek(struct jls_raw_s * self, int64_t offset);
 int64_t jls_raw_chunk_tell(struct jls_raw_s * self);
 
 /**
+ * @brief Flush all JLS changes to disk.
+ *
+ * @param self The JLS raw instance.
+ * @return 0 or error code.
+ */
+int32_t jls_raw_flush(struct jls_raw_s * self);
+
+/**
  * @brief Navigate to the next chunk.
  *
  * @param self The JLS raw instance.

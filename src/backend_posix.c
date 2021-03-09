@@ -162,6 +162,10 @@ int64_t jls_bk_ftell(struct jls_bkf_s * self) {
     return lseek(self->fd, 0, SEEK_CUR);
 }
 
+int32_t jls_bk_fflush(struct jls_bkf_s * self) {
+    return fsync(self->f);
+}
+
 static void * task(void * user_data) {
     struct jls_twr_s * self = (struct jls_twr_s *) user_data;
     jls_twr_run(self);
@@ -214,20 +218,36 @@ void jls_bkt_finalize(struct jls_bkt_s * self) {
     }
 }
 
-void jls_bkt_msg_lock(struct jls_bkt_s * self) {
-    pthread_mutex_lock(&self->msg_mutex);
+int jls_bkt_msg_lock(struct jls_bkt_s * self) {
+    int rc = pthread_mutex_lock(&self->msg_mutex);
+    if (rc) {
+        JLS_LOGE("jls_bkt_msg_lock failed %d", (int) rc);
+    }
+    return rc;
 }
 
-void jls_bkt_msg_unlock(struct jls_bkt_s * self) {
-    pthread_mutex_unlock(&self->msg_mutex);
+int jls_bkt_msg_unlock(struct jls_bkt_s * self) {
+    int rc = pthread_mutex_unlock(&self->msg_mutex);
+    if (rc) {
+        JLS_LOGE("jls_bkt_msg_unlock failed %d", (int) rc);
+    }
+    return rc;
 }
 
-void jls_bkt_process_lock(struct jls_bkt_s * self) {
-    pthread_mutex_lock(&self->process_mutex);
+int jls_bkt_process_lock(struct jls_bkt_s * self) {
+    int rc = pthread_mutex_lock(&self->process_mutex);
+    if (rc) {
+        JLS_LOGE("jls_bkt_process_lock failed %d", (int) rc);
+    }
+    return rc;
 }
 
-void jls_bkt_process_unlock(struct jls_bkt_s * self) {
-    pthread_mutex_unlock(&self->process_mutex);
+int jls_bkt_process_unlock(struct jls_bkt_s * self) {
+    int rc = pthread_mutex_unlock(&self->process_mutex);
+    if (rc) {
+        JLS_LOGE("jls_bkt_process_unlock failed %d", (int) rc);
+    }
+    return rc;
 }
 
 void jls_bkt_msg_wait(struct jls_bkt_s * self) {

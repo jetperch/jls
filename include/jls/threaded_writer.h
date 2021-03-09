@@ -47,6 +47,7 @@ struct jls_twr_s;
 
 JLS_API int32_t jls_twr_open(struct jls_twr_s ** instance, const char * path);
 JLS_API int32_t jls_twr_close(struct jls_twr_s * self);
+JLS_API int32_t jls_twr_flush(struct jls_twr_s * self);
 JLS_API int32_t jls_twr_source_def(struct jls_twr_s * self, const struct jls_source_def_s * source);
 JLS_API int32_t jls_twr_signal_def(struct jls_twr_s * self, const struct jls_signal_def_s * signal);
 JLS_API int32_t jls_twr_user_data(struct jls_twr_s * self, uint16_t chunk_meta,
