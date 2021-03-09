@@ -4,6 +4,13 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.2.2
+
+2021 Mar 9
+
+*   Fixed build using Clang and AppleClang.
+
+
 ## 0.2.1
 
 2021 Mar 8
