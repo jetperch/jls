@@ -163,7 +163,7 @@ int64_t jls_bk_ftell(struct jls_bkf_s * self) {
 }
 
 int32_t jls_bk_fflush(struct jls_bkf_s * self) {
-    return fsync(self->f);
+    return fsync(self->fd);
 }
 
 static void * task(void * user_data) {
