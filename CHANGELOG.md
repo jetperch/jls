@@ -4,6 +4,15 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.2.3
+
+2021 Mar 10
+
+*   Fixed sdist to include native files for pyjls cython build.
+*   Added CREDITS.html.
+*   Included credits, license & readme with pyjls source distribution.
+
+
 ## 0.2.2
 
 2021 Mar 9

@@ -1,0 +1,7 @@
+include CHANGELOG.md
+include CREDITS.html
+include README.md
+include LICENSE
+recursive-include include *.h
+recursive-include include_prv *.h
+recursive-include src *.c *.h

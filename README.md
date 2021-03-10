@@ -32,6 +32,12 @@ simultaneous, one-dimensional signals. This repository contains:
 > implemented and the API is subject to rapid change.
 
 
+## License
+
+This project is Copyright © 2017-2021 Jetperch LLC and licensed under the 
+permissive [Apache 2.0](LICENSE).
+
+
 ## Features
 
 * Cross-platform
