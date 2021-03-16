@@ -26,11 +26,13 @@ set(SOURCES
         writer.c
 )
 
-if (WIN32)
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
+    set(SOURCES ${SOURCES} backend_posix.c crc32c_arm_neon.c)
+    set(JLS_LIBS jls m pthread PARENT_SCOPE)
+elseif (WIN32)
     set(SOURCES ${SOURCES} backend_win.c crc32c_intel_sse4.c)
     set(JLS_LIBS jls PARENT_SCOPE)
 elseif (APPLE)
-    # todo handle arm
     set(SOURCES ${SOURCES} backend_posix.c crc32c_intel_sse4.c)
     set(JLS_LIBS jls m pthread PARENT_SCOPE)
 elseif (UNIX)

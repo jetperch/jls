@@ -15,7 +15,7 @@
 cmake_minimum_required (VERSION 3.1)
 set(PARENT_PROJECT_DIR ${PROJECT_SOURCE_DIR})
 project(JLS
-        VERSION 0.2.3
+        VERSION 0.2.4
         LANGUAGES C)
 SET(PROJECT_PREFIX JLS)
 SET(VERSION_STRING "${PROJECT_VERSION}")
@@ -37,8 +37,12 @@ function (SET_FILENAME _filename)
         COMPILE_DEFINITIONS "__FILENAME__=\"${b}\"")
 endfunction (SET_FILENAME)
 
+message(STATUS "CMAKE_SYSTEM_PROCESSOR = ${CMAKE_SYSTEM_PROCESSOR}")
+message(STATUS "CMAKE_C_COMPILER_ID = ${CMAKE_C_COMPILER_ID}")
 
-if (CMAKE_C_COMPILER_ID STREQUAL "GNU")
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
+    add_definitions(-march=armv8-a+crc+simd)
+elseif (CMAKE_C_COMPILER_ID STREQUAL "GNU")
     message(STATUS "complier=GNU")
     add_definitions(-msse4.2)
 elseif (CMAKE_C_COMPILER_ID MATCHES "^(Apple)?Clang$")

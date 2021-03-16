@@ -9,6 +9,7 @@ __pycache__
 *.atsuo
 *.pyd
 *.egg-info
+.eggs
 
 # Cython files
 pyjls/binding.c

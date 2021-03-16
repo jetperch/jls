@@ -52,11 +52,15 @@ with open(VERSION_PATH, 'r', encoding='utf-8') as f:
 
 
 if platform.system() == 'Windows':
-    sources = ['src/backend_win.c']
+    sources = ['src/backend_win.c', 'src/crc32c_intel_sse4.c']
     libraries = []
     extra_compile_args = []
+elif platform.processor() == 'aarch64':
+    sources = ['src/backend_posix.c', 'src/crc32c_arm_neon.c',]
+    libraries = ['pthread', 'm']
+    extra_compile_args = ['-march=armv8-a+crc+simd']
 else:
-    sources = ['src/backend_posix.c']
+    sources = ['src/backend_posix.c', 'src/crc32c_intel_sse4.c',]
     libraries = ['pthread', 'm']
     extra_compile_args = ['-msse4']
 
@@ -66,7 +70,6 @@ extensions = [
     setuptools.Extension('pyjls.binding',
         sources=[
             'pyjls/binding' + ext,
-            'src/crc32c_intel_sse4.c',
             'src/ec.c',
             'src/log.c',
             'src/msg_ring_buffer.c',
