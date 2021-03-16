@@ -9,6 +9,7 @@ This file contains the list of changes made to the JLS project.
 2021 Mar 16
 
 *   Added support for aarch64 (Raspberry Pi 4).  Untested on mac M1.
+*   Fixed POSIX time.
 
 
 ## 0.2.3

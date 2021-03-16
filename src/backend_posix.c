@@ -271,8 +271,8 @@ void jls_bkt_sleep_ms(uint32_t duration_ms) {
 int64_t jls_now() {
     int64_t t;
     struct timespec ts;
-    if (clock_getres(CLOCK_REALTIME, &ts)) {
-        JLS_LOGE("clock_getres error");
+    if (clock_gettime(CLOCK_REALTIME, &ts)) {
+        JLS_LOGE("clock_gettime error");
     }
     t = ((int64_t) ts.tv_sec + JLS_TIME_EPOCH_UNIX_OFFSET_SECONDS) * JLS_TIME_SECOND;
     t += JLS_COUNTER_TO_TIME(ts.tv_nsec, 1000000000LL);
@@ -282,8 +282,8 @@ int64_t jls_now() {
 struct jls_time_counter_s jls_time_counter() {
     struct jls_time_counter_s counter;
     struct timespec ts;
-    if (clock_getres(CLOCK_MONOTONIC, &ts)) {
-        JLS_LOGE("clock_getres error");
+    if (clock_gettime(CLOCK_MONOTONIC, &ts)) {
+        JLS_LOGE("clock_gettime error");
     }
     counter.value = ((int64_t) ts.tv_sec + JLS_TIME_EPOCH_UNIX_OFFSET_SECONDS) * JLS_TIME_SECOND;
     counter.value += JLS_COUNTER_TO_TIME(ts.tv_nsec, 1000000000LL);
