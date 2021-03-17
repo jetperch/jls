@@ -26,7 +26,10 @@ set(SOURCES
         writer.c
 )
 
-if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "armv7l")
+    set(SOURCES ${SOURCES} backend_posix.c crc32c_sw.c)
+    set(JLS_LIBS jls m pthread PARENT_SCOPE)
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
     set(SOURCES ${SOURCES} backend_posix.c crc32c_arm_neon.c)
     set(JLS_LIBS jls m pthread PARENT_SCOPE)
 elseif (WIN32)

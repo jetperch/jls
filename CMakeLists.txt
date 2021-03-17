@@ -40,7 +40,9 @@ endfunction (SET_FILENAME)
 message(STATUS "CMAKE_SYSTEM_PROCESSOR = ${CMAKE_SYSTEM_PROCESSOR}")
 message(STATUS "CMAKE_C_COMPILER_ID = ${CMAKE_C_COMPILER_ID}")
 
-if (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
+if (CMAKE_SYSTEM_PROCESSOR STREQUAL "armv7l")
+    # no extra defines, using software crc
+elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
     add_definitions(-march=armv8-a+crc+simd)
 elseif (CMAKE_C_COMPILER_ID STREQUAL "GNU")
     message(STATUS "complier=GNU")

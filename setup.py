@@ -55,6 +55,10 @@ if platform.system() == 'Windows':
     sources = ['src/backend_win.c', 'src/crc32c_intel_sse4.c']
     libraries = []
     extra_compile_args = []
+elif 'armv7' in platform.machine():
+    sources = ['src/backend_posix.c', 'src/crc32c_sw.c',]
+    libraries = ['pthread', 'm']
+    extra_compile_args = []
 elif platform.processor() == 'aarch64':
     sources = ['src/backend_posix.c', 'src/crc32c_arm_neon.c',]
     libraries = ['pthread', 'm']
@@ -163,6 +167,7 @@ setuptools.setup(
         # Supported Python versions
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
         'Programming Language :: Python :: Implementation :: CPython',
@@ -185,17 +190,17 @@ setuptools.setup(
     include_dirs=[],
     
     # See https://packaging.python.org/guides/distributing-packages-using-setuptools/#python-requires
-    python_requires='~=3.8',
+    python_requires='~=3.7',
 
     setup_requires=[
         # https://developercommunity.visualstudio.com/content/problem/1207405/fmod-after-an-update-to-windows-2004-is-causing-a.html
-        'numpy>=1.20',
+        'numpy>=1.16',
         'Cython>=0.29.3',
     ],
 
     # See https://packaging.python.org/en/latest/requirements.html
     install_requires=[
-        "numpy>=1.20",
+        "numpy>=1.16",
     ] + PLATFORM_INSTALL_REQUIRES,
 
     extras_require={
