@@ -1,6 +1,6 @@
 Debug
 Release
-cmake-build-*
+cmake-build*
 build
 dist
 __pycache__

@@ -41,8 +41,10 @@ message(STATUS "CMAKE_SYSTEM_PROCESSOR = ${CMAKE_SYSTEM_PROCESSOR}")
 message(STATUS "CMAKE_C_COMPILER_ID = ${CMAKE_C_COMPILER_ID}")
 
 if (CMAKE_SYSTEM_PROCESSOR STREQUAL "armv7l")
+    message(STATUS "platform=ARMv7")
     # no extra defines, using software crc
-elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
+elseif ((CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64") OR (CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64"))
+    message(STATUS "platform=arm64")
     add_definitions(-march=armv8-a+crc+simd)
 elseif (CMAKE_C_COMPILER_ID STREQUAL "GNU")
     message(STATUS "complier=GNU")
@@ -66,7 +68,8 @@ if (JLS_TOPLEVEL)
         endif (WIN32)
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99")
-    elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    elseif (CMAKE_C_COMPILER_ID MATCHES "^(Apple)?Clang$")
+        add_definitions(-Wall -Wextra -Wpedantic -Werror -fPIC)
     elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Intel") # Intel C++
     elseif (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")  # Visual Studio C++
     endif()
