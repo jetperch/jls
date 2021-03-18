@@ -34,6 +34,11 @@ struct jls_bkt_s {
     HANDLE thread;
 };
 
+// Simplified implementation, for backend purposed.
+struct jls_twr_s {
+    struct jls_bkt_s * bk;  // REQUIRED first entry
+};
+
 // https://docs.microsoft.com/en-us/cpp/c-runtime-library/low-level-i-o?view=msvc-160
 // The C standard library only gets in the way for JLS.
 int32_t jls_bk_fopen(struct jls_bkf_s * self, const char * filename, const char * mode) {
@@ -159,6 +164,7 @@ struct jls_bkt_s * jls_bkt_initialize(struct jls_twr_s * wr) {
         return NULL;
     }
 
+    wr->bk = self;
     self->thread = CreateThread(
             NULL,                   // default security attributes
             0,                      // use default stack size
@@ -168,6 +174,7 @@ struct jls_bkt_s * jls_bkt_initialize(struct jls_twr_s * wr) {
             NULL);                  // returns the thread identifier
     if (!self->thread) {
         jls_bkt_finalize(self);
+        self->bk = NULL;
         return NULL;
     }
     if (!SetThreadPriority(self->thread, THREAD_PRIORITY_BELOW_NORMAL)) {
@@ -198,6 +205,7 @@ void jls_bkt_finalize(struct jls_bkt_s * self) {
             CloseHandle(self->process_mutex);
             self->process_mutex = NULL;
         }
+        free(self);
     }
 }
 

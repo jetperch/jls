@@ -4,9 +4,17 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.2.6
+
+2021 Mar 18 [in progress]
+
+*   Fixed uninitialized variables in POSIX backend (thanks Valgrind!).
+*   Fixed memory leaks (thanks Valgrind!).
+
+
 ## 0.2.5
 
-2021 Mar 16
+2021 Mar 18
 
 *   Added 32-bit ARMv7 support (Raspberry Pi OS).
 *   Added 64-bit ARM support for Apple silicon (M1).

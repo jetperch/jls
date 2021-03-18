@@ -45,6 +45,11 @@ struct jls_bkt_s {
     pthread_t thread;
 };
 
+// Simplified implementation, for backend purposed.
+struct jls_twr_s {
+    struct jls_bkt_s * bk;  // REQUIRED first entry
+};
+
 static struct event_flag* eventflag_create() {
     struct event_flag* ev;
     ev = (struct event_flag*) malloc(sizeof(struct event_flag));
@@ -177,24 +182,31 @@ struct jls_bkt_s * jls_bkt_initialize(struct jls_twr_s * wr) {
     if (!self) {
         return NULL;
     }
+
     if (pthread_mutex_init(&self->msg_mutex, NULL)) {
+        JLS_LOGE("jls_bkt_initialize: msg_mutex failed");
         jls_bkt_finalize(self);
         return NULL;
     }
     if (pthread_mutex_init(&self->process_mutex, NULL)) {
+        JLS_LOGE("jls_bkt_initialize: process_mutex failed");
         jls_bkt_finalize(self);
         return NULL;
     }
 
     self->msg_event = eventflag_create();
     if (!self->msg_event) {
+        JLS_LOGE("jls_bkt_initialize: eventflag_create failed");
+        jls_bkt_finalize(self);
         return NULL;
     }
 
+    wr->bk = self;
     int rc = pthread_create(&self->thread, NULL, task, wr);
     if (rc) {
         JLS_LOGE("jls_bkt_initialize: pthread_create returned %d", rc);
         jls_bkt_finalize(self);
+        wr->bk = NULL;
         return NULL;
     }
     return self;
@@ -215,6 +227,7 @@ void jls_bkt_finalize(struct jls_bkt_s * self) {
         }
         pthread_mutex_destroy(&self->msg_mutex);
         pthread_mutex_destroy(&self->process_mutex);
+        free(self);
     }
 }
 

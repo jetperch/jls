@@ -281,6 +281,7 @@ int32_t jls_wf_f32_close(struct jls_wf_f32_s * self) {
         for (size_t i = 0; i < JLS_ARRAY_SIZE(self->summary); ++i) {
             summary_close(self, (uint8_t) i);
         }
+        free(self);
     }
     return 0;
 }

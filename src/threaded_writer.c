@@ -31,7 +31,7 @@
 
 
 struct jls_twr_s {
-    struct jls_bkt_s * bk;
+    struct jls_bkt_s * bk;  // REQUIRED first entry
     struct jls_wr_s * wr;
     volatile int quit;
     volatile uint64_t flush_send_id;
@@ -83,7 +83,16 @@ int32_t jls_twr_run(struct jls_twr_s * self) {
     uint8_t * payload;
     int32_t rc = 0;
 
+    if (!self->bk) {
+        JLS_LOGE("backend null on entry");
+    }
+
     while (!self->quit) {
+        if (!self->bk) {
+            JLS_LOGE("backend null");
+            jls_bkt_sleep_ms(500);
+            continue;
+        }
         jls_bkt_msg_wait(self->bk);
         if (jls_bkt_msg_lock(self->bk)) {
             continue;
@@ -156,6 +165,9 @@ int32_t jls_twr_open(struct jls_twr_s ** instance, const char * path) {
     }
     self->quit = 0;
     self->wr = wr;
+    self->flush_send_id = 0;
+    self->flush_processed_id = 0;
+
     jls_mrb_init(&self->mrb, self->mrb_buffer, MRB_BUFFER_SIZE);
     self->bk = jls_bkt_initialize(self);
     if (!self->bk) {
