@@ -30,7 +30,12 @@ import os
 import platform
 import sys
 
-setuptools.dist.Distribution().fetch_build_eggs(['Cython>=0.20.1', 'numpy>=1.18'])
+if platform.system() == 'Windows':
+    numpy_req = 'numpy>=1.20'
+else:
+    numpy_req = 'numpy>=1.16'
+
+setuptools.dist.Distribution().fetch_build_eggs(['Cython>=0.29.3', numpy_req])
 
 import numpy as np
 
@@ -194,13 +199,13 @@ setuptools.setup(
 
     setup_requires=[
         # https://developercommunity.visualstudio.com/content/problem/1207405/fmod-after-an-update-to-windows-2004-is-causing-a.html
-        'numpy>=1.16',
+        numpy_req,
         'Cython>=0.29.3',
     ],
 
     # See https://packaging.python.org/en/latest/requirements.html
     install_requires=[
-        "numpy>=1.16",
+        numpy_req,
     ] + PLATFORM_INSTALL_REQUIRES,
 
     extras_require={
