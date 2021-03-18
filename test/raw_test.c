@@ -25,7 +25,7 @@
 #include <string.h>
 
 
-const char * filename = "tmp.jls";
+const char * filename = "raw_test_tmp.jls";
 static const uint8_t FILE_HDR[] = JLS_HEADER_IDENTIFICATION;
 static const uint8_t PAYLOAD1[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
 
@@ -242,6 +242,9 @@ static void test_end(void **state) {
     assert_int_equal(0, jls_raw_open(&j, filename, "r"));
     int64_t pos_end = jls_raw_chunk_tell_end(j);
     assert_int_equal(32, pos_end);
+
+    assert_int_equal(0, jls_raw_close(j));
+    remove(filename);
 }
 
 int main(void) {

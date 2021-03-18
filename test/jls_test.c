@@ -28,7 +28,7 @@
 
 #define SKIP_BASIC 0
 
-const char * filename = "tmp.jls";
+const char * filename = "jls_test_tmp.jls";
 const uint8_t USER_DATA_1[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
 const uint16_t CHUNK_META_1 = 0x0123;
 const uint8_t USER_DATA_2[] = {0x11, 0x22, 0xab, 0x34, 0x45, 0x46, 0x42, 42, 42, 3, 7};
@@ -114,6 +114,7 @@ static void test_source(void **state) {
     assert_string_equal(SOURCE_1.serial_number, sources[1].serial_number);
     assert_string_equal(SOURCE_3.name, sources[2].name);
     jls_rd_close(rd);
+    remove(filename);
 }
 
 static void test_wr_source_duplicate(void **state) {
@@ -124,6 +125,7 @@ static void test_wr_source_duplicate(void **state) {
     assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_1));
     assert_int_equal(JLS_ERROR_ALREADY_EXISTS, jls_wr_source_def(wr, &SOURCE_1));
     assert_int_equal(0, jls_wr_close(wr));
+    remove(filename);
 }
 
 static int32_t on_annotation(void * user_data, const struct jls_annotation_s * annotation) {
@@ -196,6 +198,7 @@ static void test_annotation(void **state) {
 
     // todo test
     jls_rd_close(rd);
+    remove(filename);
 }
 
 static int32_t on_user_data(void * user_data,
@@ -233,6 +236,7 @@ static void test_user_data(void **state) {
     assert_int_equal(0, jls_rd_user_data(rd, on_user_data, NULL));
 
     jls_rd_close(rd);
+    remove(filename);
 }
 
 static void test_signal(void **state) {
@@ -267,6 +271,7 @@ static void test_signal(void **state) {
     assert_string_equal(SIGNAL_6.name, signals[2].name);
 
     jls_rd_close(rd);
+    remove(filename);
 }
 
 static void test_wr_signal_without_source(void **state) {
@@ -275,6 +280,7 @@ static void test_wr_signal_without_source(void **state) {
     assert_int_equal(0, jls_wr_open(&wr, filename));
     assert_int_equal(JLS_ERROR_NOT_FOUND, jls_wr_signal_def(wr, &SIGNAL_6));
     assert_int_equal(0, jls_wr_close(wr));
+    remove(filename);
 }
 
 static void test_wr_signal_duplicate(void **state) {
@@ -285,6 +291,7 @@ static void test_wr_signal_duplicate(void **state) {
     assert_int_equal(0, jls_wr_signal_def(wr, &SIGNAL_6));
     assert_int_equal(JLS_ERROR_ALREADY_EXISTS, jls_wr_signal_def(wr, &SIGNAL_6));
     assert_int_equal(0, jls_wr_close(wr));
+    remove(filename);
 }
 #endif
 
@@ -356,6 +363,7 @@ static void test_data(void **state) {
 
     jls_rd_close(rd);
     free(signal);
+    remove(filename);
 }
 
 static void compare_stats(float * data, float * src, size_t src_length) {
@@ -413,6 +421,7 @@ static void test_statistics(void **state) {
 
     jls_rd_close(rd);
     free(signal);
+    remove(filename);
 }
 
 int main(void) {

@@ -29,7 +29,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-const char * filename = "tmp.jls";
+const char * filename = "threaded_test_tmp.jls";
 
 const struct jls_source_def_s SOURCE_3 = {
         .source_id = 3,
@@ -124,6 +124,7 @@ static void test_data(void **state) {
 
     jls_rd_close(rd);
     free(signal);
+    remove(filename);
 }
 
 int main(void) {
