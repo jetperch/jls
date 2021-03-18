@@ -161,6 +161,7 @@ struct jls_bkt_s * jls_bkt_initialize(struct jls_twr_s * wr) {
 
     self->msg_event = CreateEvent(NULL, TRUE, FALSE, NULL);
     if (!self->msg_event) {
+        jls_bkt_finalize(self);
         return NULL;
     }
 
@@ -174,7 +175,7 @@ struct jls_bkt_s * jls_bkt_initialize(struct jls_twr_s * wr) {
             NULL);                  // returns the thread identifier
     if (!self->thread) {
         jls_bkt_finalize(self);
-        self->bk = NULL;
+        wr->bk = NULL;
         return NULL;
     }
     if (!SetThreadPriority(self->thread, THREAD_PRIORITY_BELOW_NORMAL)) {

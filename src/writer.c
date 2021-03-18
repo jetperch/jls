@@ -517,7 +517,7 @@ int32_t jls_wr_user_data(struct jls_wr_s * self, uint16_t chunk_meta,
     if (!self) {
         return JLS_ERROR_PARAMETER_INVALID;
     }
-    if (data_size & !data) {
+    if (data_size && !data) {
         return JLS_ERROR_PARAMETER_INVALID;
     }
     if (chunk_meta & 0xf000) {
