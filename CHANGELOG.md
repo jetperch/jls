@@ -6,7 +6,7 @@ This file contains the list of changes made to the JLS project.
 
 ## 0.2.6
 
-2021 Mar 18 [in progress]
+2021 Mar 18
 
 *   Fixed uninitialized variables in POSIX backend (thanks Valgrind!).
 *   Fixed memory leaks (thanks Valgrind!).
