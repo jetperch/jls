@@ -4,6 +4,14 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.2.5
+
+2021 Mar 16
+
+*   Added 32-bit ARMv7 support (Raspberry Pi OS).
+*   Added 64-bit ARM support for Apple silicon (M1).
+
+
 ## 0.2.4
 
 2021 Mar 16

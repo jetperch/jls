@@ -43,8 +43,9 @@ permissive [Apache 2.0](LICENSE).
 * Cross-platform
   * Microsoft Windows x64
   * Apple macOS x64
-  * Apple macOS ARM 🔜  
+  * Apple macOS ARM
   * Linux x64
+  * Linux aarch64 (ARM 64-bit).  Supports Raspberry Pi 4.
 * Support for multiple, simultaneous data sources
 * Support for multiple, simultaneous signal waveforms
 * Fixed sample rate signals (FSR)
