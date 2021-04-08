@@ -670,7 +670,7 @@ int32_t jls_wr_index_prv(struct jls_wr_s * self, uint16_t signal_id, enum jls_tr
     // write
     if (JLS_LOG_CHECK_STATIC(JLS_LOG_LEVEL_DEBUG3)) {
         struct jls_payload_header_s * hdr = (struct jls_payload_header_s *) payload;
-        JLS_LOGD3("wr_index(signal_id=%d, level=%d, timestamp=%" PRIi64 ", entries=%" PRIi64
+        JLS_LOGD3("wr_index(signal_id=%d, level=%d, timestamp=%" PRIi64 ", entries=%" PRIu32
                   ") => offset=%" PRIi64,
                   (int) signal_id, (int) level,
                   hdr->timestamp, hdr->entry_count,
