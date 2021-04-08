@@ -35,6 +35,7 @@ struct jls_wr_ts_s {
     struct jls_payload_header_s * summary[JLS_SUMMARY_LEVEL_COUNT - 1];
 };
 
+#if 0
 static void ts_free(struct jls_wr_ts_s * self) {
     if (self) {
         for (int i = 0; i < JLS_SUMMARY_LEVEL_COUNT - 1; ++i) {
@@ -106,6 +107,8 @@ static int32_t summary_alloc(struct jls_wr_ts_s * self, uint8_t level) {
     self->summary[level - 1] = summary;
     return 0;
 }
+#endif
+
 
 int32_t jls_wr_ts_open(
         struct jls_wr_ts_s ** instance,
@@ -125,11 +128,13 @@ int32_t jls_wr_ts_open(
     return 0;
 }
 
-static void ts_close(struct jls_wf_f32_s * self, uint8_t level) {
+static void ts_close(struct jls_wr_ts_s * self, uint8_t level) {
+    (void) self;
+    (void) level;
     // todo
 }
 
-int32_t jls_wf_ts_close(struct jls_wf_f32_s * self) {
+int32_t jls_wf_ts_close(struct jls_wr_ts_s * self) {
     if (self) {
         for (uint8_t level = 1; level < JLS_SUMMARY_LEVEL_COUNT; ++level) {
             ts_close(self, level);
@@ -141,12 +146,22 @@ int32_t jls_wf_ts_close(struct jls_wf_f32_s * self) {
 
 int32_t jls_wr_ts_anno(struct jls_wr_ts_s * self, int64_t timestamp, int64_t offset,
                        enum jls_annotation_type_e annotation_type, uint8_t group_id, float y) {
+    (void) self;
+    (void) timestamp;
+    (void) offset;
+    (void) annotation_type;
+    (void) group_id;
+    (void) y;
     // todo add index entry
     // todo add summary entry
     return 0;
 }
 
 int32_t jls_wr_ts_utc(struct jls_wr_ts_s * self, int64_t sample_id, int64_t offset, int64_t utc) {
+    (void) self;
+    (void) sample_id;
+    (void) offset;
+    (void) utc;
     // todo add index entry
     // todo add summary entry
     return 0;

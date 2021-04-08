@@ -61,7 +61,7 @@ else()
 endif()
 
 if (JLS_TOPLEVEL)
-    if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    if (CMAKE_C_COMPILER_ID STREQUAL "GNU")
         add_definitions(-Wall -Wextra -Wpedantic -Werror -fPIC)
         if (WIN32)
             add_definitions(-Wno-pedantic-ms-format)

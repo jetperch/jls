@@ -81,7 +81,7 @@ JLS_CPP_GUARD_START
 #define __FILENAME__ __FILE__
 #endif
 
-#ifdef __GNUC__
+#if defined(__GNUC__) && !defined(_WIN32)
 /* https://gcc.gnu.org/onlinedocs/gcc-4.7.2/gcc/Function-Attributes.html */
 #define JLS_LOG_PRINTF_FORMAT __attribute__((format (printf, 1, 2)))
 #else
