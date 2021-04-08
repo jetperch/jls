@@ -295,7 +295,7 @@ static int32_t summaryN(struct jls_wf_f32_s * self, uint8_t level, int64_t pos) 
     }
 
     const double scale = 1.0 / self->def.summary_decimate_factor;
-    JLS_LOGD2("summaryN %d: %" PRIi64 " %" PRIi64, (int) level, dst->index->header.entry_count, pos);
+    JLS_LOGD2("summaryN %d: %" PRIu32 " %" PRIi64, (int) level, dst->index->header.entry_count, pos);
     dst->index->offsets[dst->index->header.entry_count++] = pos;
 
     uint32_t summaries_per = (uint32_t) (src->summary->header.entry_count / self->def.summary_decimate_factor);
