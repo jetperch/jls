@@ -29,7 +29,7 @@ simultaneous, one-dimensional signals. This repository contains:
 
 > **⚠ CAUTION ⚠**  
 > We are actively developing this library.  Many features are not 
-> implemented and the API is subject to rapid change.
+> yet implemented.
 
 
 ## License
@@ -64,7 +64,7 @@ permissive [Apache 2.0](LICENSE).
     * Provides fast waveform load without any additional processing steps
   * Automatic load by summary level
   * Fast seek, next, previous access
-* Sample ID to Wall-clock time (UTC) for FSR signals 🔜
+* Sample ID to Wall-clock time (UTC) for FSR signals
 * Annotations
   * Global VSR annotations
   * Signal annotations, timestamped to sample_id for FSR and UTC time for VSR
@@ -81,9 +81,10 @@ permissive [Apache 2.0](LICENSE).
   * lossless 🔜
   * lossy 🔜
   * lossy with downsampling below threshold 🔜
+  * Support level 0 DATA not written (only INDEX & SUMMARY) 🔜
 
 Items marked with 🔜 are under development and coming soon.
-As of Mar 2021, the JLS v2 file structure is well-defined.
+As of April 2021, the JLS v2 file structure is well-defined.
 However, the datatype and compression storage formats are not 
 yet defined, and the software still needs to grow to support 
 the target feature set.
@@ -113,7 +114,8 @@ used by MPEG4 and many others:
   * [Overview](https://mpeg.chiariglione.org/standards/mpeg-4/iso-base-media-file-format)
 
 However, the standard does not included the ability to store the signal summaries
-and our specific signal types.
+and our specific signal types.  While we could add these features, these formats
+are already complicated, greatly reducing the advantage of repurposing them.
 
 
 ## Why JLS v2?
@@ -158,12 +160,12 @@ confused with the **chunk header**.  A **chunk** may have zero payload length,
 in which case the next header follows immediately.  Otherwise, a 
 **chunk** consists of a **header** followed by a **payload**. 
 
-The JLS file format supports sources that produce data.  The file allows
+The JLS file format defines **sources** that produce data.  The file allows
 the application to clearly define and label the source.  Each source
 can have any number of associated signals.
 
-Signals are 1-D sequences of values over time consisting of a single,
-fixed data type.  Each signal can have multiple tracks that contain
+**Signals** are 1-D sequences of values over time consisting of a single,
+fixed data type.  Each signal can have multiple **tracks** that contain
 data associated with that signal. The JLS file supports two signal types: 
 fixed sample rate (FSR) and variable sample rate (VSR).  FSR signals
 store their sample data in the FSR track using FSR_DATA and FSR_SUMMARY.
@@ -182,7 +184,7 @@ used to store UART text data where each line contains a UTC timestamp.
 Signals support DATA chunks and SUMMARY chunks.
 The DATA chunks store the actual sample data.  The SUMMARY chunks
 store the reduced statistics, where each statistic entry represents
-multiple samples.  This file format stores the mean, min, max, 
+multiple samples.  FSR tracks store the mean, min, max, 
 and standard deviation.  Although standard deviation requires the
 writer to compute the square root, standard deviation keeps the
 same units and bit depth requirements as the other fields.  Variance
@@ -191,7 +193,8 @@ requires twice the bit size for integer types since it is squared.
 Before each SUMMARY chunk, the JLS file will contain the INDEX chunk
 which contains the starting time and offset for each chunk that 
 contributed to the summary.  This SUMMARY chunk enables fast O(log n)
-navigation of the file. 
+navigation of the file.  For FSR tracks, the starting time is 
+calculated rather than stored for each entry.
 
 The JLS file format design supports SUMMARY of SUMMARY.  It supports
 the DATA and up to 15 layers of SUMMARIES.  timestamp is given as a

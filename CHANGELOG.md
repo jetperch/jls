@@ -4,6 +4,15 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.3.0
+
+2021 Apr 8
+
+*   NOT BACKWARDS COMPATIBLE with 0.2.6 and earlier.
+*   Modified annotation to contain optional y-axis position.  API change.
+*   Improved file format consistency and improved format.h.
+
+
 ## 0.2.6
 
 2021 Mar 18

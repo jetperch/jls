@@ -47,13 +47,13 @@ struct jls_twr_s;
 
 int64_t jls_wr_tell_prv(struct jls_wr_s * self);
 
-int32_t jls_wr_data_prv(struct jls_wr_s * self, uint16_t signal_id,
+int32_t jls_wr_data_prv(struct jls_wr_s * self, uint16_t signal_id, enum jls_track_type_e track_type,
         const uint8_t * payload, uint32_t payload_length);
 
-int32_t jls_wr_summary_prv(struct jls_wr_s * self, uint16_t signal_id, uint8_t level,
+int32_t jls_wr_summary_prv(struct jls_wr_s * self, uint16_t signal_id, enum jls_track_type_e track_type, uint8_t level,
                         const uint8_t * payload, uint32_t payload_length);
 
-int32_t jls_wr_index_prv(struct jls_wr_s * self, uint16_t signal_id, uint8_t level,
+int32_t jls_wr_index_prv(struct jls_wr_s * self, uint16_t signal_id, enum jls_track_type_e track_type, uint8_t level,
                          const uint8_t * payload, uint32_t payload_length);
 
 

@@ -43,6 +43,7 @@ static void test_open_write(void **state) {
     (void) state;
     struct jls_raw_s * j = NULL;
     assert_int_equal(0, jls_raw_open(&j, filename, "w"));
+    assert_int_equal(JLS_FORMAT_VERSION_U32, jls_raw_version(j).u32);
     assert_int_equal(0, jls_raw_close(j));
 
     FILE * f = fopen(filename, "rb");

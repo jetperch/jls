@@ -249,13 +249,15 @@ cdef class Writer:
         if rc:
             raise RuntimeError(f'fsr_f32 failed {rc}')
 
-    def annotation(self, signal_id, timestamp, annotation_type, group_id, data):
+    def annotation(self, signal_id, timestamp, annotation_type, group_id, y, data):
         cdef int32_t rc
         if isinstance(annotation_type, str):
             annotation_type = _annotation_map[annotation_type.lower()]
         storage_type, payload, payload_length = _storage_pack(data)
+        if y is None or not np.isfinite(y):
+            y = NAN
         rc = c_jls.jls_twr_annotation(self._wr, signal_id, timestamp, annotation_type,
-            group_id, storage_type, payload, payload_length)
+            group_id, storage_type, y, payload, payload_length)
         if rc:
             raise RuntimeError(f'annotation failed {rc}')
 
@@ -367,7 +369,7 @@ cdef class Reader:
 
         :param signal_id: The signal id.
         :param timestamp: The starting timestamp.
-        :param cbk: The function(timestamp, annotation_type, group_id, data)
+        :param cbk: The function(timestamp, annotation_type, group_id, y, data)
             to call for each annotation.  Return True to stop iteration over
             the annotations or False to continue iterating.
         """
@@ -386,7 +388,10 @@ cdef class Reader:
 cdef int32_t _annotation_cbk_fn(void * user_data, const c_jls.jls_annotation_s * annotation):
     cbk_fn = <object> user_data
     data = _storage_unpack(annotation[0].storage_type, annotation[0].data, annotation[0].data_size)
-    rc = cbk_fn(annotation[0].timestamp, annotation[0].annotation_type, annotation[0].group_id, data)
+    y = annotation[0].y
+    if not isfinite(y):
+        y = None
+    rc = cbk_fn(annotation[0].timestamp, annotation[0].annotation_type, annotation[0].group_id, y, data)
     return 1 if bool(rc) else 0
 
 

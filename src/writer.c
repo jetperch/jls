@@ -1,4 +1,5 @@
 /*
+/*
  * Copyright 2021 Jetperch LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -37,11 +38,6 @@ struct chunk_s {
     int64_t offset;
 };
 
-struct utc_data_s {
-    uint32_t entry_length;
-    struct jls_utc_s data;
-};
-
 struct track_info_s {
     uint16_t signal_id;
     uint8_t track_type;  // enum jls_track_type_e
@@ -54,8 +50,6 @@ struct track_info_s {
     struct chunk_s index[JLS_SUMMARY_LEVEL_COUNT];
     struct chunk_s data;
     struct chunk_s summary[JLS_SUMMARY_LEVEL_COUNT];
-
-    // todo The index entries for VSR, ANNOTATION, and UTC tracks
 };
 
 struct signal_info_s {
@@ -63,13 +57,12 @@ struct signal_info_s {
     struct jls_signal_def_s signal_def;
     char name[1024];
     char units[128];
-    struct track_info_s tracks[4];   // index jls_track_type_e
+    struct track_info_s tracks[JLS_TRACK_TYPE_COUNT];   // array index is jls_track_type_e
     struct jls_wf_f32_s * signal_writer;
 
     uint8_t data_tag;
     uint8_t summary_tag;
     uint8_t index_tag;
-    uint8_t data_track_type;
 };
 
 struct buf_s {
@@ -266,6 +259,19 @@ static int32_t buf_wr_u32(struct jls_wr_s * self, uint32_t value) {
     return 0;
 }
 
+static int32_t buf_wr_f32(struct jls_wr_s * self, float value) {
+    struct buf_s * buf = &self->buf;
+    uint8_t * p = (uint8_t *) &value;
+    if ((buf->cur + 4) > buf->end) {
+        return JLS_ERROR_NOT_ENOUGH_MEMORY;
+    }
+    *buf->cur++ = *p++;
+    *buf->cur++ = *p++;
+    *buf->cur++ = *p++;
+    *buf->cur++ = *p++;
+    return 0;
+}
+
 static int32_t buf_wr_i64(struct jls_wr_s * self, int64_t value) {
     struct buf_s * buf = &self->buf;
     if ((buf->cur + 8) > buf->end) {
@@ -437,7 +443,6 @@ int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signal_def_s 
             info->data_tag = JLS_TAG_TRACK_FSR_DATA;
             info->summary_tag = JLS_TAG_TRACK_FSR_SUMMARY;
             info->index_tag = JLS_TAG_TRACK_FSR_INDEX;
-            info->data_track_type = JLS_TRACK_TYPE_FSR;
             break;
         case JLS_SIGNAL_TYPE_VSR:
             if (def->sample_rate) {
@@ -447,7 +452,6 @@ int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signal_def_s 
             info->data_tag = JLS_TAG_TRACK_VSR_DATA;
             info->summary_tag = JLS_TAG_TRACK_VSR_SUMMARY;
             info->index_tag = JLS_TAG_TRACK_VSR_INDEX;
-            info->data_track_type = JLS_TRACK_TYPE_VSR;
             break;
         default:
             JLS_LOGE("Invalid signal type: %d", (int) def->signal_type);
@@ -557,10 +561,6 @@ int32_t jls_wr_user_data(struct jls_wr_s * self, uint16_t chunk_meta,
     return update_mra(self, &self->user_data_mra, &chunk);
 }
 
-// struct jls_track_index_s variable sized, format defined by track
-// struct jls_track_data_s variable sized, format defined by track
-// struct jls_track_summary_s variable sized, format defined by track
-
 static int32_t signal_validate(struct jls_wr_s * self, uint16_t signal_id) {
     if (signal_id >= JLS_SIGNAL_COUNT) {
         return JLS_ERROR_PARAMETER_INVALID;
@@ -586,11 +586,11 @@ int64_t jls_wr_tell_prv(struct jls_wr_s * self) {
     return jls_raw_chunk_tell(self->raw);
 }
 
-int32_t jls_wr_data_prv(struct jls_wr_s * self, uint16_t signal_id,
+int32_t jls_wr_data_prv(struct jls_wr_s * self, uint16_t signal_id, enum jls_track_type_e track_type,
                         const uint8_t * payload, uint32_t payload_length) {
     ROE(signal_validate(self, signal_id));
     struct signal_info_s * info = &self->signal_info[signal_id];
-    struct track_info_s * track = &info->tracks[info->data_track_type];
+    struct track_info_s * track = &info->tracks[track_type];
     struct chunk_s chunk;
 
     chunk.hdr.item_next = 0;  // update later
@@ -602,12 +602,10 @@ int32_t jls_wr_data_prv(struct jls_wr_s * self, uint16_t signal_id,
     chunk.hdr.payload_prev_length = self->payload_prev_length;
     chunk.offset = jls_raw_chunk_tell(self->raw);
 
-    // write
     if (JLS_LOG_CHECK_STATIC(JLS_LOG_LEVEL_DEBUG3)) {
-        int64_t * u64 = (int64_t *) payload;
-        JLS_LOGD3("wr_data(signal_id=%d, timestamp=%" PRIi64 ", entries=%" PRIi64 ") => offset=%" PRIi64,
-                  (int) signal_id,
-                  u64[0], u64[1],
+        struct jls_payload_header_s * hdr = (struct jls_payload_header_s *) payload;
+        JLS_LOGD3("wr_data(signal_id=%d, timestamp=%" PRIi64 ", entries=%" PRIu32 ") => offset=%" PRIi64,
+                  (int) signal_id, hdr->timestamp, hdr->entry_count,
                   jls_raw_chunk_tell(self->raw));
     }
 
@@ -623,11 +621,11 @@ int32_t jls_wr_data_prv(struct jls_wr_s * self, uint16_t signal_id,
     return 0;
 }
 
-int32_t jls_wr_summary_prv(struct jls_wr_s * self, uint16_t signal_id, uint8_t level,
+int32_t jls_wr_summary_prv(struct jls_wr_s * self, uint16_t signal_id, enum jls_track_type_e track_type, uint8_t level,
                            const uint8_t * payload, uint32_t payload_length) {
     ROE(signal_validate(self, signal_id));
     struct signal_info_s * info = &self->signal_info[signal_id];
-    struct track_info_s * track = &info->tracks[info->data_track_type];
+    struct track_info_s * track = &info->tracks[track_type];
     struct chunk_s chunk;
 
     chunk.hdr.item_next = 0;  // update later
@@ -654,11 +652,11 @@ static inline int32_t update_track(struct jls_wr_s * self, struct track_info_s *
     return 0;
 }
 
-int32_t jls_wr_index_prv(struct jls_wr_s * self, uint16_t signal_id, uint8_t level,
+int32_t jls_wr_index_prv(struct jls_wr_s * self, uint16_t signal_id, enum jls_track_type_e track_type, uint8_t level,
                          const uint8_t * payload, uint32_t payload_length) {
     ROE(signal_validate(self, signal_id));
     struct signal_info_s * info = &self->signal_info[signal_id];
-    struct track_info_s * track = &info->tracks[info->data_track_type];
+    struct track_info_s * track = &info->tracks[track_type];
     struct chunk_s chunk;
 
     chunk.hdr.item_next = 0;  // update later
@@ -672,11 +670,11 @@ int32_t jls_wr_index_prv(struct jls_wr_s * self, uint16_t signal_id, uint8_t lev
 
     // write
     if (JLS_LOG_CHECK_STATIC(JLS_LOG_LEVEL_DEBUG3)) {
-        int64_t *u64 = (int64_t *) payload;
+        struct jls_payload_header_s * hdr = (struct jls_payload_header_s *) payload;
         JLS_LOGD3("wr_index(signal_id=%d, level=%d, timestamp=%" PRIi64 ", entries=%" PRIi64
-                  ", [0]=%" PRIi64 ", [%d]=%" PRIi64 ") => offset=%" PRIi64,
+                  ") => offset=%" PRIi64,
                   (int) signal_id, (int) level,
-                  u64[0], u64[1], u64[2], (int) u64[1] - 1, u64[2 + u64[1] - 1],
+                  hdr->timestamp, hdr->entry_count,
                   jls_raw_chunk_tell(self->raw));
     }
     ROE(jls_raw_wr(self->raw, &chunk.hdr, payload));
@@ -697,7 +695,9 @@ int32_t jls_wr_fsr_f32(struct jls_wr_s * self, uint16_t signal_id,
 int32_t jls_wr_annotation(struct jls_wr_s * self, uint16_t signal_id, int64_t timestamp,
                           enum jls_annotation_type_e annotation_type,
                           uint8_t group_id,
-                          enum jls_storage_type_e storage_type, const uint8_t * data, uint32_t data_size) {
+                          enum jls_storage_type_e storage_type,
+                          float y,
+                          const uint8_t * data, uint32_t data_size) {
     ROE(signal_validate(self, signal_id));
     struct signal_info_s * signal_info = &self->signal_info[signal_id];
     struct track_info_s * track = &signal_info->tracks[JLS_TRACK_TYPE_ANNOTATION];
@@ -711,10 +711,14 @@ int32_t jls_wr_annotation(struct jls_wr_s * self, uint16_t signal_id, int64_t ti
     // construct payload
     buf_reset(self);
     ROE(buf_wr_i64(self, timestamp));
+    ROE(buf_wr_u32(self, 1));  // number of entries
+    ROE(buf_wr_u16(self, 0));  // unspecified entry length
+    ROE(buf_wr_u16(self, 0));  // reserved
     ROE(buf_wr_u8(self, annotation_type));
     ROE(buf_wr_u8(self, storage_type));
     ROE(buf_wr_u8(self, group_id));
-    ROE(buf_add_zero(self, 1));
+    ROE(buf_wr_u8(self, 0));    // reserved
+    ROE(buf_wr_f32(self, y));
     switch (storage_type) {
         case JLS_STORAGE_TYPE_BINARY:
             ROE(buf_wr_u32(self, data_size));
@@ -759,7 +763,15 @@ int32_t jls_wr_fsr_utc(struct jls_wr_s * self, uint16_t signal_id, int64_t sampl
     struct signal_info_s * signal_info = &self->signal_info[signal_id];
 
     // Construct payload
-    struct jls_utc_s payload = {.sample_id=sample_id, .timestamp=utc};
+    struct jls_utc_data_s payload = {
+        .header = {
+                .timestamp=sample_id,
+                .entry_count=1,
+                .entry_size_bits=sizeof(utc) * 8,
+                .rsv16=0,
+        },
+        .timestamp=utc
+    };
     uint32_t payload_length = sizeof(payload);
 
     // construct header

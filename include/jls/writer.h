@@ -127,6 +127,7 @@ JLS_API int32_t jls_wr_fsr_f32(struct jls_wr_s * self, uint16_t signal_id,
  * @param annotation_type The annotation type.
  * @param group_id The optional group identifier.  If unused, set to 0.
  * @param storage_type The storage type.
+ * @param y The y-axis value or NAN to automatically position.
  * @param data The data for the annotation.
  * @param data_size The length of data for JLS_STORAGE_TYPE_BINARY storage_type.
  *      Set to 0 for all other storage types.
@@ -138,6 +139,7 @@ JLS_API int32_t jls_wr_annotation(struct jls_wr_s * self,
                                   enum jls_annotation_type_e annotation_type,
                                   uint8_t group_id,
                                   enum jls_storage_type_e storage_type,
+                                  float y,
                                   const uint8_t * data,
                                   uint32_t data_size);
 

@@ -52,6 +52,7 @@ struct jls_raw_s {
     struct jls_chunk_header_s hdr;  // the current chunk header.
     int64_t offset;                 // the offset for the current chunk
     uint8_t write_en;
+    union jls_version_u version;
 };
 
 static inline void invalidate_current_chunk(struct jls_raw_s * self) {
@@ -108,10 +109,13 @@ static int32_t rd_file_header(struct jls_raw_s * self, struct jls_file_header_s 
         return JLS_ERROR_UNSUPPORTED_FILE;
     }
 
-    if (hdr->version.s.major != JLS_FORMAT_VERSION_MAJOR) {
-        JLS_LOGE("unsupported file format: %d", (int) hdr->version.s.major);
+    if (hdr->version.s.major > JLS_FORMAT_VERSION_MAJOR) {
+        JLS_LOGE("unsupported file format: %d > %d", (int) hdr->version.s.major, JLS_FORMAT_VERSION_MAJOR);
         return JLS_ERROR_UNSUPPORTED_FILE;
+    } else if (hdr->version.s.major < JLS_FORMAT_VERSION_MAJOR) {
+        JLS_LOGI("old file format: %d < %d", (int) hdr->version.s.major, JLS_FORMAT_VERSION_MAJOR);
     }
+    self->version.u32 = hdr->version.u32;
 
     if (0 == hdr->length) {
         JLS_LOGW("file header length 0, not closed gracefully");
@@ -163,6 +167,7 @@ int32_t jls_raw_open(struct jls_raw_s ** instance, const char * path, const char
             self->write_en = 1;
             rc = wr_file_header(self);
             self->offset = self->backend.fpos;
+            self->version.u32 = JLS_FORMAT_VERSION_U32;
             break;
         case 'r':
             rc = read_verify(self);
@@ -170,7 +175,10 @@ int32_t jls_raw_open(struct jls_raw_s ** instance, const char * path, const char
         case 'a':
             self->write_en = 1;
             rc = read_verify(self);
-            if (jls_bk_fseek(&self->backend, 0, SEEK_END)) {
+            if (self->version.u32 != JLS_FORMAT_VERSION_U32) {
+                JLS_LOGE("cannot append, different format versions");
+                rc = JLS_ERROR_UNSUPPORTED_FILE;
+            } else if (jls_bk_fseek(&self->backend, 0, SEEK_END)) {
                 rc = JLS_ERROR_IO;
             } else {
                 self->offset = self->backend.fpos;
@@ -198,6 +206,10 @@ int32_t jls_raw_close(struct jls_raw_s * self) {
         free(self);
     }
     return 0;
+}
+
+union jls_version_u jls_raw_version(struct jls_raw_s * self) {
+    return self->version;
 }
 
 int32_t jls_raw_wr(struct jls_raw_s * self, struct jls_chunk_header_s * hdr, const uint8_t * payload) {
@@ -454,23 +466,23 @@ const char * jls_tag_to_name(uint8_t tag) {
         case JLS_TAG_SIGNAL_DEF:                return "signal_def";
         case JLS_TAG_TRACK_FSR_DEF:             return "track_fsr_def";
         case JLS_TAG_TRACK_FSR_HEAD:            return "track_fsr_head";
-        case JLS_TAG_TRACK_FSR_INDEX:           return "track_fsr_index";
         case JLS_TAG_TRACK_FSR_DATA:            return "track_fsr_data";
+        case JLS_TAG_TRACK_FSR_INDEX:           return "track_fsr_index";
         case JLS_TAG_TRACK_FSR_SUMMARY:         return "track_fsr_summary";
         case JLS_TAG_TRACK_VSR_DEF:             return "track_vsr_def";
         case JLS_TAG_TRACK_VSR_HEAD:            return "track_vsr_head";
-        case JLS_TAG_TRACK_VSR_INDEX:           return "track_vsr_index";
         case JLS_TAG_TRACK_VSR_DATA:            return "track_vsr_data";
+        case JLS_TAG_TRACK_VSR_INDEX:           return "track_vsr_index";
         case JLS_TAG_TRACK_VSR_SUMMARY:         return "track_vsr_summary";
         case JLS_TAG_TRACK_ANNOTATION_DEF:      return "track_annotation_def";
         case JLS_TAG_TRACK_ANNOTATION_HEAD:     return "track_annotation_head";
-        case JLS_TAG_TRACK_ANNOTATION_INDEX:    return "track_annotation_index";
         case JLS_TAG_TRACK_ANNOTATION_DATA:     return "track_annotation_data";
+        case JLS_TAG_TRACK_ANNOTATION_INDEX:    return "track_annotation_index";
         case JLS_TAG_TRACK_ANNOTATION_SUMMARY:  return "track_annotation_summary";
         case JLS_TAG_TRACK_UTC_DEF:             return "track_utc_def";
         case JLS_TAG_TRACK_UTC_HEAD:            return "track_utc_head";
-        case JLS_TAG_TRACK_UTC_INDEX:           return "track_utc_index";
         case JLS_TAG_TRACK_UTC_DATA:            return "track_utc_data";
+        case JLS_TAG_TRACK_UTC_INDEX:           return "track_utc_index";
         case JLS_TAG_TRACK_UTC_SUMMARY:         return "track_utc_summary";
         case JLS_TAG_USER_DATA:                 return "user_data";
         case JLS_TAG_END:                       return "end";

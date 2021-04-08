@@ -38,9 +38,9 @@
 
 JLS_CPP_GUARD_START
 
-#define JLS_FORMAT_VERSION_MAJOR  (0)
-#define JLS_FORMAT_VERSION_MINOR  (1)
-#define JLS_FORMAT_VERSION_PATCH  (1)
+#define JLS_FORMAT_VERSION_MAJOR  (1)
+#define JLS_FORMAT_VERSION_MINOR  (0)
+#define JLS_FORMAT_VERSION_PATCH  (0)
 #define JLS_FORMAT_VERSION_U32     ((uint32_t) ( \
     ((JLS_FORMAT_VERSION_MAJOR & 0xff) << 24) | \
     ((JLS_FORMAT_VERSION_MINOR & 0xff) << 16) | \
@@ -116,7 +116,7 @@ enum jls_track_type_e {
     /**
      * @brief Fixed-type, variable-sample-rate (VSR) time series data.
      *
-     * Each entry consists of time in UTC and the data.
+     * Each data entry consists of time in UTC and the data.
      */
     JLS_TRACK_TYPE_VSR = 1,
 
@@ -125,7 +125,8 @@ enum jls_track_type_e {
      *
      * @see jls_annotation_type_e for the annotation types.
      *
-     * Each annotation entry consists of time and the data.
+     * Each annotation data entry consists of time and associated
+     * annotation data.
      * For FSR, time must be samples_id.
      * For VSR, time must be UTC.
      */
@@ -134,8 +135,8 @@ enum jls_track_type_e {
     /**
      * @brief The UTC track associates sample_id with UTC.
      *
-     * Each entry consists of sample_id, UTC pairs.  This track
-     * is only used for FSR signals.
+     * Each utc data entry consists of sample_id, UTC timestamp pairs.
+     * This track is only used for FSR signals.
      */
     JLS_TRACK_TYPE_UTC = 3,
 
@@ -168,7 +169,6 @@ enum jls_annotation_type_e {
      * @brief Arbitrary user data.
      *
      * Application-dependent data with no standardized form or purpose.
-     * This type supports any jls_storage_type_e.
      */
     JLS_ANNOTATION_TYPE_USER = 0,
 
@@ -198,11 +198,58 @@ enum jls_annotation_type_e {
  * @brief The chunks used to store the track information.
  */
 enum jls_track_chunk_e {
-    JLS_TRACK_CHUNK_DEF = 0,        // track definition
-    JLS_TRACK_CHUNK_HEAD = 1,       // first INDEX chunk offset for each level (16 total)
-    JLS_TRACK_CHUNK_INDEX = 2,      // The indices of all contributing summary chunks, followed immediately by summary
-    JLS_TRACK_CHUNK_DATA = 3,       // sample data
-    JLS_TRACK_CHUNK_SUMMARY = 4,    // reduction mean, min, max, std
+    /**
+     * @brief Track definition chunk.
+     *
+     * This chunk contains a zero-length (empty) payload.
+     */
+    JLS_TRACK_CHUNK_DEF = 0,
+
+    /**
+     * @brief Track offsets for the first chunk at each level.
+     *
+     * @see jls_track_head_s for all track types.
+     *
+     * This chunk provides fast seek access to the first chunk at
+     * each summary level for this track.  The payload is jls_track_head_s
+     * which contains the offset to the first INDEX chunk.
+     */
+    JLS_TRACK_CHUNK_HEAD = 1,
+
+    /**
+     * @brief The data chunk.
+     *
+     * @see jls_fsr_f32_data_s for FSR float32.
+     * @see jls_annotation_s for ANNOTATION.
+     * @see jls_utc_data_s for UTC.
+     *
+     * The payload varies by track type and data format.  All DATA
+     * payloads start with jls_payload_header_s.
+     */
+    JLS_TRACK_CHUNK_DATA = 2,
+
+    /**
+     * @brief Provides the timestamp and offset for each contributing data chunk.
+     *
+     * @see jls_fsr_index_s for FSR track types.
+     * @see jls_index_s for all other track types.
+     *
+     * This chunk MUST be immediately follow by a SUMMARY chunk.
+     * All INDEX payloads start with jls_payload_header_s.
+     */
+    JLS_TRACK_CHUNK_INDEX = 3,
+
+    /**
+     * @brief The summary chunk.
+     *
+     * @see jls_fsr_f32_summary_s for FSR float32.
+     * @see jls_annotation_summary_s for ANNOTATION.
+     * @see jls_utc_summary_s for UTC.
+     *
+     * The payload format is defined by the track type.
+     * All CHUNK payloads start with jls_payload_header_s.
+     */
+    JLS_TRACK_CHUNK_SUMMARY = 4,
 };
 
 /**
@@ -219,26 +266,26 @@ enum jls_tag_e {
     // track tags
     JLS_TAG_TRACK_FSR_DEF               = (0x20 | (JLS_TRACK_TYPE_FSR << 3) | JLS_TRACK_CHUNK_DEF),
     JLS_TAG_TRACK_FSR_HEAD              = (0x20 | (JLS_TRACK_TYPE_FSR << 3) | JLS_TRACK_CHUNK_HEAD),
-    JLS_TAG_TRACK_FSR_INDEX             = (0x20 | (JLS_TRACK_TYPE_FSR << 3) | JLS_TRACK_CHUNK_INDEX),
     JLS_TAG_TRACK_FSR_DATA              = (0x20 | (JLS_TRACK_TYPE_FSR << 3) | JLS_TRACK_CHUNK_DATA),
+    JLS_TAG_TRACK_FSR_INDEX             = (0x20 | (JLS_TRACK_TYPE_FSR << 3) | JLS_TRACK_CHUNK_INDEX),
     JLS_TAG_TRACK_FSR_SUMMARY           = (0x20 | (JLS_TRACK_TYPE_FSR << 3) | JLS_TRACK_CHUNK_SUMMARY),
 
     JLS_TAG_TRACK_VSR_DEF               = (0x20 | (JLS_TRACK_TYPE_VSR << 3) | JLS_TRACK_CHUNK_DEF),
     JLS_TAG_TRACK_VSR_HEAD              = (0x20 | (JLS_TRACK_TYPE_VSR << 3) | JLS_TRACK_CHUNK_HEAD),
-    JLS_TAG_TRACK_VSR_INDEX             = (0x20 | (JLS_TRACK_TYPE_VSR << 3) | JLS_TRACK_CHUNK_INDEX),
     JLS_TAG_TRACK_VSR_DATA              = (0x20 | (JLS_TRACK_TYPE_VSR << 3) | JLS_TRACK_CHUNK_DATA),
+    JLS_TAG_TRACK_VSR_INDEX             = (0x20 | (JLS_TRACK_TYPE_VSR << 3) | JLS_TRACK_CHUNK_INDEX),
     JLS_TAG_TRACK_VSR_SUMMARY           = (0x20 | (JLS_TRACK_TYPE_VSR << 3) | JLS_TRACK_CHUNK_SUMMARY),
 
-    JLS_TAG_TRACK_ANNOTATION_DEF        = (0x20 | (JLS_TRACK_TYPE_ANNOTATION << 3) | JLS_TRACK_CHUNK_DEF),  // not used
+    JLS_TAG_TRACK_ANNOTATION_DEF        = (0x20 | (JLS_TRACK_TYPE_ANNOTATION << 3) | JLS_TRACK_CHUNK_DEF),
     JLS_TAG_TRACK_ANNOTATION_HEAD       = (0x20 | (JLS_TRACK_TYPE_ANNOTATION << 3) | JLS_TRACK_CHUNK_HEAD),
-    JLS_TAG_TRACK_ANNOTATION_INDEX      = (0x20 | (JLS_TRACK_TYPE_ANNOTATION << 3) | JLS_TRACK_CHUNK_INDEX),
     JLS_TAG_TRACK_ANNOTATION_DATA       = (0x20 | (JLS_TRACK_TYPE_ANNOTATION << 3) | JLS_TRACK_CHUNK_DATA),
+    JLS_TAG_TRACK_ANNOTATION_INDEX      = (0x20 | (JLS_TRACK_TYPE_ANNOTATION << 3) | JLS_TRACK_CHUNK_INDEX),
     JLS_TAG_TRACK_ANNOTATION_SUMMARY    = (0x20 | (JLS_TRACK_TYPE_ANNOTATION << 3) | JLS_TRACK_CHUNK_SUMMARY),
 
     JLS_TAG_TRACK_UTC_DEF               = (0x20 | (JLS_TRACK_TYPE_UTC << 3) | JLS_TRACK_CHUNK_DEF),
     JLS_TAG_TRACK_UTC_HEAD              = (0x20 | (JLS_TRACK_TYPE_UTC << 3) | JLS_TRACK_CHUNK_HEAD),
-    JLS_TAG_TRACK_UTC_INDEX             = (0x20 | (JLS_TRACK_TYPE_UTC << 3) | JLS_TRACK_CHUNK_INDEX),
     JLS_TAG_TRACK_UTC_DATA              = (0x20 | (JLS_TRACK_TYPE_UTC << 3) | JLS_TRACK_CHUNK_DATA),
+    JLS_TAG_TRACK_UTC_INDEX             = (0x20 | (JLS_TRACK_TYPE_UTC << 3) | JLS_TRACK_CHUNK_INDEX),
     JLS_TAG_TRACK_UTC_SUMMARY           = (0x20 | (JLS_TRACK_TYPE_UTC << 3) | JLS_TRACK_CHUNK_SUMMARY),
 
     // other tags
@@ -308,7 +355,9 @@ struct jls_signal_def_s {       // 0 reserved for VSR annotations
 
 //  struct jls_track_def_s  // empty, only need chunk_meta for now
 
-
+/**
+ * @brief The track head payload for JLS_TRACK_CHUNK_HEAD.
+ */
 struct jls_track_head_s {
     uint64_t offset[16];  // 0 = data, 1 = first summary, ...
 };
@@ -322,12 +371,9 @@ enum jls_summary_fsr_e {
     JLS_SUMMARY_FSR_COUNT = 4,   // must be last
 };
 
-// struct jls_track_index_s variable sized, format defined by track
-// struct jls_track_data_s variable sized, format defined by track
-// struct jls_track_summary_s variable sized, format defined by track
-
-// struct jls_user_data_s contains raw data.  header field chuck_meta is user-defined.
-
+/**
+ * @brief Union structure for parsing 32-bit versions.
+ */
 union jls_version_u {
     uint32_t u32;
     struct {
@@ -459,49 +505,137 @@ struct jls_chunk_header_s {
     uint32_t crc32;
 };
 
-/// The index of FSR chunk offsets for tag JLS_TAG_TRACK_FSR_INDEX.
-struct jls_fsr_index_s {
+/**
+ * @brief The payload header for DATA, INDEX, and SUMMARY chunks.
+ */
+struct jls_payload_header_s {
     int64_t timestamp;          ///< The sample_id for the first entry.
-    int64_t entry_count;        ///< The total number of entries
-    int64_t entries[];          ///< The chunk file offsets, spaced by fixed time intervals.
+    uint32_t entry_count;       ///< The total number of entries.
+    uint16_t entry_size_bits;   ///< The size of each entry, in bits.
+    uint16_t rsv16;             ///< Reserved.
 };
 
-/// The (timestamp, offset) entries for jls_timestamped_index_s.
-struct jls_timestamped_index_entry_s {
-    int64_t timestamp;          ///< The timestamp.  sample_id for FSR, UTC for VSR.
-    int64_t offset;             ///< The chunk file offset.
+/// The FSR float32 data chunk format.
+struct jls_fsr_f32_data_s {
+    struct jls_payload_header_s header;
+    float data[];          ///< The summary data, each entry is 1 x f32.
 };
 
 /**
- * @brief The index of (timestamp, offset) pairs.
+ * @brief The payload for JLS_TAG_TRACK_FSR_INDEX chunks.
  *
- * This structure is the index used by VSR, ANNOTATION, and UTC tracks.
- * The tags are:
- * - JLS_TAG_TRACK_VSR_INDEX
- * - JLS_TAG_TRACK_ANNOTATION_INDEX
- * - JLS_TAG_TRACK_UTC_INDEX
+ * @see jls_index_s for all other INDEX chunk types.
+ *
+ * Since FSR has a fixed sample rate, the header contains enough information
+ * to fully identify the timestamp for each offset.  Therefore, no additional
+ * time information is required per entry.
  */
-struct jls_timestamped_index_s {
-    int64_t timestamp;          ///< The timestamp of the first entry.  sample_id for FSR, UTC for VSR.
-    int64_t entry_count;        ///< The total number of entries.
-    struct jls_timestamped_index_entry_s entries[];
+struct jls_fsr_index_s {
+    struct jls_payload_header_s header;
+    uint64_t offsets[];         ///< The chunk file offsets, spaced by fixed time intervals.
 };
 
-/// Store a single annotation for JLS_TAG_TRACK_ANNOTATION_DATA.
+/// The FSR float32 summary chunk format.
+struct jls_fsr_f32_summary_s {
+    struct jls_payload_header_s header;
+    float data[];          ///< The summary data, each entry is 4 x f32: mean, std, min, max.
+};
+
+/**
+ * @brief The entry format for JLS_TRACK_CHUNK_INDEX payloads.
+ * @see jls_index_s
+ */
+struct jls_index_entry_s {
+    int64_t timestamp;      ///< The timestamp for this entry.  sample_id for FSR, UTC for VSR.
+    uint64_t offset;        ///< The chunk file offset.
+};
+
+/**
+ * @brief The payload for JLS_TRACK_CHUNK_INDEX chunks.
+ *
+ * @see jls_fsr_index_s for JLS_TAG_TRACK_FSR_INDEX.
+ *
+ * The INDEX payload maps timestamps to offsets to allow fast seek.
+ * However, the JLS_TAG_TRACK_FSR_INDEX uses the jls_fsr_index_s since
+ * the timestamp provides unnecessary, duplicative information for FSR tracks.
+ */
+struct jls_index_s {
+    struct jls_payload_header_s header;
+    struct jls_index_entry_s entries[];
+};
+
+/**
+ * @brief Hold a single annotation record.
+ *
+ * This structure is used by both the API and JLS_TAG_TRACK_ANNOTATION_DATA.
+ */
 struct jls_annotation_s {
     int64_t timestamp;          ///< The timestamp for this annotation.  sample_id for FSR, UTC for VSR.
+    uint64_t rsv64_1;           ///< Reserved, write to 0.
     uint8_t annotation_type;    ///< The jls_annotation_type_e.
     uint8_t storage_type;       ///< The jls_storage_type_e.
     uint8_t group_id;           ///< The optional group identifier.  If unused, write to 0.
     uint8_t rsv8_1;             ///< Reserved, write to 0.
+    float y;                    ///< The y-axis value or NAN to automatically position.
     uint32_t data_size;         ///< The size of data in bytes.
     uint8_t data[];             ///< The annotation data.
 };
 
-/// Store mappings from (sample_id, utc) for JLS_TAG_TRACK_UTC_DATA.
-struct jls_utc_s {
-    uint64_t sample_id;         ///< The timestamp in sample ids.
-    uint64_t timestamp;         ///< The timestamp in UTC.
+/**
+ * @brief The entry format for JLS_TAG_TRACK_ANNOTATION_SUMMARY.
+ * @see jls_annotation_summary_s
+ */
+struct jls_annotation_summary_entry_s {
+    int64_t timestamp;          ///< The timestamp (duplicates INDEX).
+    uint8_t annotation_type;    ///< The jls_annotation_s.annotation_type
+    uint8_t group_id;           ///< The jls_annotation_s.group_id
+    uint8_t rsv8_1;             ///< Reserved, write to 0.
+    uint8_t rsv8_2;             ///< Reserved, write to 0.
+    float y;                    ///< The jls_annotation_s.y
+};
+
+/**
+ * @brief The payload format for JLS_TAG_TRACK_ANNOTATION_SUMMARY chunks.
+ */
+struct jls_annotation_summary_s {
+    struct jls_payload_header_s header;
+    struct jls_annotation_summary_entry_s entries[];
+};
+
+/**
+ * @brief The entry format for JLS_TAG_TRACK_UTC_DATA.
+ *
+ * @see jls_utc_summary_s
+ *
+ * This same format is reused for summary entries.
+ * UTC.DATA only exists to provide recovery in the event that the
+ * file is not properly closed.
+ */
+struct jls_utc_data_s {
+    struct jls_payload_header_s header;
+    int64_t timestamp;         ///< The timestamp in UTC.
+};
+
+/**
+ * @brief The entry format for JLS_TAG_TRACK_UTC_SUMMARY.
+ *
+ * @see jls_utc_summary_s
+ *
+ * This same format is reused for summary entries.
+ * UTC.DATA only exists to provide recovery in the event that the
+ * file is not properly closed.
+ */
+struct jls_utc_summary_entry_s {
+    int64_t sample_id;         ///< The timestamp in sample ids (duplicates INDEX).
+    int64_t timestamp;         ///< The timestamp in UTC.
+};
+
+/**
+ * @brief The payload format for JLS_TAG_TRACK_UTC_SUMMARY chunks.
+ */
+struct jls_utc_summary_s {
+    struct jls_payload_header_s header;
+    struct jls_utc_data_s entries[];
 };
 
 JLS_CPP_GUARD_END

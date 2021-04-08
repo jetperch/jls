@@ -556,6 +556,11 @@ int32_t jls_rd_open(struct jls_rd_s ** instance, const char * path) {
         return rc;
     }
 
+    if (jls_raw_version(self->raw).s.major < 1) {
+        JLS_LOGE("version < 1.x.x no longer supported");
+        return JLS_ERROR_UNSUPPORTED_FILE;
+    }
+
     int64_t end_pos = jls_raw_chunk_tell_end(self->raw);
     if (!end_pos) {
         // Not properly closed.  Indices & summary may be incomplete.
@@ -664,10 +669,12 @@ int32_t seek(struct jls_rd_s * self, uint16_t signal_id, uint8_t level, int64_t 
             JLS_LOGW("seek tag mismatch: %d", (int) self->chunk_cur.hdr.tag);
         }
 
-        int64_t * payload = (int64_t *) self->payload.start;
-        int64_t chunk_timestamp = payload[0];
-        int64_t chunk_entries = payload[1];
-        if (((2 + chunk_entries) * sizeof(int64_t)) > self->payload.length) {
+        struct jls_fsr_index_s * r = (struct jls_fsr_index_s *) self->payload.start;
+        int64_t chunk_timestamp = r->header.timestamp;
+        int64_t chunk_entries = r->header.entry_count;
+        uint8_t * p_end = (uint8_t *) &r->offsets[r->header.entry_count];
+
+        if ((size_t) (p_end - self->payload.start) > self->payload.length) {
             JLS_LOGE("invalid payload length");
             return JLS_ERROR_PARAMETER_INVALID;
         }
@@ -676,10 +683,7 @@ int32_t seek(struct jls_rd_s * self, uint16_t signal_id, uint8_t level, int64_t 
         if (idx >= chunk_entries) {
             JLS_LOGE("invalid index: %" PRIi64 " >= %" PRIi64, idx, chunk_entries);
         }
-
-        JLS_LOGD3("index level=%d, entries=%d, 0:%" PRIi64 ", 1:%" PRIi64 ", end:%" PRIi64,
-                  (int) lvl, (int) chunk_entries, payload[2], payload[3], payload[2 + payload[1] - 1]);
-        offset = payload[2 + idx];
+        offset = r->offsets[idx];
     }
 
     ROE(jls_raw_chunk_seek(self->raw, offset));
@@ -705,27 +709,32 @@ int32_t jls_rd_fsr_length(struct jls_rd_s * self, uint16_t signal_id, int64_t * 
         *samples = 0;
         return 0;
     }
+    struct jls_fsr_index_s * r;
 
     for (int lvl = level; lvl > 0; --lvl) {
         JLS_LOGD3("signal %d, level %d, index=%" PRIi64, (int) signal_id, (int) lvl, offset);
         ROE(jls_raw_chunk_seek(self->raw, offset));
         ROE(rd(self));
 
-        int64_t * payload = (int64_t *) self->payload.start;
-        if (((2 + payload[1]) * sizeof(int64_t)) > self->payload.length) {
+        r = (struct jls_fsr_index_s *) self->payload.start;
+        if (r->header.entry_size_bits != (sizeof(r->offsets[0]) * 8)) {
+            JLS_LOGE("invalid FSR index entry size: %d bits", (int) r->header.entry_size_bits);
+            return JLS_ERROR_PARAMETER_INVALID;
+        }
+        size_t sz = sizeof(r->header) + r->header.entry_count * sizeof(r->offsets[0]);
+        if (sz > self->payload.length) {
             JLS_LOGE("invalid payload length");
             return JLS_ERROR_PARAMETER_INVALID;
         }
-        JLS_LOGD3("index level=%d, entries=%d, 0:%" PRIi64 ", 1:%" PRIi64 ", end:%" PRIi64,
-                  (int) lvl, (int) payload[1], payload[2], payload[3], payload[2 + payload[1] - 1]);
-        offset = payload[2 + payload[1] - 1];
+        if (r->header.entry_count > 0) {
+            offset = r->offsets[r->header.entry_count - 1];
+        }
     }
 
     ROE(jls_raw_chunk_seek(self->raw, offset));
     ROE(rd(self));
-    int64_t * payload = (int64_t *) self->payload.start;
-    JLS_LOGD1("fsr_length = %" PRIi64 " = %" PRIi64 " + %" PRIi64 "", payload[0] + payload[1], payload[0], payload[1]);
-    *samples = payload[0] + payload[1];
+    r = (struct jls_fsr_index_s *) self->payload.start;
+    *samples = r->header.timestamp + r->header.entry_count;
     return 0;
 }
 
@@ -743,9 +752,12 @@ int32_t jls_rd_fsr_f32(struct jls_rd_s * self, uint16_t signal_id, int64_t start
     while (data_length > 0) {
         ROE(jls_raw_chunk_seek(self->raw, self->chunk_cur.hdr.item_next));
         ROE(rd(self));
-        int64_t * i64 = ((int64_t*) self->payload.start);
-        int64_t chunk_sample_id = i64[0];
-        int64_t chunk_sample_count = i64[1];
+        struct jls_fsr_f32_data_s * r = (struct jls_fsr_f32_data_s *) self->payload.start;
+        int64_t chunk_sample_id = r->header.timestamp;
+        int64_t chunk_sample_count = r->header.entry_count;
+        if (r->header.entry_size_bits != 8 * sizeof(r->data[0])) {
+            JLS_LOGE("Invalid f32 data");
+        }
         int64_t idx_start = 0;
         if (start_sample_id > chunk_sample_id) {
             idx_start = start_sample_id - chunk_sample_id;
@@ -754,7 +766,7 @@ int32_t jls_rd_fsr_f32(struct jls_rd_s * self, uint16_t signal_id, int64_t start
         if (data_length < chunk_sample_count) {
             chunk_sample_count = data_length;
         }
-        float * f32 = (float *) &i64[2];
+        float * f32 = &r->data[0];
         memcpy(data, f32 + idx_start, (size_t) chunk_sample_count * sizeof(float));
         data += chunk_sample_count;
         data_length -= chunk_sample_count;
@@ -825,10 +837,14 @@ static int32_t fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
     int64_t pos = jls_raw_chunk_tell(self->raw);
     ROE(rd_stats_chunk(self, signal_id, level));
 
-    int64_t * i64 = ((int64_t *) self->payload.start);
-    int64_t chunk_sample_id = i64[0];
-    float * src = (float *) &i64[2];
-    float * src_end = src + i64[1] * 4;
+    struct jls_fsr_f32_summary_s * summary = (struct jls_fsr_f32_summary_s *) self->payload.start;
+    if (summary->header.entry_size_bits != JLS_SUMMARY_FSR_COUNT * sizeof(float) * 8) {
+        JLS_LOGE("invalid summary entry size: %d", (int) summary->header.entry_size_bits);
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
+    int64_t chunk_sample_id = summary->header.timestamp;
+    float * src = summary->data;
+    float * src_end = &src[summary->header.entry_count * JLS_SUMMARY_FSR_COUNT * sizeof(float)];
     int64_t entry_offset = ((start_sample_id - chunk_sample_id + step_size - 1) / step_size);
     int64_t entry_sample_id = entry_offset * step_size + chunk_sample_id;
 
@@ -854,10 +870,13 @@ static int32_t fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
             if (self->chunk_cur.hdr.item_next) {
                 ROE(jls_raw_chunk_seek(self->raw, self->chunk_cur.hdr.item_next));
                 ROE(rd_stats_chunk(self, signal_id, level));
-                i64 = ((int64_t*) self->payload.start);
-                // chunk_sample_id = i64[0];
-                src = (float *) &i64[2];
-                src_end = src + i64[1] * JLS_SUMMARY_FSR_COUNT;
+                summary = (struct jls_fsr_f32_summary_s *) self->payload.start;
+                if (summary->header.entry_size_bits != JLS_SUMMARY_FSR_COUNT * sizeof(float) * 8) {
+                    JLS_LOGE("invalid summary entry size: %d", (int) summary->header.entry_size_bits);
+                    return JLS_ERROR_PARAMETER_INVALID;
+                }
+                src = summary->data;
+                src_end = &src[summary->header.entry_count * JLS_SUMMARY_FSR_COUNT * sizeof(float)];
             } else {
                 if ((incr_remaining <= step_size) && (data_length == 1)) {
                     // not a problem, will fetch from lower statistics
@@ -935,10 +954,14 @@ int32_t jls_rd_fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
 
     ROE(seek(self, signal_id, 0, start_sample_id));
     ROE(rd(self));
-    int64_t * i64 = ((int64_t*) self->payload.start);
-    int64_t chunk_sample_id = i64[0];
-    float * src = (float *) &i64[2];
-    float * src_end = src + i64[1];
+    struct jls_fsr_f32_data_s * s = (struct jls_fsr_f32_data_s *) self->payload.start;
+    int64_t chunk_sample_id = s->header.timestamp;
+    if (s->header.entry_size_bits != sizeof(float) * 8) {
+        JLS_LOGE("invalid data entry size: %d", (int) s->header.entry_size_bits);
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
+    float * src = &s->data[0];
+    float * src_end = &s->data[s->header.entry_count];
     if (start_sample_id > chunk_sample_id) {
         src += start_sample_id - chunk_sample_id;
     }
@@ -963,10 +986,14 @@ int32_t jls_rd_fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
             if (self->chunk_cur.hdr.chunk_meta != signal_id) {
                 JLS_LOGW("unexpected chunk meta: %d", (int) self->chunk_cur.hdr.chunk_meta);
             }
-            i64 = ((int64_t*) self->payload.start);
-            chunk_sample_id = i64[0];
-            src = (float *) &i64[2];
-            src_end = src + i64[1];
+            s = (struct jls_fsr_f32_data_s *) self->payload.start;
+            if (s->header.entry_size_bits != sizeof(float) * 8) {
+                JLS_LOGE("invalid data entry size: %d", (int) s->header.entry_size_bits);
+                return JLS_ERROR_PARAMETER_INVALID;
+            }
+            chunk_sample_id = s->header.timestamp;
+            src = &s->data[0];
+            src_end = &s->data[s->header.entry_count];
         }
         v = *src++;
         v_mean += v;

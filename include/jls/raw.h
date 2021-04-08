@@ -69,6 +69,15 @@ int32_t jls_raw_open(struct jls_raw_s ** instance, const char * path, const char
 int32_t jls_raw_close(struct jls_raw_s * self);
 
 /**
+ * @brief Get the JLS file format version.
+ *
+ * @param self The JLS raw instance.
+ * @return The JLS file format version.
+ * @see jls_version_u32() to get the JLS implementation version.
+ */
+union jls_version_u jls_raw_version(struct jls_raw_s * self);
+
+/**
  * @brief Write a chunk to the file at the current location and advance on success.
  *
  * @param self The JLS raw instance.

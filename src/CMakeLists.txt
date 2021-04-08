@@ -23,6 +23,7 @@ set(SOURCES
         statistics.c
         threaded_writer.c
         wf_f32.c
+        wr_ts.c
         writer.c
 )
 
