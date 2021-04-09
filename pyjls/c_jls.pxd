@@ -104,6 +104,8 @@ cdef extern from "jls/threaded_writer.h":
             jls_storage_type_e storage_type, 
             float y,
             const uint8_t * data, uint32_t data_size)
+    int32_t jls_twr_utc(jls_twr_s * self, uint16_t signal_id, 
+                        int64_t sample_id, int64_t utc)
 
 
 cdef extern from "jls/reader.h":

@@ -341,7 +341,7 @@ float * gen_triangle(uint32_t period_samples, int64_t length_samples) {
     return y;
 }
 
-static void test_data(void **state) {
+static void test_fsr_f32(void **state) {
     (void) state;
     struct jls_wr_s * wr = NULL;
     const int64_t sample_count = WINDOW_SIZE * 1000;
@@ -352,8 +352,11 @@ static void test_data(void **state) {
     assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_3));
     assert_int_equal(0, jls_wr_signal_def(wr, &SIGNAL_5));
 
+    int64_t utc = JLS_TIME_YEAR;   // one year after start of epoch
+
     for (int sample_id = 0; sample_id < sample_count; sample_id += WINDOW_SIZE) {
         assert_int_equal(0, jls_wr_fsr_f32(wr, 5, sample_id, signal + sample_id, WINDOW_SIZE));
+        assert_int_equal(0, jls_wr_utc(wr, 5, sample_id, utc + JLS_COUNTER_TO_TIME(sample_id, SIGNAL_5.sample_rate)));
     }
 
     assert_int_equal(0, jls_wr_close(wr));
@@ -399,7 +402,7 @@ static void compare_stats(float * data, float * src, size_t src_length) {
     assert_float_equal(v_std, data[JLS_SUMMARY_FSR_STD], 1e-7f + 0.0005f * v_std);
 }
 
-static void test_statistics(void **state) {
+static void test_fsr_f32_statistics(void **state) {
     (void) state;
     struct jls_wr_s * wr = NULL;
     const int64_t sample_count = WINDOW_SIZE * 1000;
@@ -457,8 +460,8 @@ int main(void) {
             cmocka_unit_test(test_wr_signal_without_source),
             cmocka_unit_test(test_wr_signal_duplicate),
 #endif
-            cmocka_unit_test(test_data),
-            cmocka_unit_test(test_statistics),
+            cmocka_unit_test(test_fsr_f32),
+            cmocka_unit_test(test_fsr_f32_statistics),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);

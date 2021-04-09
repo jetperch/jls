@@ -87,6 +87,7 @@ extensions = [
             'src/statistics.c',
             'src/threaded_writer.c',
             'src/wf_f32.c',
+            'src/wr_ts.c',
             'src/writer.c',
         ] + sources,
         include_dirs=['include', 'include_prv', np.get_include()],

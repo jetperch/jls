@@ -19,6 +19,7 @@
 #include "jls/format.h"
 #include "jls/wr_prv.h"
 #include "jls/wf_f32.h"
+#include "jls/wr_ts.h"
 #include "jls/cdef.h"
 #include "jls/ec.h"
 #include "jls/log.h"
@@ -49,6 +50,8 @@ struct track_info_s {
     struct chunk_s index[JLS_SUMMARY_LEVEL_COUNT];
     struct chunk_s data;
     struct chunk_s summary[JLS_SUMMARY_LEVEL_COUNT];
+
+    struct jls_wr_ts_s * ts;  // for ANNOTATION & UTC tracks only
 };
 
 struct signal_info_s {
@@ -162,8 +165,16 @@ static int32_t wr_end(struct jls_wr_s * self) {
 int32_t jls_wr_close(struct jls_wr_s * self) {
     if (self) {
         for (size_t i = 0; i < JLS_SIGNAL_COUNT; ++i) {
-            if (self->signal_info[i].signal_writer) {
-                jls_wf_f32_close(self->signal_info[i].signal_writer);
+            struct signal_info_s * signal_info = &self->signal_info[i];
+            if (signal_info->signal_writer) {
+                jls_wf_f32_close(signal_info->signal_writer);
+            }
+            for (size_t track_id = 0; track_id < JLS_TRACK_TYPE_COUNT; track_id++) {
+                struct jls_wr_ts_s * ts = signal_info->tracks[track_id].ts;
+                if (ts) {
+                    jls_wr_ts_close(ts);
+                    signal_info->tracks[track_id].ts = NULL;
+                }
             }
         }
         wr_end(self);
@@ -738,6 +749,7 @@ int32_t jls_wr_annotation(struct jls_wr_s * self, uint16_t signal_id, int64_t ti
 
     // construct header
     struct chunk_s chunk;
+    uint64_t offset = jls_raw_chunk_tell(self->raw);
     chunk.hdr.item_next = 0;  // update later
     chunk.hdr.item_prev = signal_info->tracks[JLS_TRACK_TYPE_ANNOTATION].data.offset;
     chunk.hdr.tag = JLS_TAG_TRACK_ANNOTATION_DATA;
@@ -745,21 +757,26 @@ int32_t jls_wr_annotation(struct jls_wr_s * self, uint16_t signal_id, int64_t ti
     chunk.hdr.chunk_meta = signal_id;
     chunk.hdr.payload_length = payload_length;
     chunk.hdr.payload_prev_length = self->payload_prev_length;
-    chunk.offset = jls_raw_chunk_tell(self->raw);
+    chunk.offset = offset;
 
     // write
     ROE(jls_raw_wr(self->raw, &chunk.hdr, self->buf.start));
     self->payload_prev_length = payload_length;
     ROE(update_mra(self, &signal_info->tracks[JLS_TRACK_TYPE_ANNOTATION].data, &chunk));
-    ROE(update_track(self, track, 0, chunk.offset));
+    ROE(update_track(self, track, 0, offset));
 
-    // todo update index
+    if (!track->ts) {
+        ROE(jls_wr_ts_open(&track->ts, self, signal_id, JLS_TRACK_TYPE_ANNOTATION,
+                           signal_info->signal_def.annotation_decimate_factor));
+    }
+    ROE(jls_wr_ts_anno(track->ts, timestamp, offset, annotation_type, group_id, y));
     return 0;
 }
 
-int32_t jls_wr_fsr_utc(struct jls_wr_s * self, uint16_t signal_id, int64_t sample_id, int64_t utc) {
+int32_t jls_wr_utc(struct jls_wr_s * self, uint16_t signal_id, int64_t sample_id, int64_t utc) {
     ROE(signal_validate_typed(self, signal_id,  JLS_SIGNAL_TYPE_FSR));
     struct signal_info_s * signal_info = &self->signal_info[signal_id];
+    struct track_info_s * track = &signal_info->tracks[JLS_TRACK_TYPE_UTC];
 
     // Construct payload
     struct jls_utc_data_s payload = {
@@ -775,6 +792,7 @@ int32_t jls_wr_fsr_utc(struct jls_wr_s * self, uint16_t signal_id, int64_t sampl
 
     // construct header
     struct chunk_s chunk;
+    uint64_t offset = jls_raw_chunk_tell(self->raw);
     chunk.hdr.item_next = 0;  // update later
     chunk.hdr.item_prev = signal_info->tracks[JLS_TRACK_TYPE_UTC].data.offset;
     chunk.hdr.tag = JLS_TAG_TRACK_UTC_DATA;
@@ -782,13 +800,18 @@ int32_t jls_wr_fsr_utc(struct jls_wr_s * self, uint16_t signal_id, int64_t sampl
     chunk.hdr.chunk_meta = signal_id;
     chunk.hdr.payload_length = payload_length;
     chunk.hdr.payload_prev_length = self->payload_prev_length;
-    chunk.offset = jls_raw_chunk_tell(self->raw);
+    chunk.offset = offset;
 
     // write
     ROE(jls_raw_wr(self->raw, &chunk.hdr, (uint8_t *) &payload));
     self->payload_prev_length = payload_length;
     ROE(update_mra(self, &signal_info->tracks[JLS_TRACK_TYPE_UTC].data, &chunk));
+    ROE(update_track(self, track, 0, offset));
 
-    // todo update index
+    if (!track->ts) {
+        ROE(jls_wr_ts_open(&track->ts, self, signal_id, JLS_TRACK_TYPE_UTC,
+                           signal_info->signal_def.utc_decimate_factor));
+    }
+    ROE(jls_wr_ts_utc(track->ts, sample_id, offset, utc));
     return 0;
 }

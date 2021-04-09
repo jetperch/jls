@@ -59,12 +59,19 @@ struct msg_header_annotation_s {
     float y;
 };
 
+struct msg_header_utc_s {
+    uint16_t signal_id;
+    int64_t sample_id;
+    int64_t utc;
+};
+
 struct msg_header_s {
     uint8_t msg_type;
     union {
         struct msg_header_user_data_s user_data;
         struct msg_header_fsr_f32_s fsr_f32;
         struct msg_header_annotation_s annotation;
+        struct msg_header_utc_s utc;
     } h;
     uint64_t d;
 };
@@ -75,6 +82,7 @@ enum message_e {
     MSG_USER_DATA,      // hdr.user_data, user_data
     MSG_FSR_F32,        // hdr.fsr_f32, data
     MSG_ANNOTATION,     // hdr.annotation, data
+    MSG_UTC,            // hdr.utc, data
 };
 
 int32_t jls_twr_run(struct jls_twr_s * self) {
@@ -135,6 +143,8 @@ int32_t jls_twr_run(struct jls_twr_s * self) {
                                            hdr.h.annotation.y,
                                            (const uint8_t *) payload, payload_sz);
                     break;
+                case MSG_UTC:
+                    rc = jls_wr_utc(self->wr, hdr.h.utc.signal_id, hdr.h.utc.sample_id, hdr.h.utc.utc);
                 default:
                     break;
             }
@@ -303,4 +313,19 @@ int32_t jls_twr_annotation(struct jls_twr_s * self, uint16_t signal_id, int64_t 
             .d = 0
     };
     return msg_send(self, &hdr, data, data_size);
+}
+
+JLS_API int32_t jls_twr_utc(struct jls_twr_s * self, uint16_t signal_id, int64_t sample_id, int64_t utc) {
+    struct msg_header_s hdr = {
+            .msg_type = MSG_ANNOTATION,
+            .h = {
+                    .utc = {
+                            .signal_id = signal_id,
+                            .sample_id = sample_id,
+                            .utc = utc
+                    }
+            },
+            .d = 0
+    };
+    return msg_send(self, &hdr, NULL, 0);
 }

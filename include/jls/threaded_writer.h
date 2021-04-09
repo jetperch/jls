@@ -60,9 +60,7 @@ JLS_API int32_t jls_twr_annotation(struct jls_twr_s * self, uint16_t signal_id, 
         enum jls_storage_type_e storage_type,
         float y,
         const uint8_t * data, uint32_t data_size);
-
-// todo jls_twr_fsr_utc
-//JLS_API int32_t jls_twr_fsr_utc(struct jls_twr_s * self, uint16_t signal_id, int64_t sample_id, int64_t utc);
+JLS_API int32_t jls_twr_utc(struct jls_twr_s * self, uint16_t signal_id, int64_t sample_id, int64_t utc);
 
 // todo jls_twr_vsr_f32
 //JLS_API int32_t jls_twr_vsr_f32(struct jls_twr_s * self, uint16_t ts_id, int64_t timestamp, uint32_t data, uint32_t size);

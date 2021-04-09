@@ -144,11 +144,19 @@ JLS_API int32_t jls_wr_annotation(struct jls_wr_s * self,
                                   uint32_t data_size);
 
 // todo jls_wr_fsr_int
-// JLS_API int32_t jls_wr_fsr_f32(struct jls_wr_s * self, uint16_t signal_id,
+// JLS_API int32_t jls_wr_fsr_i32(struct jls_wr_s * self, uint16_t signal_id,
 //        int64_t sample_id, const void * data, uint32_t data_length);
 
-// todo jls_wr_fsr_utc
-// JLS_API int32_t jls_wr_fsr_utc(struct jls_wr_s * self, uint16_t signal_id, int64_t sample_id, int64_t utc);
+/**
+ * @brief Add a mapping from sample_id to UTC timestamp for an FSR signal.
+ *
+ * @param self The writer instance.
+ * @param signal_id The signal id.
+ * @param sample_id The sample_id for FSR.
+ * @param utc The UTC timestamp.
+ * @return 0 or error code.
+ */
+JLS_API int32_t jls_wr_utc(struct jls_wr_s * self, uint16_t signal_id, int64_t sample_id, int64_t utc);
 
 // todo jls_wr_vsr_f32
 // JLS_API int32_t jls_wr_vsr_f32(struct jls_wr_s * self, uint16_t ts_id, int64_t timestamp, uint32_t data, uint32_t size);

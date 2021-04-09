@@ -635,7 +635,7 @@ struct jls_utc_summary_entry_s {
  */
 struct jls_utc_summary_s {
     struct jls_payload_header_s header;
-    struct jls_utc_data_s entries[];
+    struct jls_utc_summary_entry_s entries[];
 };
 
 JLS_CPP_GUARD_END

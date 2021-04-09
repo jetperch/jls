@@ -261,6 +261,12 @@ cdef class Writer:
         if rc:
             raise RuntimeError(f'annotation failed {rc}')
 
+    def utc(self, signal_id, sample_id, utc):
+        cdef int32_t rc
+        rc = c_jls.jls_twr_utc(self._wr, signal_id, sample_id, utc)
+        if rc:
+            raise RuntimeError(f'utc failed {rc}')
+
 
 cdef class Reader:
     cdef c_jls.jls_rd_s * _rd

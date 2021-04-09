@@ -11,6 +11,8 @@ This file contains the list of changes made to the JLS project.
 *   NOT BACKWARDS COMPATIBLE with 0.2.6 and earlier.
 *   Modified annotation to contain optional y-axis position.  API change.
 *   Improved file format consistency and improved format.h.
+*   Added UTC track writer for FSR signals.
+*   Added INDEX and SUMMARY writer for ANNOTATION and UTC tracks.
 
 
 ## 0.2.6
