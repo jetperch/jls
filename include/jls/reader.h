@@ -193,6 +193,34 @@ typedef int32_t (*jls_rd_user_data_cbk_fn)(void * user_data,
  */
 JLS_API int32_t jls_rd_user_data(struct jls_rd_s * self, jls_rd_user_data_cbk_fn cbk_fn, void * cbk_user_data);
 
+
+/**
+ * @brief The function called for each UTC entry.
+ *
+ * @param user_data The arbitrary user data.
+ * @param utc The array of utc entries, which are sample_id / timestamp pairs.
+ * @param size The number of utc entries for this callback.
+ * @return 0 to continue iteration or any other value to stop.
+ * @see jls_rd_annotations
+ */
+typedef int32_t (*jls_rd_utc_cbk_fn)(void * user_data,
+        const struct jls_utc_summary_entry_s * utc, uint32_t size);
+
+/**
+ * @brief Iterate over the UTC timestamps for a FSR signal.
+ *
+ * @param self The reader instance.
+ * @param signal_id The signal id.
+ * @param sample_id The starting sample_id.  Skip all prior sample ids.
+ * @param cbk_fn The callback function that jls_rd_utc() will
+ *      call once for UTC entries.  Return 0 to continue
+ *      to the next UTC entries or a non-zero value to stop iteration.
+ * @param cbk_user_data The arbitrary data provided to cbk_fn.
+ * @return 0 or error code.
+ */
+JLS_API int32_t jls_rd_utc(struct jls_rd_s * self, uint16_t signal_id, int64_t sample_id,
+                           jls_rd_utc_cbk_fn cbk_fn, void * cbk_user_data);
+
 JLS_CPP_GUARD_END
 
 /** @} */

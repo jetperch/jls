@@ -795,7 +795,7 @@ static inline void stats_to_float(float * data, struct jls_statistics_s * stats)
 
 static int32_t rd_stats_chunk(struct jls_rd_s * self, uint16_t signal_id, uint8_t level) {
     ROE(rd(self));
-    if (JLS_TAG_TRACK_FSR_SUMMARY != self->chunk_cur.hdr.tag){
+    if (JLS_TAG_TRACK_FSR_SUMMARY != self->chunk_cur.hdr.tag) {
         JLS_LOGW("unexpected chunk tag %d", (int) self->chunk_cur.hdr.tag);
         return JLS_ERROR_IO;
     }
@@ -1089,6 +1089,42 @@ int32_t jls_rd_user_data(struct jls_rd_s * self, jls_rd_user_data_cbk_fn cbk_fn,
             return 0;
         }
         pos = self->chunk_cur.hdr.item_next;
+    }
+    return 0;
+}
+
+JLS_API int32_t jls_rd_utc(struct jls_rd_s * self, uint16_t signal_id, int64_t sample_id,
+                           jls_rd_utc_cbk_fn cbk_fn, void * cbk_user_data) {
+    struct jls_utc_summary_s * utc;
+    if (!cbk_fn) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
+    if (!is_signal_defined(self, signal_id)) {
+        return JLS_ERROR_NOT_FOUND;
+    }
+
+    // todo seek
+    (void) sample_id;
+
+    // iterate
+    struct jls_chunk_header_s hdr;
+    hdr.item_next = self->signals[signal_id].track_head_data[JLS_TRACK_TYPE_UTC][1];  // index level 1
+
+    while (hdr.item_next) {
+        ROE(jls_raw_chunk_seek(self->raw, hdr.item_next));
+        ROE(jls_raw_rd_header(self->raw, &hdr));
+        if (hdr.tag != JLS_TAG_TRACK_UTC_INDEX) {
+            return JLS_ERROR_NOT_FOUND;
+        }
+        ROE(jls_raw_chunk_next(self->raw));
+        ROE(rd(self));
+        if (self->chunk_cur.hdr.tag != JLS_TAG_TRACK_UTC_SUMMARY) {
+            return JLS_ERROR_NOT_FOUND;
+        }
+        utc = (struct jls_utc_summary_s *) self->payload.start;
+        if (cbk_fn(cbk_user_data, utc->entries, utc->header.entry_count)) {
+            return 0;
+        }
     }
     return 0;
 }

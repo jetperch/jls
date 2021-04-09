@@ -261,6 +261,43 @@ static void test_user_data(void **state) {
     remove(filename);
 }
 
+int32_t on_utc(void * user_data, const struct jls_utc_summary_entry_s * utc, uint32_t size) {
+    (void) user_data;
+    for (uint32_t i = 0; i < size; ++i) {
+        int64_t sample_id = utc[i].sample_id;
+        int64_t timestamp = utc[i].timestamp;
+        check_expected(sample_id);
+        check_expected(timestamp);
+    }
+    return 0;
+}
+
+#define expect_utc(sample_id_, timestamp_)          \
+    expect_value(on_utc, sample_id, sample_id_);    \
+    expect_value(on_utc, timestamp, timestamp_);
+
+static void test_utc(void **state) {
+    (void) state;
+    struct jls_wr_s * wr = NULL;
+    struct jls_rd_s * rd = NULL;
+    assert_int_equal(0, jls_wr_open(&wr, filename));
+    assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_3));
+    assert_int_equal(0, jls_wr_signal_def(wr, &SIGNAL_5));
+    for (int64_t i = 0; i < SIGNAL_5.utc_decimate_factor * 5 + 10; ++i) {
+        int64_t sample_id = i * 10;
+        int64_t timestamp = i * JLS_TIME_SECOND;
+        assert_int_equal(0, jls_wr_utc(wr, 5, sample_id, timestamp));
+        expect_utc(sample_id, timestamp);
+    }
+    assert_int_equal(0, jls_wr_close(wr));
+
+    assert_int_equal(0, jls_rd_open(&rd, filename));
+    assert_int_equal(0, jls_rd_utc(rd, 5, 0, on_utc, NULL));
+
+    jls_rd_close(rd);
+    remove(filename);
+}
+
 static void test_signal(void **state) {
     (void) state;
     struct jls_wr_s * wr = NULL;
@@ -456,6 +493,7 @@ int main(void) {
             cmocka_unit_test(test_wr_source_duplicate),
             cmocka_unit_test(test_annotation),
             cmocka_unit_test(test_user_data),
+            cmocka_unit_test(test_utc),
             cmocka_unit_test(test_signal),
             cmocka_unit_test(test_wr_signal_without_source),
             cmocka_unit_test(test_wr_signal_duplicate),
