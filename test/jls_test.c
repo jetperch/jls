@@ -223,6 +223,36 @@ static void test_annotation(void **state) {
     remove(filename);
 }
 
+static void test_annotation_seek(void **state) {
+    (void) state;
+    struct jls_wr_s * wr = NULL;
+    struct jls_rd_s * rd = NULL;
+    assert_int_equal(0, jls_wr_open(&wr, filename));
+    assert_int_equal(0, jls_wr_annotation(wr, 0, 0,
+                                          JLS_ANNOTATION_TYPE_TEXT, 0, JLS_STORAGE_TYPE_STRING,
+                                          NAN,
+                                          (const uint8_t *) STRING_1, 0));
+    assert_int_equal(0, jls_wr_annotation(wr, 0, 1,
+                                          JLS_ANNOTATION_TYPE_TEXT, 0, JLS_STORAGE_TYPE_STRING,
+                                          NAN,
+                                          (const uint8_t *) STRING_1, 0));
+    assert_int_equal(0, jls_wr_annotation(wr, 0, JLS_TIME_SECOND,
+                                          JLS_ANNOTATION_TYPE_TEXT, 0, JLS_STORAGE_TYPE_STRING,
+                                          NAN,
+                                          (const uint8_t *) STRING_1, 0));
+    assert_int_equal(0, jls_wr_close(wr));
+
+    assert_int_equal(0, jls_rd_open(&rd, filename));
+    expect_annotation(JLS_TIME_SECOND,
+                      JLS_ANNOTATION_TYPE_TEXT, 0, JLS_STORAGE_TYPE_STRING,
+                      NAN,
+                      (const uint8_t *) STRING_1, sizeof(STRING_1));
+    assert_int_equal(0, jls_rd_annotations(rd, 0, JLS_TIME_SECOND, on_annotation, NULL));
+
+    jls_rd_close(rd);
+    remove(filename);
+}
+
 static int32_t on_user_data(void * user_data,
                             uint16_t chunk_meta, enum jls_storage_type_e storage_type,
                             uint8_t * data, uint32_t data_size) {
@@ -276,26 +306,52 @@ int32_t on_utc(void * user_data, const struct jls_utc_summary_entry_s * utc, uin
     expect_value(on_utc, sample_id, sample_id_);    \
     expect_value(on_utc, timestamp, timestamp_);
 
-static void test_utc(void **state) {
-    (void) state;
+static void utc_gen(uint32_t count, int64_t timestamp_start, int64_t timestamp_end) {
     struct jls_wr_s * wr = NULL;
-    struct jls_rd_s * rd = NULL;
     assert_int_equal(0, jls_wr_open(&wr, filename));
     assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_3));
     assert_int_equal(0, jls_wr_signal_def(wr, &SIGNAL_5));
-    for (int64_t i = 0; i < SIGNAL_5.utc_decimate_factor * 5 + 10; ++i) {
+    for (int64_t i = 0; i < count; ++i) {
         int64_t sample_id = i * 10;
         int64_t timestamp = i * JLS_TIME_SECOND;
         assert_int_equal(0, jls_wr_utc(wr, 5, sample_id, timestamp));
-        expect_utc(sample_id, timestamp);
+        if ((timestamp >= timestamp_start) && (timestamp < timestamp_end)) {
+            expect_utc(sample_id, timestamp);
+        }
     }
     assert_int_equal(0, jls_wr_close(wr));
+}
 
+static void utc_check(int64_t sample_id) {
+    struct jls_rd_s * rd = NULL;
     assert_int_equal(0, jls_rd_open(&rd, filename));
-    assert_int_equal(0, jls_rd_utc(rd, 5, 0, on_utc, NULL));
-
+    assert_int_equal(0, jls_rd_utc(rd, 5, sample_id, on_utc, NULL));
     jls_rd_close(rd);
     remove(filename);
+}
+
+static void test_utc(void **state) {
+    (void) state;
+    utc_gen(SIGNAL_5.utc_decimate_factor * 5 + 10, 0, 1000000 * JLS_TIME_SECOND);
+    utc_check(0);
+}
+
+static void test_utc_seek_first_block(void **state) {
+    (void) state;
+    utc_gen(SIGNAL_5.utc_decimate_factor * 5 + 10, 50 * JLS_TIME_SECOND, 1000000 * JLS_TIME_SECOND);
+    utc_check(500);
+}
+
+static void test_utc_seek_second_block_start(void **state) {
+    (void) state;
+    utc_gen(SIGNAL_5.utc_decimate_factor * 5 + 10, 100 * JLS_TIME_SECOND, 1000000 * JLS_TIME_SECOND);
+    utc_check(1000);
+}
+
+static void test_utc_seek_second_block_middle(void **state) {
+    (void) state;
+    utc_gen(SIGNAL_5.utc_decimate_factor * 5 + 10, 150 * JLS_TIME_SECOND, 1000000 * JLS_TIME_SECOND);
+    utc_check(1500);
 }
 
 static void test_signal(void **state) {
@@ -492,8 +548,13 @@ int main(void) {
             cmocka_unit_test(test_source),
             cmocka_unit_test(test_wr_source_duplicate),
             cmocka_unit_test(test_annotation),
+            cmocka_unit_test(test_annotation_seek),
             cmocka_unit_test(test_user_data),
             cmocka_unit_test(test_utc),
+            cmocka_unit_test(test_utc_seek_first_block),
+            cmocka_unit_test(test_utc_seek_second_block_start),
+            cmocka_unit_test(test_utc_seek_second_block_middle),
+
             cmocka_unit_test(test_signal),
             cmocka_unit_test(test_wr_signal_without_source),
             cmocka_unit_test(test_wr_signal_duplicate),

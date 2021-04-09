@@ -24,6 +24,7 @@
 #include "jls/ec.h"
 #include "jls/log.h"
 #include "jls/crc32c.h"
+#include "jls/util.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -107,17 +108,6 @@ struct jls_signal_def_s SIGNAL_0 = {       // 0 reserved for VSR annotations
         .name = "global_annotation_signal",
         .units = "",
 };
-
-/**
- * @brief construct the chunk tag.
- *
- * @param track_type The jls_track_type_e
- * @param track_chunk The jls_track_chunk_e
- * @return
- */
-static inline uint8_t tag_construct(uint8_t track_type, uint8_t track_chunk) {
-    return 0x20 | ((track_type & 0x03) << 3) | (track_chunk & 0x07);
-}
 
 int32_t jls_wr_open(struct jls_wr_s ** instance, const char * path) {
     if (!instance) {
@@ -364,7 +354,7 @@ static int32_t track_wr_def(struct jls_wr_s * self, struct track_info_s * track_
     }
     chunk->hdr.item_next = 0;  // update later
     chunk->hdr.item_prev = self->signal_mra.offset;
-    chunk->hdr.tag = tag_construct(track_info->track_type, JLS_TRACK_CHUNK_DEF);
+    chunk->hdr.tag = jls_track_tag_pack(track_info->track_type, JLS_TRACK_CHUNK_DEF);
     chunk->hdr.rsv0_u8 = 0;
     chunk->hdr.chunk_meta = track_info->signal_id;
     chunk->hdr.payload_length = 0;
@@ -383,7 +373,7 @@ static int32_t track_wr_head(struct jls_wr_s * self, struct track_info_s * track
     if (!chunk->offset) {
         chunk->hdr.item_next = 0;  // update later
         chunk->hdr.item_prev = self->signal_mra.offset;
-        chunk->hdr.tag = tag_construct(track_info->track_type, JLS_TRACK_CHUNK_HEAD);
+        chunk->hdr.tag = jls_track_tag_pack(track_info->track_type, JLS_TRACK_CHUNK_HEAD);
         chunk->hdr.rsv0_u8 = 0;
         chunk->hdr.chunk_meta = track_info->signal_id;
         chunk->hdr.payload_length = sizeof(track_info->head_offsets);
@@ -611,7 +601,7 @@ int32_t jls_wr_data_prv(struct jls_wr_s * self, uint16_t signal_id, enum jls_tra
 
     chunk.hdr.item_next = 0;  // update later
     chunk.hdr.item_prev = track->data.offset;
-    chunk.hdr.tag = tag_construct(track->track_type, JLS_TRACK_CHUNK_DATA);
+    chunk.hdr.tag = jls_track_tag_pack(track->track_type, JLS_TRACK_CHUNK_DATA);
     chunk.hdr.rsv0_u8 = 0;
     chunk.hdr.chunk_meta = signal_id | (0 << 12);
     chunk.hdr.payload_length = payload_length;
@@ -646,7 +636,7 @@ int32_t jls_wr_summary_prv(struct jls_wr_s * self, uint16_t signal_id, enum jls_
 
     chunk.hdr.item_next = 0;  // update later
     chunk.hdr.item_prev = track->summary[level].offset;
-    chunk.hdr.tag = tag_construct(track->track_type, JLS_TRACK_CHUNK_SUMMARY);
+    chunk.hdr.tag = jls_track_tag_pack(track->track_type, JLS_TRACK_CHUNK_SUMMARY);
     chunk.hdr.rsv0_u8 = 0;
     chunk.hdr.chunk_meta = signal_id | (((uint16_t) level) << 12);
     chunk.hdr.payload_length = payload_length;
@@ -677,7 +667,7 @@ int32_t jls_wr_index_prv(struct jls_wr_s * self, uint16_t signal_id, enum jls_tr
 
     chunk.hdr.item_next = 0;  // update later
     chunk.hdr.item_prev = track->index[level].offset;
-    chunk.hdr.tag = tag_construct(track->track_type, JLS_TRACK_CHUNK_INDEX);
+    chunk.hdr.tag = jls_track_tag_pack(track->track_type, JLS_TRACK_CHUNK_INDEX);
     chunk.hdr.rsv0_u8 = 0;
     chunk.hdr.chunk_meta = signal_id | (((uint16_t) level) << 12);;
     chunk.hdr.payload_length = payload_length;

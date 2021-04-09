@@ -21,6 +21,7 @@
 #include "jls/log.h"
 #include "jls/crc32c.h"
 #include "jls/statistics.h"
+#include "jls/util.h"
 #include <inttypes.h>
 #include <math.h>
 #include <stdio.h>
@@ -628,13 +629,72 @@ int32_t jls_rd_signal(struct jls_rd_s * self, uint16_t signal_id, struct jls_sig
     return 0;
 }
 
-int32_t seek(struct jls_rd_s * self, uint16_t signal_id, uint8_t level, int64_t sample_id) {
+static int32_t ts_seek(struct jls_rd_s * self, uint16_t signal_id, uint8_t level,
+                       enum jls_track_type_e track_type, int64_t timestamp) {
+    if (!is_signal_defined(self, signal_id)) {
+        return JLS_ERROR_NOT_FOUND;
+    }
+    switch (track_type) {
+        case JLS_TRACK_TYPE_VSR: break;
+        case JLS_TRACK_TYPE_ANNOTATION: break;
+        case JLS_TRACK_TYPE_UTC: break;
+        default:
+            JLS_LOGW("ts_seek: unsupported track type: %d", (int) track_type);
+            return JLS_ERROR_PARAMETER_INVALID;
+    }
+    struct signal_s * s = &self->signals[signal_id];
+    int64_t offset = 0;
+    int64_t * offsets = s->track_head_data[track_type];
+
+    int initial_level = JLS_SUMMARY_LEVEL_COUNT - 1;
+    for (; initial_level >= 0; --initial_level) {
+        if (offsets[initial_level]) {
+            offset = offsets[initial_level];
+            break;
+        }
+    }
+    if (!offset) {
+        return JLS_ERROR_NOT_FOUND;
+    }
+
+    for (int lvl = initial_level; lvl > level; --lvl) {
+        JLS_LOGD3("signal %d, level %d, offset=%" PRIi64, (int) signal_id, (int) lvl, offset);
+        ROE(jls_raw_chunk_seek(self->raw, offset));
+        ROE(rd(self));
+        if (self->chunk_cur.hdr.tag != jls_track_tag_pack(track_type, JLS_TRACK_CHUNK_INDEX)) {
+            JLS_LOGW("seek tag mismatch: %d", (int) self->chunk_cur.hdr.tag);
+        }
+
+        struct jls_index_s * r = (struct jls_index_s *) self->payload.start;
+        uint8_t * p_end = (uint8_t *) &r->entries[r->header.entry_count];
+
+        if ((size_t) (p_end - self->payload.start) > self->payload.length) {
+            JLS_LOGE("invalid payload length");
+            return JLS_ERROR_PARAMETER_INVALID;
+        }
+        if (r->header.entry_count == 0) {
+            JLS_LOGE("invalid entry count");
+            return JLS_ERROR_PARAMETER_INVALID;
+        }
+
+        uint32_t idx = r->header.entry_count - 1;
+        for (; ((idx > 0) && (r->entries[idx].timestamp > timestamp)); --idx) {
+            // iterate
+        }
+        offset = r->entries[idx].offset;
+    }
+
+    ROE(jls_raw_chunk_seek(self->raw, offset));
+    return 0;
+}
+
+static int32_t fsr_seek(struct jls_rd_s * self, uint16_t signal_id, uint8_t level, int64_t sample_id) {
     if (!is_signal_defined(self, signal_id)) {
         return JLS_ERROR_NOT_FOUND;
     }
     struct jls_signal_def_s * signal_def = &self->signal_def[signal_id];
     if (signal_def->signal_type != JLS_SIGNAL_TYPE_FSR) {
-        JLS_LOGW("fsr_length not support for signal type %d", (int) signal_def->signal_type);
+        JLS_LOGW("fsr_seek not support for signal type %d", (int) signal_def->signal_type);
         return JLS_ERROR_NOT_SUPPORTED;
     }
     struct signal_s * s = &self->signals[signal_id];
@@ -747,7 +807,7 @@ int32_t jls_rd_fsr_f32(struct jls_rd_s * self, uint16_t signal_id, int64_t start
         return 0;
     }
     //JLS_LOGD3("jls_rd_fsr_f32(%d, %" PRIi64 ")", (int) signal_id, start_sample_id);
-    ROE(seek(self, signal_id, 0, start_sample_id));
+    ROE(fsr_seek(self, signal_id, 0, start_sample_id));
     self->chunk_cur.hdr.item_next = jls_raw_chunk_tell(self->raw);
     while (data_length > 0) {
         ROE(jls_raw_chunk_seek(self->raw, self->chunk_cur.hdr.item_next));
@@ -832,7 +892,7 @@ static int32_t fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
         step_size *= signal_def->summary_decimate_factor;
     }
     float f32_tmp4[4];
-    ROE(seek(self, signal_id, level, start_sample_id)); // returns the index
+    ROE(fsr_seek(self, signal_id, level, start_sample_id)); // returns the index
     ROE(jls_raw_chunk_next(self->raw));  // statistics
     int64_t pos = jls_raw_chunk_tell(self->raw);
     ROE(rd_stats_chunk(self, signal_id, level));
@@ -952,7 +1012,7 @@ int32_t jls_rd_fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
     struct f32_buf_s * b = self->f32_buf;
     int64_t buf_offset = 0;
 
-    ROE(seek(self, signal_id, 0, start_sample_id));
+    ROE(fsr_seek(self, signal_id, 0, start_sample_id));
     ROE(rd(self));
     struct jls_fsr_f32_data_s * s = (struct jls_fsr_f32_data_s *) self->payload.start;
     int64_t chunk_sample_id = s->header.timestamp;
@@ -1040,11 +1100,10 @@ int32_t jls_rd_annotations(struct jls_rd_s * self, uint16_t signal_id, int64_t t
         return JLS_ERROR_NOT_FOUND;
     }
 
-    // todo seek
-    (void) timestamp;
+    ROE(ts_seek(self, signal_id, 0, JLS_TRACK_TYPE_ANNOTATION, timestamp));
 
     // iterate
-    int64_t pos = self->signals[signal_id].track_head_data[JLS_TRACK_TYPE_ANNOTATION][0];
+    int64_t pos = jls_raw_chunk_tell(self->raw);
     while (pos) {
         ROE(jls_raw_chunk_seek(self->raw, pos));
         ROE(rd(self));
@@ -1103,12 +1162,11 @@ JLS_API int32_t jls_rd_utc(struct jls_rd_s * self, uint16_t signal_id, int64_t s
         return JLS_ERROR_NOT_FOUND;
     }
 
-    // todo seek
-    (void) sample_id;
+    ROE(ts_seek(self, signal_id, 1, JLS_TRACK_TYPE_UTC, sample_id));
 
     // iterate
     struct jls_chunk_header_s hdr;
-    hdr.item_next = self->signals[signal_id].track_head_data[JLS_TRACK_TYPE_UTC][1];  // index level 1
+    hdr.item_next = jls_raw_chunk_tell(self->raw);
 
     while (hdr.item_next) {
         ROE(jls_raw_chunk_seek(self->raw, hdr.item_next));
@@ -1122,8 +1180,15 @@ JLS_API int32_t jls_rd_utc(struct jls_rd_s * self, uint16_t signal_id, int64_t s
             return JLS_ERROR_NOT_FOUND;
         }
         utc = (struct jls_utc_summary_s *) self->payload.start;
-        if (cbk_fn(cbk_user_data, utc->entries, utc->header.entry_count)) {
-            return 0;
+        uint32_t idx = 0;
+        for (; (idx < utc->header.entry_count) && (sample_id > utc->entries[idx].sample_id); ++idx) {
+            // iterate
+        }
+        uint32_t size = utc->header.entry_count - idx;
+        if (size) {
+            if (cbk_fn(cbk_user_data, utc->entries + idx, size)) {
+                return 0;
+            }
         }
     }
     return 0;

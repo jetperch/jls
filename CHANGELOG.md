@@ -13,6 +13,7 @@ This file contains the list of changes made to the JLS project.
 *   Improved file format consistency and improved format.h.
 *   Added UTC track writer and reader for FSR signals.
 *   Added INDEX and SUMMARY writer for ANNOTATION and UTC tracks.
+*   Added reader seek to timestamp for ANNOTATION and UTC using INDEX & SUMMARY.
 
 
 ## 0.2.6
