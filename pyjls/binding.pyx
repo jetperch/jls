@@ -317,7 +317,7 @@ cdef class Reader:
                 utc_decimate_factor=signals[i].utc_decimate_factor,
                 name=signals[i].name.decode('utf-8'),
                 units=signals[i].units.decode('utf-8'))
-            if signal_def.signal_type == 0:
+            if signal_def.signal_type == c_jls.JLS_SIGNAL_TYPE_FSR:
                 rc = c_jls.jls_rd_fsr_length(self._rd, signal_id, &samples)
                 if rc:
                     raise RuntimeError(f'fsr signal length failed {rc}')
@@ -363,7 +363,7 @@ cdef class Reader:
 
         cdef int32_t rc
         cdef np.float32_t [:, :] c_data
-        data = np.empty((length, 4), dtype=np.float32)
+        data = np.empty((length, c_jls.JLS_SUMMARY_FSR_COUNT), dtype=np.float32)
         c_data = data
         rc = c_jls.jls_rd_fsr_f32_statistics(self._rd, signal_id, start_sample_id, increment, &c_data[0, 0], length)
         if rc:
@@ -374,7 +374,7 @@ cdef class Reader:
         """Read annotations from a signal.
 
         :param signal_id: The signal id.
-        :param timestamp: The starting timestamp.
+        :param timestamp: The starting timestamp.  FSR uses sample_id.  VSR uses utc.
         :param cbk: The function(timestamp, annotation_type, group_id, y, data)
             to call for each annotation.  Return True to stop iteration over
             the annotations or False to continue iterating.
@@ -390,6 +390,22 @@ cdef class Reader:
         if rc:
             raise RuntimeError(f'annotations failed {rc}')
 
+    def utc(self, signal_id, sample_id, cbk_fn):
+        """Read the sample_id / utc pairs from a FSR signal.
+
+        :param signal_id: The signal id.
+        :param sample_id: The starting sample_id.
+        :param cbk: The function(entries)
+            to call for each annotation.  Entries is an Nx2 numpy array of
+            [sample_id, utc_timestamp].
+            Return True to stop iteration over the annotations
+            or False to continue iterating.
+        """
+        cdef int32_t rc
+        rc = c_jls.jls_rd_utc(self._rd, signal_id, sample_id, _utc_cbk_fn, <void *> cbk_fn)
+        if rc:
+            raise RuntimeError(f'utc failed {rc}')
+
 
 cdef int32_t _annotation_cbk_fn(void * user_data, const c_jls.jls_annotation_s * annotation):
     cbk_fn = <object> user_data
@@ -397,7 +413,11 @@ cdef int32_t _annotation_cbk_fn(void * user_data, const c_jls.jls_annotation_s *
     y = annotation[0].y
     if not isfinite(y):
         y = None
-    rc = cbk_fn(annotation[0].timestamp, annotation[0].annotation_type, annotation[0].group_id, y, data)
+    try:
+        rc = cbk_fn(annotation[0].timestamp, annotation[0].annotation_type, annotation[0].group_id, y, data)
+    except Exception:
+        logging.getLogger(__name__).exception('in annotation callback')
+        return 1
     return 1 if bool(rc) else 0
 
 
@@ -406,4 +426,15 @@ cdef int32_t _user_data_cbk_fn(void * user_data, uint16_t chunk_meta, c_jls.jls_
     cbk_fn = <object> user_data
     d = _storage_unpack(storage_type, data, data_size)
     rc = cbk_fn(chunk_meta, d)
+    return 1 if bool(rc) else 0
+
+
+cdef int32_t _utc_cbk_fn(void * user_data, const c_jls.jls_utc_summary_entry_s * utc, uint32_t size):
+    cdef uint32_t idx
+    cbk_fn = <object> user_data
+    entries = np.empty((size, 2), dtype=np.int64)
+    for idx in range(size):
+        entries[idx, 0] = utc[idx].sample_id
+        entries[idx, 1] = utc[idx].timestamp
+    rc = cbk_fn(entries)
     return 1 if bool(rc) else 0

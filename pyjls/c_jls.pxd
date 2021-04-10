@@ -74,6 +74,10 @@ cdef extern from "jls/format.h":
         JLS_SUMMARY_FSR_MAX = 3
         JLS_SUMMARY_FSR_COUNT = 4
 
+    struct jls_utc_summary_entry_s:
+        int64_t sample_id
+        int64_t timestamp
+
 
 cdef extern from "jls/log.h":
     void jls_log_printf(const char * format, ...)
@@ -126,3 +130,6 @@ cdef extern from "jls/reader.h":
         uint16_t chunk_meta, jls_storage_type_e storage_type,
         uint8_t * data, uint32_t data_size)
     int32_t jls_rd_user_data(jls_rd_s * self, jls_rd_user_data_cbk_fn cbk_fn, void * cbk_user_data)
+    ctypedef int32_t (*jls_rd_utc_cbk_fn)(void * user_data, const jls_utc_summary_entry_s * utc, uint32_t size)
+    int32_t jls_rd_utc(jls_rd_s * self, uint16_t signal_id, int64_t sample_id,
+                       jls_rd_utc_cbk_fn cbk_fn, void * cbk_user_data)

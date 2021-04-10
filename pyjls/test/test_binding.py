@@ -29,24 +29,34 @@ class TestBinding(unittest.TestCase):
         f = tempfile.NamedTemporaryFile(delete=False, suffix='.jls')
         f.close()
         self._path = f.name
+        self.user_data = []
+        self.annotations = []
+        self._utc = []
+
+    def _on_user_data(self, *args):
+        self.user_data.append(args)
+
+    def _on_annotations(self, *args):
+        self.annotations.append(args)
+
+    def _on_utc(self, entries):
+        self._utc.append(entries)
+
+    @property
+    def utc(self):
+        return np.concatenate(self._utc)
 
     def tearDown(self) -> None:
         if os.path.isfile(self._path):
             os.remove(self._path)
 
-    def test_basic(self):
+    def test_fsr_f32(self):
         data = np.arange(110000, dtype=np.float32)
         with Writer(self._path) as w:
             w.source_def(source_id=1, name='name', vendor='vendor', model='model',
                          version='version', serial_number='serial_number')
             w.signal_def(3, source_id=1, sample_rate=1000000, name='current', units='A')
-            w.user_data(1, b'user binary')
-            w.user_data(2, 'user string')
-            w.user_data(3, {'user': 'json'})
             w.fsr_f32(3, 0, data)
-            w.annotation(3, 10, 'user', 20, None, b'annotation binary')
-            w.annotation(3, 11, 'str', 21, None, 'annotation str')
-            w.annotation(3, 12, 'marker', 22, 1.0, '1')
 
         with Reader(self._path) as r:
             self.assertEqual(2, len(r.sources))
@@ -84,26 +94,79 @@ class TestBinding(unittest.TestCase):
             np.testing.assert_allclose(np.max(data), stats[0, SummaryFSR.MAX])
             np.testing.assert_allclose(e_std, stats[0, SummaryFSR.STD], rtol=1e-4)
 
-            annotations = []
+    def test_user_data(self):
+        data = [
+            (1, b'user binary'),
+            (2, 'user string'),
+            (3, {'user': 'json'}),
+        ]
+        with Writer(self._path) as w:
+            for d in data:
+                w.user_data(*d)
+        with Reader(self._path) as r:
+            r.user_data(self._on_user_data)
+        self.assertEqual(data, self.user_data)
 
-            def annotations_fn(*args):
-                annotations.append(args)
+    def _annotation_gen(self, signal_id):
+        annotations = [
+            (10, 0, 20, None, b'annotation binary'),
+            (11, 1, 21, None, 'annotation str'),
+            (12, 2, 22, 1.0, '1'),
+        ]
+        with Writer(self._path) as w:
+            fs = 1000000
+            w.source_def(source_id=1, name='name', vendor='vendor', model='model',
+                         version='version', serial_number='serial_number')
+            w.signal_def(signal_id=signal_id, source_id=1, sample_rate=fs, name='current', units='A')
+            for a in annotations:
+                w.annotation(signal_id, *a)
+        return annotations
 
-            r.annotations(3, 0, annotations_fn)
-            self.assertEqual(3, len(annotations))
-            self.assertEqual((10, 0, 20, None, b'annotation binary'), annotations[0])
-            self.assertEqual((11, 1, 21, None, 'annotation str'), annotations[1])
-            self.assertEqual((12, 2, 22, 1.0, '1'), annotations[2])
+    def test_annotation(self):
+        signal_id = 3
+        expected = self._annotation_gen(signal_id)
+        with Reader(self._path) as r:
+            r.annotations(signal_id, 0, self._on_annotations)
+        self.assertEqual(expected, self.annotations)
 
-            user_data = []
-            def user_data_fn(*args):
-                user_data.append(args)
+    def test_annotation_seek(self):
+        signal_id = 3
+        expected = self._annotation_gen(signal_id)
+        with Reader(self._path) as r:
+            r.annotations(signal_id, expected[1][0], self._on_annotations)
+        self.assertEqual(expected[1:], self.annotations)
 
-            r.user_data(user_data_fn)
-            self.assertEqual(3, len(user_data))
-            self.assertEqual((1, b'user binary'), user_data[0])
-            self.assertEqual((2, 'user string'), user_data[1])
-            self.assertEqual((3, {'user': 'json'}), user_data[2])
+    def _utc_gen(self, signal_id):
+        signal_id = 3
+        data = []
+        with Writer(self._path) as w:
+            fs = 1000000
+            w.source_def(source_id=1, name='name', vendor='vendor', model='model',
+                         version='version', serial_number='serial_number')
+            w.signal_def(signal_id=signal_id, source_id=1, sample_rate=fs, name='current', units='A')
+            SECOND = 2 ** 30
+            w.fsr_f32(3, 0, np.array([1, 2, 3, 4], dtype=np.float32))
+            for entry in range(100):
+                sample_id = entry * fs
+                timestamp = entry * SECOND
+                data.append([sample_id, timestamp])
+                w.utc(signal_id, entry * fs, entry * SECOND)
+        return np.array(data, dtype=np.int64)
+
+    def test_utc(self):
+        signal_id = 3
+        expected = self._utc_gen(signal_id)
+        with Reader(self._path) as r:
+            r.utc(signal_id, 0, self._on_utc)
+        np.testing.assert_equal(expected, self.utc)
+
+    def test_utc_seek(self):
+        signal_id = 3
+        expected = self._utc_gen(signal_id)
+        expected = expected[len(expected) // 2:, :]
+        with Reader(self._path) as r:
+            r.utc(signal_id, expected[0, 0], self._on_utc)
+        np.testing.assert_equal(expected, self.utc)
 
     def test_log(self):
         log = logging.getLogger('pyjls.c')

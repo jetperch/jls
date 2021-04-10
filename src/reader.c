@@ -904,7 +904,7 @@ static int32_t fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
     }
     int64_t chunk_sample_id = summary->header.timestamp;
     float * src = summary->data;
-    float * src_end = &src[summary->header.entry_count * JLS_SUMMARY_FSR_COUNT * sizeof(float)];
+    float * src_end = &src[summary->header.entry_count * JLS_SUMMARY_FSR_COUNT];
     int64_t entry_offset = ((start_sample_id - chunk_sample_id + step_size - 1) / step_size);
     int64_t entry_sample_id = entry_offset * step_size + chunk_sample_id;
 
@@ -936,7 +936,7 @@ static int32_t fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
                     return JLS_ERROR_PARAMETER_INVALID;
                 }
                 src = summary->data;
-                src_end = &src[summary->header.entry_count * JLS_SUMMARY_FSR_COUNT * sizeof(float)];
+                src_end = &src[summary->header.entry_count * JLS_SUMMARY_FSR_COUNT];
             } else {
                 if ((incr_remaining <= step_size) && (data_length == 1)) {
                     // not a problem, will fetch from lower statistics
@@ -1100,7 +1100,12 @@ int32_t jls_rd_annotations(struct jls_rd_s * self, uint16_t signal_id, int64_t t
         return JLS_ERROR_NOT_FOUND;
     }
 
-    ROE(ts_seek(self, signal_id, 0, JLS_TRACK_TYPE_ANNOTATION, timestamp));
+    int32_t rv = ts_seek(self, signal_id, 0, JLS_TRACK_TYPE_ANNOTATION, timestamp);
+    if (rv == JLS_ERROR_NOT_FOUND) {
+        return 0;  // no annotations, and that's just fine
+    } else if (rv) {
+        return rv;
+    }
 
     // iterate
     int64_t pos = jls_raw_chunk_tell(self->raw);
@@ -1162,7 +1167,12 @@ JLS_API int32_t jls_rd_utc(struct jls_rd_s * self, uint16_t signal_id, int64_t s
         return JLS_ERROR_NOT_FOUND;
     }
 
-    ROE(ts_seek(self, signal_id, 1, JLS_TRACK_TYPE_UTC, sample_id));
+    int32_t rv = ts_seek(self, signal_id, 1, JLS_TRACK_TYPE_UTC, sample_id);
+    if (rv == JLS_ERROR_NOT_FOUND) {
+        return 0;  // no utc entries, and that's just fine
+    } else if (rv) {
+        return rv;
+    }
 
     // iterate
     struct jls_chunk_header_s hdr;

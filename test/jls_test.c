@@ -27,6 +27,7 @@
 
 
 #define SKIP_BASIC 0
+#define SKIP_REALWORLD 1
 
 const char * filename = "jls_test_tmp.jls";
 const uint8_t USER_DATA_1[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
@@ -542,6 +543,35 @@ static void test_fsr_f32_statistics(void **state) {
     remove(filename);
 }
 
+#if !SKIP_REALWORLD
+static void test_fsr_f32_statistics_real(void **state) {
+    (void) state;
+    struct jls_rd_s * rd = NULL;
+    assert_int_equal(0, jls_rd_open(&rd, "C:\\repos\\Jetperch\\out.jls"));
+
+    float data[596][JLS_SUMMARY_FSR_COUNT];
+    assert_int_equal(0, jls_rd_fsr_f32_statistics(rd, 1, 393783914LL, 96563, &data[0][0], 596));
+    jls_rd_close(rd);
+}
+
+static int32_t on_annotation_real(void * user_data, const struct jls_annotation_s * annotation) {
+    int64_t * count = (int64_t *) user_data;
+    *count += 1;
+    (void) annotation;
+    return 0;
+}
+
+static void test_fsr_annotation_real(void **state) {
+    (void) state;
+    int64_t count = 0;
+    struct jls_rd_s * rd = NULL;
+    assert_int_equal(0, jls_rd_open(&rd, "C:\\repos\\Jetperch\\out.anno.jls"));
+    assert_int_equal(0, jls_rd_annotations(rd, 1, 0, on_annotation_real, &count));
+    jls_rd_close(rd);
+}
+#endif
+
+
 int main(void) {
     const struct CMUnitTest tests[] = {
 #if !SKIP_BASIC
@@ -561,6 +591,11 @@ int main(void) {
 #endif
             cmocka_unit_test(test_fsr_f32),
             cmocka_unit_test(test_fsr_f32_statistics),
+
+#if !SKIP_REALWORLD
+            cmocka_unit_test(test_fsr_f32_statistics_real),
+            cmocka_unit_test(test_fsr_annotation_real)
+#endif
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);

@@ -317,7 +317,7 @@ int32_t jls_twr_annotation(struct jls_twr_s * self, uint16_t signal_id, int64_t 
 
 JLS_API int32_t jls_twr_utc(struct jls_twr_s * self, uint16_t signal_id, int64_t sample_id, int64_t utc) {
     struct msg_header_s hdr = {
-            .msg_type = MSG_ANNOTATION,
+            .msg_type = MSG_UTC,
             .h = {
                     .utc = {
                             .signal_id = signal_id,

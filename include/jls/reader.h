@@ -193,7 +193,6 @@ typedef int32_t (*jls_rd_user_data_cbk_fn)(void * user_data,
  */
 JLS_API int32_t jls_rd_user_data(struct jls_rd_s * self, jls_rd_user_data_cbk_fn cbk_fn, void * cbk_user_data);
 
-
 /**
  * @brief The function called for each UTC entry.
  *
