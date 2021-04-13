@@ -28,7 +28,6 @@ from collections.abc import Mapping
 import json
 import logging
 import numpy as np
-import dateutil.parser
 import time
 cimport numpy as np
 from . cimport c_jls
@@ -41,7 +40,8 @@ __all__ = ['DataType', 'AnnotationType', 'SignalType', 'Writer', 'Reader',
 
 _log_c_name = 'pyjls.c'
 _log_c = logging.getLogger(_log_c_name)
-_UTC_OFFSET = dateutil.parser.parse('2018-01-01T00:00:00Z').timestamp()   # = 1514764800 seconds
+# _UTC_OFFSET = dateutil.parser.parse('2018-01-01T00:00:00Z').timestamp()
+_UTC_OFFSET = 1514764800  # seconds
 DEF _JLS_SIGNAL_COUNT = 256  # From jls/format.h
 
 
