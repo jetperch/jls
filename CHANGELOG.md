@@ -4,9 +4,21 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.3.1
+
+2021 Apr 13
+
+*   Fixed y annotation argument order.
+*   Added horizontal marker annotation.
+*   Fixed Python API to automatically convert to/from UTC python timestamps.
+*   Fixed reader seek when contains multiple annotations at same timestamp.
+
+
 ## 0.3.0
 
 2021 Apr 8
+
+Yanked this release, use 0.3.1
 
 *   NOT BACKWARDS COMPATIBLE with 0.2.6 and earlier.
 *   Modified annotation to contain optional y-axis position.  API change.

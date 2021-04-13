@@ -30,7 +30,8 @@ cdef extern from "jls/format.h":
     enum jls_annotation_type_e:
         JLS_ANNOTATION_TYPE_USER = 0
         JLS_ANNOTATION_TYPE_TEXT = 1
-        JLS_ANNOTATION_TYPE_MARKER = 2
+        JLS_ANNOTATION_TYPE_VERTICAL_MARKER = 2
+        JLS_ANNOTATION_TYPE_HORIZONTAL_MARKER = 3
 
     struct jls_source_def_s:
         uint16_t source_id
@@ -103,10 +104,10 @@ cdef extern from "jls/threaded_writer.h":
             int64_t sample_id, const float * data, uint32_t data_length)
     int32_t jls_twr_annotation(jls_twr_s * self, uint16_t signal_id, 
             int64_t timestamp,
-            jls_annotation_type_e annotation_type, 
+            float y,
+            jls_annotation_type_e annotation_type,
             uint8_t group_id,
             jls_storage_type_e storage_type, 
-            float y,
             const uint8_t * data, uint32_t data_size)
     int32_t jls_twr_utc(jls_twr_s * self, uint16_t signal_id, 
                         int64_t sample_id, int64_t utc)

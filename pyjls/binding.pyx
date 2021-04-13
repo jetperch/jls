@@ -28,6 +28,7 @@ from collections.abc import Mapping
 import json
 import logging
 import numpy as np
+import dateutil.parser
 import time
 cimport numpy as np
 from . cimport c_jls
@@ -40,6 +41,8 @@ __all__ = ['DataType', 'AnnotationType', 'SignalType', 'Writer', 'Reader',
 
 _log_c_name = 'pyjls.c'
 _log_c = logging.getLogger(_log_c_name)
+_UTC_OFFSET = dateutil.parser.parse('2018-01-01T00:00:00Z').timestamp()   # = 1514764800 seconds
+DEF _JLS_SIGNAL_COUNT = 256  # From jls/format.h
 
 
 def _data_type_def(basetype, size, q):
@@ -60,7 +63,8 @@ class DataType:
 class AnnotationType:
     USER = c_jls.JLS_ANNOTATION_TYPE_USER
     TEXT = c_jls.JLS_ANNOTATION_TYPE_TEXT
-    MARKER = c_jls.JLS_ANNOTATION_TYPE_MARKER
+    VMARKER = c_jls.JLS_ANNOTATION_TYPE_VERTICAL_MARKER
+    HMARKER = c_jls.JLS_ANNOTATION_TYPE_HORIZONTAL_MARKER
 
 
 _annotation_map = {
@@ -70,7 +74,11 @@ _annotation_map = {
     'txt': AnnotationType.TEXT,
     'str': AnnotationType.TEXT,
     'string': AnnotationType.TEXT,
-    'marker': AnnotationType.MARKER,
+    'marker': AnnotationType.VMARKER,
+    'vertical_marker': AnnotationType.VMARKER,
+    'vmarker': AnnotationType.VMARKER,
+    'horizontal_marker': AnnotationType.HMARKER,
+    'hmarker': AnnotationType.HMARKER,
 }
 
 _log_level_map = {
@@ -148,11 +156,23 @@ cdef _storage_unpack(uint8_t storage_type, const uint8_t * data, uint32_t data_s
         return json.loads(str[:data_size - 1].decode('utf-8'))
 
 
+def _utc_to_jls(utc):
+    """Convert from python UTC timestamp to jls timestamp."""
+    return int((utc - _UTC_OFFSET) * (2**30))
+
+
+def _jls_to_utc(timestamp):
+    """Convert from jls timestamp to python UTC timestamp."""
+    return (timestamp / (2**30)) + _UTC_OFFSET
+
+
 cdef class Writer:
     cdef c_jls.jls_twr_s * _wr
+    cdef c_jls.jls_signal_def_s _signals[_JLS_SIGNAL_COUNT]
 
     def __init__(self, path: str):
         cdef int32_t rc
+        self._signals[0].signal_type = c_jls.JLS_SIGNAL_TYPE_VSR
         rc = c_jls.jls_twr_open(&self._wr, path.encode('utf-8'))
         if rc:
             raise RuntimeError(f'open failed {rc}')
@@ -200,7 +220,8 @@ cdef class Writer:
                    summary_decimate_factor=None, annotation_decimate_factor=None, utc_decimate_factor=None,
                    name=None, units=None):
         cdef int32_t rc
-        cdef c_jls.jls_signal_def_s s
+        cdef c_jls.jls_signal_def_s * s
+        s = &self._signals[signal_id]
         s.signal_id = signal_id
         s.source_id = source_id
         s.signal_type = 0 if signal_type is None else int(signal_type)
@@ -216,7 +237,7 @@ cdef class Writer:
         units_b = _encode_str(units)
         s.name = name_b
         s.units = units_b
-        rc = c_jls.jls_twr_signal_def(self._wr, &s)
+        rc = c_jls.jls_twr_signal_def(self._wr, s)
         if rc:
             raise RuntimeError(f'signal_def failed {rc}')
 
@@ -249,23 +270,35 @@ cdef class Writer:
         if rc:
             raise RuntimeError(f'fsr_f32 failed {rc}')
 
-    def annotation(self, signal_id, timestamp, annotation_type, group_id, y, data):
+    def annotation(self, signal_id, timestamp, y, annotation_type, group_id, data):
         cdef int32_t rc
         if isinstance(annotation_type, str):
             annotation_type = _annotation_map[annotation_type.lower()]
         storage_type, payload, payload_length = _storage_pack(data)
         if y is None or not np.isfinite(y):
             y = NAN
-        rc = c_jls.jls_twr_annotation(self._wr, signal_id, timestamp, annotation_type,
-            group_id, storage_type, y, payload, payload_length)
+        if self._signals[signal_id].signal_type == c_jls.JLS_SIGNAL_TYPE_VSR:
+            timestamp = _utc_to_jls(timestamp)
+        rc = c_jls.jls_twr_annotation(self._wr, signal_id, timestamp, y, annotation_type,
+            group_id, storage_type, payload, payload_length)
         if rc:
             raise RuntimeError(f'annotation failed {rc}')
 
     def utc(self, signal_id, sample_id, utc):
         cdef int32_t rc
+        utc = _utc_to_jls(utc)
         rc = c_jls.jls_twr_utc(self._wr, signal_id, sample_id, utc)
         if rc:
             raise RuntimeError(f'utc failed {rc}')
+
+
+cdef class AnnotationCallback:
+    cdef uint8_t is_fsr
+    cdef object cbk_fn
+
+    def __init__(self, is_fsr, cbk_fn):
+        self.is_fsr = is_fsr
+        self.cbk_fn = cbk_fn
 
 
 cdef class Reader:
@@ -375,12 +408,14 @@ cdef class Reader:
 
         :param signal_id: The signal id.
         :param timestamp: The starting timestamp.  FSR uses sample_id.  VSR uses utc.
-        :param cbk: The function(timestamp, annotation_type, group_id, y, data)
+        :param cbk: The function(timestamp, y, annotation_type, group_id, data)
             to call for each annotation.  Return True to stop iteration over
             the annotations or False to continue iterating.
         """
         cdef int32_t rc
-        rc = c_jls.jls_rd_annotations(self._rd, signal_id, timestamp, _annotation_cbk_fn, <void *> cbk_fn)
+        is_fsr = self._signals[signal_id].signal_type == c_jls.JLS_SIGNAL_TYPE_FSR
+        user_data = AnnotationCallback(is_fsr, cbk_fn)
+        rc = c_jls.jls_rd_annotations(self._rd, signal_id, timestamp, _annotation_cbk_fn, <void *> user_data)
         if rc:
             raise RuntimeError(f'annotations failed {rc}')
 
@@ -408,13 +443,16 @@ cdef class Reader:
 
 
 cdef int32_t _annotation_cbk_fn(void * user_data, const c_jls.jls_annotation_s * annotation):
-    cbk_fn = <object> user_data
+    obj: AnnotationCallback = <object> user_data
     data = _storage_unpack(annotation[0].storage_type, annotation[0].data, annotation[0].data_size)
     y = annotation[0].y
+    timestamp = annotation[0].timestamp
+    if not obj.is_fsr:
+        timestamp = _jls_to_utc(annotation[0].timestamp)
     if not isfinite(y):
         y = None
     try:
-        rc = cbk_fn(annotation[0].timestamp, annotation[0].annotation_type, annotation[0].group_id, y, data)
+        rc = obj.cbk_fn(timestamp, y, annotation[0].annotation_type, annotation[0].group_id, data)
     except Exception:
         logging.getLogger(__name__).exception('in annotation callback')
         return 1
@@ -435,6 +473,6 @@ cdef int32_t _utc_cbk_fn(void * user_data, const c_jls.jls_utc_summary_entry_s *
     entries = np.empty((size, 2), dtype=np.int64)
     for idx in range(size):
         entries[idx, 0] = utc[idx].sample_id
-        entries[idx, 1] = utc[idx].timestamp
+        entries[idx, 1] = _jls_to_utc(utc[idx].timestamp)
     rc = cbk_fn(entries)
     return 1 if bool(rc) else 0

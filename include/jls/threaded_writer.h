@@ -55,10 +55,10 @@ JLS_API int32_t jls_twr_user_data(struct jls_twr_s * self, uint16_t chunk_meta,
 JLS_API int32_t jls_twr_fsr_f32(struct jls_twr_s * self, uint16_t signal_id,
         int64_t sample_id, const float * data, uint32_t data_length);
 JLS_API int32_t jls_twr_annotation(struct jls_twr_s * self, uint16_t signal_id, int64_t timestamp,
+        float y,
         enum jls_annotation_type_e annotation_type,
         uint8_t group_id,
         enum jls_storage_type_e storage_type,
-        float y,
         const uint8_t * data, uint32_t data_size);
 JLS_API int32_t jls_twr_utc(struct jls_twr_s * self, uint16_t signal_id, int64_t sample_id, int64_t utc);
 

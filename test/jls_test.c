@@ -154,16 +154,16 @@ static int32_t on_annotation(void * user_data, const struct jls_annotation_s * a
     return 0;
 }
 
-#define expect_annotation(timestamp_, annotation_type_, group_id_, storage_type_, y_value_, data_, data_size_) \
+#define expect_annotation(timestamp_, y_value_, annotation_type_, group_id_, storage_type_, data_, data_size_) \
     expect_value(on_annotation, timestamp, timestamp_);                                   \
-    expect_value(on_annotation, annotation_type, annotation_type_);                       \
-    expect_value(on_annotation, group_id, group_id_);                                     \
-    expect_value(on_annotation, storage_type, storage_type_);                             \
     if (isfinite(y_value_)) {                                                             \
         expect_value(on_annotation, y, y_value_);                                         \
     } else {                                                                              \
         expect_value(on_annotation, y_nan, 1);                                            \
     }                                                                                     \
+    expect_value(on_annotation, annotation_type, annotation_type_);                       \
+    expect_value(on_annotation, group_id, group_id_);                                     \
+    expect_value(on_annotation, storage_type, storage_type_);                             \
     expect_value(on_annotation, data_size, data_size_);                                   \
     expect_memory(on_annotation, data, data_, data_size_)
 
@@ -173,53 +173,42 @@ static void test_annotation(void **state) {
     struct jls_wr_s * wr = NULL;
     struct jls_rd_s * rd = NULL;
     assert_int_equal(0, jls_wr_open(&wr, filename));
-    assert_int_equal(0, jls_wr_annotation(wr, 0, now + 0 * JLS_TIME_MILLISECOND,
+    assert_int_equal(0, jls_wr_annotation(wr, 0, now + 0 * JLS_TIME_MILLISECOND, NAN,
                                           JLS_ANNOTATION_TYPE_TEXT, 0, JLS_STORAGE_TYPE_STRING,
-                                          NAN,
                                           (const uint8_t *) STRING_1, 0));
-    assert_int_equal(0, jls_wr_annotation(wr, 0, now + 1 * JLS_TIME_MILLISECOND,
-                                          JLS_ANNOTATION_TYPE_MARKER, 1, JLS_STORAGE_TYPE_STRING,
-                                          1.0f,
+    assert_int_equal(0, jls_wr_annotation(wr, 0, now + 1 * JLS_TIME_MILLISECOND, 1.0f,
+                                          JLS_ANNOTATION_TYPE_VERTICAL_MARKER, 1, JLS_STORAGE_TYPE_STRING,
                                           (const uint8_t *) "1", 0));
-    assert_int_equal(0, jls_wr_annotation(wr, 0, now + 2 * JLS_TIME_MILLISECOND,
+    assert_int_equal(0, jls_wr_annotation(wr, 0, now + 2 * JLS_TIME_MILLISECOND, 2.0f,
                                           JLS_ANNOTATION_TYPE_USER, 2, JLS_STORAGE_TYPE_BINARY,
-                                          2.0f,
                                           USER_DATA_1, sizeof(USER_DATA_1)));
-    assert_int_equal(0, jls_wr_annotation(wr, 0, now + 3 * JLS_TIME_MILLISECOND,
+    assert_int_equal(0, jls_wr_annotation(wr, 0, now + 3 * JLS_TIME_MILLISECOND, 3.0f,
                                           JLS_ANNOTATION_TYPE_USER, 3, JLS_STORAGE_TYPE_STRING,
-                                          3.0f,
                                           (const uint8_t *) STRING_1, 0));
-    assert_int_equal(0, jls_wr_annotation(wr, 0, now + 4 * JLS_TIME_MILLISECOND,
+    assert_int_equal(0, jls_wr_annotation(wr, 0, now + 4 * JLS_TIME_MILLISECOND, 4.0f,
                                           JLS_ANNOTATION_TYPE_USER, 4, JLS_STORAGE_TYPE_JSON,
-                                          4.0f,
                                           (const uint8_t *) JSON_1, 0));
     assert_int_equal(0, jls_wr_close(wr));
 
     assert_int_equal(0, jls_rd_open(&rd, filename));
 
-    expect_annotation(now + 0 * JLS_TIME_MILLISECOND,
+    expect_annotation(now + 0 * JLS_TIME_MILLISECOND, NAN,
                       JLS_ANNOTATION_TYPE_TEXT, 0, JLS_STORAGE_TYPE_STRING,
-                      NAN,
                       (const uint8_t *) STRING_1, sizeof(STRING_1));
-    expect_annotation(now + 1 * JLS_TIME_MILLISECOND,
-                      JLS_ANNOTATION_TYPE_MARKER, 1, JLS_STORAGE_TYPE_STRING,
-                      1.0f,
+    expect_annotation(now + 1 * JLS_TIME_MILLISECOND, 1.0f,
+                      JLS_ANNOTATION_TYPE_VERTICAL_MARKER, 1, JLS_STORAGE_TYPE_STRING,
                       (const uint8_t *) "1", 2);
-    expect_annotation(now + 2 * JLS_TIME_MILLISECOND,
+    expect_annotation(now + 2 * JLS_TIME_MILLISECOND, 2.0f,
                       JLS_ANNOTATION_TYPE_USER, 2, JLS_STORAGE_TYPE_BINARY,
-                      2.0f,
                       USER_DATA_1, sizeof(USER_DATA_1));
-    expect_annotation(now + 3 * JLS_TIME_MILLISECOND,
+    expect_annotation(now + 3 * JLS_TIME_MILLISECOND, 3.0f,
                       JLS_ANNOTATION_TYPE_USER, 3, JLS_STORAGE_TYPE_STRING,
-                      3.0f,
                       (const uint8_t *) STRING_1, sizeof(STRING_1));
-    expect_annotation(now + 4 * JLS_TIME_MILLISECOND,
+    expect_annotation(now + 4 * JLS_TIME_MILLISECOND, 4.0f,
                       JLS_ANNOTATION_TYPE_USER, 4, JLS_STORAGE_TYPE_JSON,
-                      4.0f,
                       (const uint8_t *) JSON_1, sizeof(JSON_1));
     assert_int_equal(0, jls_rd_annotations(rd, 0, 0, on_annotation, NULL));
 
-    // todo test
     jls_rd_close(rd);
     remove(filename);
 }
@@ -229,26 +218,49 @@ static void test_annotation_seek(void **state) {
     struct jls_wr_s * wr = NULL;
     struct jls_rd_s * rd = NULL;
     assert_int_equal(0, jls_wr_open(&wr, filename));
-    assert_int_equal(0, jls_wr_annotation(wr, 0, 0,
+    assert_int_equal(0, jls_wr_annotation(wr, 0, 0, NAN,
                                           JLS_ANNOTATION_TYPE_TEXT, 0, JLS_STORAGE_TYPE_STRING,
-                                          NAN,
                                           (const uint8_t *) STRING_1, 0));
-    assert_int_equal(0, jls_wr_annotation(wr, 0, 1,
+    assert_int_equal(0, jls_wr_annotation(wr, 0, 1, NAN,
                                           JLS_ANNOTATION_TYPE_TEXT, 0, JLS_STORAGE_TYPE_STRING,
-                                          NAN,
                                           (const uint8_t *) STRING_1, 0));
-    assert_int_equal(0, jls_wr_annotation(wr, 0, JLS_TIME_SECOND,
+    assert_int_equal(0, jls_wr_annotation(wr, 0, JLS_TIME_SECOND, NAN,
                                           JLS_ANNOTATION_TYPE_TEXT, 0, JLS_STORAGE_TYPE_STRING,
-                                          NAN,
                                           (const uint8_t *) STRING_1, 0));
     assert_int_equal(0, jls_wr_close(wr));
 
     assert_int_equal(0, jls_rd_open(&rd, filename));
-    expect_annotation(JLS_TIME_SECOND,
+    expect_annotation(JLS_TIME_SECOND, NAN,
                       JLS_ANNOTATION_TYPE_TEXT, 0, JLS_STORAGE_TYPE_STRING,
-                      NAN,
                       (const uint8_t *) STRING_1, sizeof(STRING_1));
     assert_int_equal(0, jls_rd_annotations(rd, 0, JLS_TIME_SECOND, on_annotation, NULL));
+
+    jls_rd_close(rd);
+    remove(filename);
+}
+
+static void test_hmarker(void **state) {
+    (void) state;
+    struct jls_wr_s * wr = NULL;
+    struct jls_rd_s * rd = NULL;
+    assert_int_equal(0, jls_wr_open(&wr, filename));
+    assert_int_equal(0, jls_wr_annotation(wr, 0, 0, 0.0f,
+                                          JLS_ANNOTATION_TYPE_HORIZONTAL_MARKER, 0, JLS_STORAGE_TYPE_STRING,
+                                          (const uint8_t *) "1a", 3));
+    assert_int_equal(0, jls_wr_annotation(wr, 0, 0, 1.0f,
+                                          JLS_ANNOTATION_TYPE_HORIZONTAL_MARKER, 1, JLS_STORAGE_TYPE_STRING,
+                                          (const uint8_t *) "1b", 3));
+    assert_int_equal(0, jls_wr_close(wr));
+
+    assert_int_equal(0, jls_rd_open(&rd, filename));
+
+    expect_annotation(0, 0.0f,
+                      JLS_ANNOTATION_TYPE_HORIZONTAL_MARKER, 0, JLS_STORAGE_TYPE_STRING,
+                      (const uint8_t *) "1a", 3);
+    expect_annotation(0, 1.0f,
+                      JLS_ANNOTATION_TYPE_HORIZONTAL_MARKER, 1, JLS_STORAGE_TYPE_STRING,
+                      (const uint8_t *) "1b", 3);
+    assert_int_equal(0, jls_rd_annotations(rd, 0, 0, on_annotation, NULL));
 
     jls_rd_close(rd);
     remove(filename);
@@ -579,6 +591,7 @@ int main(void) {
             cmocka_unit_test(test_wr_source_duplicate),
             cmocka_unit_test(test_annotation),
             cmocka_unit_test(test_annotation_seek),
+            cmocka_unit_test(test_hmarker),
             cmocka_unit_test(test_user_data),
             cmocka_unit_test(test_utc),
             cmocka_unit_test(test_utc_seek_first_block),

@@ -677,9 +677,20 @@ static int32_t ts_seek(struct jls_rd_s * self, uint16_t signal_id, uint8_t level
             return JLS_ERROR_PARAMETER_INVALID;
         }
 
-        uint32_t idx = r->header.entry_count - 1;
-        for (; ((idx > 0) && (r->entries[idx].timestamp > timestamp)); --idx) {
-            // iterate
+        int32_t idx = 0;
+        for (; ; ++idx) {
+            if (idx >= r->header.entry_count) {
+                idx = r->header.entry_count - 1;
+                break;
+            } else if (r->entries[idx].timestamp > timestamp) {
+                --idx;
+                break;
+            } else if (r->entries[idx].timestamp == timestamp) {
+                break;
+            }
+        }
+        if (idx < 0) {
+            idx = 0;
         }
         offset = r->entries[idx].offset;
     }

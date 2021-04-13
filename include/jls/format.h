@@ -189,7 +189,18 @@ enum jls_annotation_type_e {
      *   a marker pair (dual markers).
      * The jls_storage_type_e must be STRING.
      */
-    JLS_ANNOTATION_TYPE_MARKER = 2,
+    JLS_ANNOTATION_TYPE_VERTICAL_MARKER = 2,
+
+    /**
+     * @brief A horizontal marker at a given y-axis value.
+     *
+     * Marker names can be arbitrary, but the convention is:
+     * - Number strings, like "1", represent a single marker.
+     * - Alpha + number string, like "A1" and "A2", represent
+     *   a marker pair (dual markers).
+     * The jls_storage_type_e must be STRING.
+     */
+    JLS_ANNOTATION_TYPE_HORIZONTAL_MARKER = 3,
 
     /// consider sample_loss: start, stop
 };

@@ -109,9 +109,10 @@ class TestBinding(unittest.TestCase):
 
     def _annotation_gen(self, signal_id):
         annotations = [
-            (10, 0, 20, None, b'annotation binary'),
-            (11, 1, 21, None, 'annotation str'),
-            (12, 2, 22, 1.0, '1'),
+            (0, 2.0,  3, 23, '2'),
+            (10, None, 0, 20, b'annotation binary'),
+            (11, None, 1, 21, 'annotation str'),
+            (12, 1.0,  2, 22, '1'),
         ]
         with Writer(self._path) as w:
             fs = 1000000
@@ -133,8 +134,8 @@ class TestBinding(unittest.TestCase):
         signal_id = 3
         expected = self._annotation_gen(signal_id)
         with Reader(self._path) as r:
-            r.annotations(signal_id, expected[1][0], self._on_annotations)
-        self.assertEqual(expected[1:], self.annotations)
+            r.annotations(signal_id, expected[2][0], self._on_annotations)
+        self.assertEqual(expected[2:], self.annotations)
 
     def _utc_gen(self, signal_id):
         signal_id = 3
@@ -144,13 +145,12 @@ class TestBinding(unittest.TestCase):
             w.source_def(source_id=1, name='name', vendor='vendor', model='model',
                          version='version', serial_number='serial_number')
             w.signal_def(signal_id=signal_id, source_id=1, sample_rate=fs, name='current', units='A')
-            SECOND = 2 ** 30
             w.fsr_f32(3, 0, np.array([1, 2, 3, 4], dtype=np.float32))
             for entry in range(100):
                 sample_id = entry * fs
-                timestamp = entry * SECOND
+                timestamp = entry  # in seconds
                 data.append([sample_id, timestamp])
-                w.utc(signal_id, entry * fs, entry * SECOND)
+                w.utc(signal_id, entry * fs, entry)
         return np.array(data, dtype=np.int64)
 
     def test_utc(self):
