@@ -12,6 +12,7 @@ This file contains the list of changes made to the JLS project.
 *   Added example/jls_read.c.
 *   Connected example/generate.py arguments to work correctly.
 *   Fixed documentation for jls_rd_fsr_f32_statistics().
+*   Added GitHub action.
 
 
 ## 0.3.1
