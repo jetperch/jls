@@ -103,7 +103,7 @@ JLS_API int32_t jls_rd_fsr_length(struct jls_rd_s * self, uint16_t signal_id, in
  * @brief Read float32 sample data.
  *
  * @param self The reader instance.
- * @param signal_id The signal
+ * @param signal_id The signal id.
  * @param start_sample_id The starting sample id to read.
  * @param data[out] The samples read.
  * @param data_length The number of samples to read.  data is
@@ -121,10 +121,13 @@ JLS_API int32_t jls_rd_fsr_f32(struct jls_rd_s * self, uint16_t signal_id, int64
  * @param start_sample_id The starting sample id to read.
  * @param increment The number of samples that form a single output summary.
  * @param data[out] The statistics information, in the shape of
- *      data[data_length][4].  The 4 elements are 0:mean, 1:min, 2:max,
- *      3:standard deviation.
+ *      data[data_length][JLS_SUMMARY_FSR_COUNT].  The elements are
+ *      mean, standard_deviation, min, max.
+ *      Use JLS_SUMMARY_FSR_MEAN, JLS_SUMMARY_FSR_STD,
+ *      JLS_SUMMARY_FSR_MIN, and JLS_SUMMARY_FSR_MAX to index the values.
  * @param data_length The number of statistics points to populate.  data
- *      is at least 4 * data_length elements (16 * data_length bytes).
+ *      is at least JLS_SUMMARY_FSR_COUNT * data_length elements, each
+ *      of float32 type (4 bytes).
  *      This argument allows efficient computation over many consecutive
  *      windows, as is common for displaying waveforms.
  * @return 0 or error code.

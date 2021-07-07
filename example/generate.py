@@ -31,15 +31,44 @@ def parser():
     p = argparse.ArgumentParser(description='JLS generator.')
     p.add_argument('filename',
                    help='The output JLS file path')
-    p.add_argument('--name', help='The signal name')
-    p.add_argument('--units', help='The signal value units (SI)')
-    p.add_argument('--sample_rate', help='The sample rate in Hz.')
+    p.add_argument('--name', default='current', help='The signal name')
+    p.add_argument('--units', default='A', help='The signal value units (SI)')
+    p.add_argument('--sample_rate', type=int, default=1000000, help='The sample rate in Hz.')
     p.add_argument('--length', type=int, default=1000000, help='The signal length in samples.')
-    p.add_argument('--samples_per_data', help='The samples per data chunk.')
-    p.add_argument('--sample_decimate_factor', help='The samples per summary entry.')
-    p.add_argument('--entries_per_summary', help='The entries per summary chunk.')
-    p.add_argument('--summary_decimate_factor', help='The summaries per summary entry.')
+    p.add_argument('--samples_per_data', type=int, default=100000, help='The samples per data chunk.')
+    p.add_argument('--sample_decimate_factor', type=int, default=1000, help='The samples per summary entry.')
+    p.add_argument('--entries_per_summary', type=int, default=20000, help='The entries per summary chunk.')
+    p.add_argument('--summary_decimate_factor', type=int, default=100, help='The summaries per summary entry.')
+    p.add_argument('--add',
+                   action='append',
+                   help='The waveform definition to add, which is one of:'
+                        'sine,{amplitude},{frequency} '
+                        'ramp'
+                   )
     return p
+
+
+def _waveform_factory(d):
+    if d is None or not len(d):
+        return None
+    parts = d.split(',')
+    name = parts[0].lower()
+    if name == 'ramp':
+        if len(parts) == 1:
+            return lambda x: x
+        elif len(parts) == 2:
+            amplitude = float(parts[1])
+            return lambda x: x * amplitude
+        else:
+            raise ValueError('Invalid ramp specification')
+    elif name in ['sin', 'sine', 'sinusoid', 'cos', 'cosine', 'freq', 'frequency', 'tone']:
+        if len(parts) != 3:
+            raise RuntimeError(f'Must specify {name},amplitude,frequency')
+        amplitude = float(parts[1])
+        freq = float(parts[2])
+        return lambda x: amplitude * np.sin((2.0 * np.pi * freq) * x)
+    else:
+        raise RuntimeError(f'Unknown waveform: {name}')
 
 
 def run():
@@ -59,15 +88,15 @@ def run():
         source_id=1,
         signal_type=SignalType.FSR,
         data_type=DataType.F32,
-        sample_rate=1000000,
-        samples_per_data=100000,
-        sample_decimate_factor=1000,
-        entries_per_summary=20000,
-        summary_decimate_factor=100,
-        annotation_decimate_factor=100,
-        utc_decimate_factor=100,
-        name='current',
-        units='A',
+        sample_rate=args.sample_rate,
+        samples_per_data=args.samples_per_data,
+        sample_decimate_factor=args.sample_decimate_factor,
+        entries_per_summary=args.entries_per_summary,
+        summary_decimate_factor=args.summary_decimate_factor,
+        annotation_decimate_factor=args.summary_decimate_factor,
+        utc_decimate_factor=args.summary_decimate_factor,
+        name=args.name,
+        units=args.units,
     )
 
     dargs = vars(args)
@@ -78,13 +107,17 @@ def run():
                 v = int(v)
             setattr(signal, key, v)
 
-    # generate waveform, 1 second chunk
-    x = np.arange(signal.sample_rate)
-    y = np.sin((2.0 * np.pi * 1000 / signal.sample_rate) * x)
-    y = y.astype(dtype=np.float32)
+    waveforms = []
+    for waveform_def in args.add:
+        fn = _waveform_factory(waveform_def)
+        if fn is not None:
+            waveforms.append(fn)
+
+    # generate waveform, 1 second chunk at a time
+    x = np.arange(signal.sample_rate, dtype=np.float64) * 1 / signal.sample_rate
 
     # Write to file
-    y_len = len(y)
+    y_len = len(x)
     sample_id = 0
     with Writer(args.filename) as wr:
         wr.source_def_from_struct(source)
@@ -92,10 +125,14 @@ def run():
         wr.user_data(0, 'string user data at start')
         length = args.length
         while length > 0:  # write data chunks
+            y = np.zeros(y_len, dtype=np.float64)
+            for waveform in waveforms:
+                y += waveform(x)
             iter_len = y_len if y_len < length else length
-            wr.fsr_f32(1, sample_id, y[:iter_len])
+            wr.fsr_f32(1, sample_id, y[:iter_len].astype(dtype=np.float32))
             sample_id += iter_len
             length -= iter_len
+            x += 1.0  # increment
         wr.user_data(42, b'binary data')
         wr.user_data(43, {'my': 'data', 'json': [1, 2, 3]})
 

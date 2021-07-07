@@ -550,6 +550,10 @@ static void test_fsr_f32_statistics(void **state) {
     assert_int_equal(0, jls_rd_fsr_f32_statistics(rd, 5, 1999, 10002, data[0], 1));
     compare_stats(data[0], signal + 1999, 10002);
 
+    // Using summaries needing raw samples before and after
+    assert_int_equal(0, jls_rd_fsr_f32_statistics(rd, 5, 750, 10000, data[0], 1));
+    compare_stats(data[0], signal + 750, 10000);
+
     jls_rd_close(rd);
     free(signal);
     remove(filename);

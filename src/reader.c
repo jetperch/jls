@@ -672,15 +672,15 @@ static int32_t ts_seek(struct jls_rd_s * self, uint16_t signal_id, uint8_t level
             JLS_LOGE("invalid payload length");
             return JLS_ERROR_PARAMETER_INVALID;
         }
-        if (r->header.entry_count == 0) {
+        if ((r->header.entry_count == 0) || (r->header.entry_count & 0x80000000)) {
             JLS_LOGE("invalid entry count");
             return JLS_ERROR_PARAMETER_INVALID;
         }
 
         int32_t idx = 0;
         for (; ; ++idx) {
-            if (idx >= r->header.entry_count) {
-                idx = r->header.entry_count - 1;
+            if (idx >= (int32_t) r->header.entry_count) {
+                idx = ((int32_t) r->header.entry_count) - 1;
                 break;
             } else if (r->entries[idx].timestamp > timestamp) {
                 --idx;
@@ -935,6 +935,7 @@ static int32_t fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
         incr_remaining -= incr;
         start_sample_id += incr;
     }
+    src += entry_offset * JLS_SUMMARY_FSR_COUNT;
 
     while (data_length) {
         if (src >= src_end) {

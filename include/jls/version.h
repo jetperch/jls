@@ -40,7 +40,7 @@ JLS_CPP_GUARD_START
 // Use version_update.py to update.
 #define JLS_VERSION_MAJOR 0
 #define JLS_VERSION_MINOR 3
-#define JLS_VERSION_PATCH 1
+#define JLS_VERSION_PATCH 2
 
 /**
  * \brief Macro to encode version to uint32_t.

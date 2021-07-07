@@ -4,6 +4,16 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.3.2
+
+2021 Jul 7
+
+*   Fixed incorrect statistics computation when using summaries.
+*   Added example/jls_read.c.
+*   Connected example/generate.py arguments to work correctly.
+*   Fixed documentation for jls_rd_fsr_f32_statistics().
+
+
 ## 0.3.1
 
 2021 Apr 13

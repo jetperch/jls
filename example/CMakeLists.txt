@@ -27,4 +27,4 @@ function (ADD_EXAMPLE _testName)
 endfunction (ADD_EXAMPLE)
 
 ADD_EXAMPLE(performance)
-
+ADD_EXAMPLE(jls_read)
