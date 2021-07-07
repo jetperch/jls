@@ -492,6 +492,12 @@ static void test_fsr_f32(void **state) {
     assert_int_equal(0, jls_rd_fsr_f32(rd, 5, sample_count - 5, data, 5));
     assert_memory_equal(signal + sample_count - 5, data, 5 * sizeof(float));
 
+    // get out of range samples
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_fsr_f32(rd, 5, -25, data, 10));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_fsr_f32(rd, 5, -5, data, 10));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_fsr_f32(rd, 5, sample_count - 5, data, 10));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_fsr_f32(rd, 5, sample_count + 5, data, 10));
+
     jls_rd_close(rd);
     free(signal);
     remove(filename);
@@ -553,6 +559,12 @@ static void test_fsr_f32_statistics(void **state) {
     // Using summaries needing raw samples before and after
     assert_int_equal(0, jls_rd_fsr_f32_statistics(rd, 5, 750, 10000, data[0], 1));
     compare_stats(data[0], signal + 750, 10000);
+
+    // get out of range statistics
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_fsr_f32_statistics(rd, 5, -25, 10, data[0], 1));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_fsr_f32_statistics(rd, 5, -5, 10, data[0], 1));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_fsr_f32_statistics(rd, 5, sample_count - 5, 10, data[0], 1));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_fsr_f32_statistics(rd, 5, sample_count + 5, 10, data[0], 1));
 
     jls_rd_close(rd);
     free(signal);

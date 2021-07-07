@@ -4,6 +4,14 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.3.3
+
+2021 Jul 7
+
+*   Added reader sample_id bounds checks to FSR functions.
+*   Cached jls_rd_fsr_length results.
+
+
 ## 0.3.2
 
 2021 Jul 7
