@@ -16,4 +16,8 @@ from .binding import DataType, AnnotationType, SignalType, Writer, Reader, Summa
 from .structs import SourceDef, SignalDef
 from .version import *
 
-__all__ = [Writer, Reader, __version__, DataType, AnnotationType, SignalType, SourceDef, SignalDef, SummaryFSR]
+__all__ = ['Writer', 'Reader', 'DataType', 'AnnotationType',
+           'SignalType', 'SourceDef', 'SignalDef', 'SummaryFSR',
+           '__version__', '__title__', '__description__', '__url__',
+           '__author__', '__author_email__', '__license__',
+           '__copyright__']

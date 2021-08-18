@@ -4,6 +4,13 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.3.4
+
+2021 Aug 18 [in progress]
+
+* Added all version fields to pyjls module.
+
+
 ## 0.3.3
 
 2021 Jul 7
