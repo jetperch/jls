@@ -42,19 +42,19 @@ const char JSON_1[] = "{\"hello\": \"world\"}";
 const struct jls_source_def_s SOURCE_1 = {
         .source_id = 1,
         .name = "source 1",
-        .vendor = "vendor",
-        .model = "model",
-        .version = "version",
-        .serial_number = "serial_number",
+        .vendor = "vendor 1",
+        .model = "model 1",
+        .version = "version 1",
+        .serial_number = "serial_number 1",
 };
 
 const struct jls_source_def_s SOURCE_3 = {
         .source_id = 3,
         .name = "source 3",
-        .vendor = "vendor",
-        .model = "model",
-        .version = "version",
-        .serial_number = "serial_number",
+        .vendor = "vendor 3",
+        .model = "model 3",
+        .version = "version 3",
+        .serial_number = "serial_number 3",
 };
 
 const struct jls_signal_def_s SIGNAL_5 = {
@@ -114,6 +114,40 @@ static void test_source(void **state) {
     assert_string_equal(SOURCE_1.version, sources[1].version);
     assert_string_equal(SOURCE_1.serial_number, sources[1].serial_number);
     assert_string_equal(SOURCE_3.name, sources[2].name);
+    jls_rd_close(rd);
+    remove(filename);
+}
+
+static void test_source_with_null_and_empty_str(void **state) {
+    (void) state;
+    struct jls_wr_s * wr = NULL;
+    struct jls_rd_s * rd = NULL;
+    const struct jls_source_def_s SOURCE = {
+            .source_id = 1,
+            .name = "s",
+            .vendor = 0,
+            .model = "",
+            .version = 0,
+            .serial_number = "serial_number",
+    };
+
+    assert_int_equal(0, jls_wr_open(&wr, filename));
+    assert_int_equal(0, jls_wr_source_def(wr, &SOURCE));
+    assert_int_equal(0, jls_wr_close(wr));
+
+    assert_int_equal(0, jls_rd_open(&rd, filename));
+
+    struct jls_source_def_s * sources = NULL;
+    uint16_t count = 0;
+    assert_int_equal(0, jls_rd_sources(rd, &sources, &count));
+    assert_int_equal(2, count);
+    assert_int_equal(0, sources[0].source_id);
+    assert_int_equal(1, sources[1].source_id);
+    assert_string_equal(SOURCE.name, sources[1].name);
+    assert_string_equal("", sources[1].vendor);
+    assert_string_equal("", sources[1].model);
+    assert_string_equal("", sources[1].version);
+    assert_string_equal(SOURCE.serial_number, sources[1].serial_number);
     jls_rd_close(rd);
     remove(filename);
 }
@@ -604,6 +638,7 @@ int main(void) {
     const struct CMUnitTest tests[] = {
 #if !SKIP_BASIC
             cmocka_unit_test(test_source),
+            cmocka_unit_test(test_source_with_null_and_empty_str),
             cmocka_unit_test(test_wr_source_duplicate),
             cmocka_unit_test(test_annotation),
             cmocka_unit_test(test_annotation_seek),

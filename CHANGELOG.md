@@ -6,9 +6,10 @@ This file contains the list of changes made to the JLS project.
 
 ## 0.3.4
 
-2021 Aug 18 [in progress]
+2021 Oct 28
 
 * Added all version fields to pyjls module.
+* Fixed writer not correctly serializing null and empty strings #6.
 
 
 ## 0.3.3

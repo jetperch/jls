@@ -209,8 +209,9 @@ static int32_t buf_add_str(struct jls_wr_s * self, const char * cstr) {
     struct buf_s * buf = &self->buf;
     uint8_t * end = buf->end - 2;
     while (buf->cur < end) {
-        *buf->cur++ = *cstr++;
-        if (!*cstr) {
+        if (cstr && *cstr) {
+            *buf->cur++ = *cstr++;
+        } else {
             *buf->cur++ = 0;
             *buf->cur++ = 0x1f;
             return 0;

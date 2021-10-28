@@ -50,6 +50,20 @@ class TestBinding(unittest.TestCase):
         if os.path.isfile(self._path):
             os.remove(self._path)
 
+    def test_source_with_none_strs(self):
+        with Writer(self._path) as w:
+            w.source_def(source_id=1, name='name', vendor='vendor', model='',
+                         version=None, serial_number='serial_number')
+            w.signal_def(3, source_id=1, sample_rate=1000000, name='current', units='A')
+        with Reader(self._path) as r:
+            self.assertEqual(2, len(r.sources))
+            self.assertEqual([0, 1], sorted(r.sources.keys()))
+            s = r.sources[1]
+            self.assertEqual(1, s.source_id)
+            self.assertEqual('name', s.name)
+            self.assertEqual('', s.model)
+            self.assertEqual('', s.version)
+
     def test_fsr_f32(self):
         data = np.arange(110000, dtype=np.float32)
         with Writer(self._path) as w:

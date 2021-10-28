@@ -130,9 +130,8 @@ def jls_inject_log(level, filename, line, msg):
 
 def _encode_str(s):
     if s is None:
-        return s
-    else:
-        return s.encode('utf-8')
+        s = ''
+    return s.encode('utf-8')
 
 
 def _storage_pack(data):
