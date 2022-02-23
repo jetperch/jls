@@ -1,5 +1,5 @@
 <!--
-# Copyright 2021 Jetperch LLC
+# Copyright 2021-2022 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ simultaneous, one-dimensional signals. This repository contains:
 
 ## License
 
-This project is Copyright © 2017-2021 Jetperch LLC and licensed under the 
+This project is Copyright © 2017-2022 Jetperch LLC and licensed under the 
 permissive [Apache 2.0](LICENSE).
 
 
@@ -51,12 +51,11 @@ permissive [Apache 2.0](LICENSE).
 * Fixed sample rate signals (FSR)
   * Handles missing samples gracefully (interpolate) 🔜
   * Multiple data types including:
-    - Floating point: f32
-     - Floating point: f64 🔜 
-    - Unsigned integers in nibble (4 bit) increments 🔜 
-    - Signed integers in nibble (4 bit) increments 🔜
-    - Fixed-point, signed integers in nibble (4 bit) increments 🔜
-    - Boolean (digital) 1-bit signals 🔜
+    - Floating point: f32, f64
+    - Unsigned integers: u1, u4, u8, u16, u24, u32, u64 
+    - Signed integers: i4, i8, i16, i24, i32, i64
+    - Fixed-point, signed integers (same bit sizes as signed integers)
+    - Boolean (digital) 1-bit signals = u1
 * Variable sample rate (VSR) signals 🔜
 * Fast read performance
   * Signal Summaries
@@ -84,7 +83,9 @@ permissive [Apache 2.0](LICENSE).
   * Support level 0 DATA not written (only INDEX & SUMMARY) 🔜
 
 Items marked with 🔜 are under development and coming soon.
-As of April 2021, the JLS v2 file structure is well-defined.
+Items marked with ⏳ are planned for future release.
+
+As of Feb 2022, the JLS v2 file structure is well-defined.
 However, the datatype and compression storage formats are not 
 yet defined, and the software still needs to grow to support 
 the target feature set.
@@ -100,7 +101,7 @@ The [Saleae binary export file format v2](https://support.saleae.com/faq/technic
 is also not suitable since it buffers stores single, contiguous blocks.
 [Sigrok v2](https://sigrok.org/wiki/File_format:Sigrok/v2) is similar.
 The [Sigrok v3](https://sigrok.org/wiki/File_format:Sigrok/v3) format
-(under development as of Mar 2021) is better in that it stores sequences of
+(under development as of Feb 2022) is better in that it stores sequences of
 "packets" containing data blocks, but it still will does not allow for
 fast seek or summaries.
 

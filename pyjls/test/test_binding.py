@@ -1,4 +1,4 @@
-# Copyright 2021 Jetperch LLC
+# Copyright 2021-2022 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the 'License');
 # you may not use this file except in compliance with the License.
@@ -90,8 +90,8 @@ class TestBinding(unittest.TestCase):
             self.assertEqual(1, s.source_id)
             self.assertEqual(0, s.signal_type)
             self.assertEqual(1000000, s.sample_rate)
-            self.assertEqual(100000, s.samples_per_data)
-            self.assertEqual(100, s.sample_decimate_factor)
+            self.assertEqual(83200, s.samples_per_data)
+            self.assertEqual(104, s.sample_decimate_factor)
             self.assertEqual(20000, s.entries_per_summary)
             self.assertEqual(100, s.summary_decimate_factor)
             self.assertEqual(100, s.annotation_decimate_factor)

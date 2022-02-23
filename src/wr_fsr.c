@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 Jetperch LLC
+ * Copyright 2021-2022 Jetperch LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "jls/wf_f32.h"
+#include "jls/wr_fsr.h"
 #include "jls/cdef.h"
 #include "jls/wr_prv.h"
 #include "jls/ec.h"
@@ -26,8 +26,8 @@
 #include <string.h>
 #include <float.h>
 
-
-#define SAMPLE_DECIMATE_FACTOR_MIN     (10)
+#define SAMPLE_SIZE_BYTES_MAX           (32)  // =256 bits, must be power of 2
+#define SAMPLE_DECIMATE_FACTOR_MIN      (10)
 #define SAMPLES_PER_DATA_MIN            (SAMPLE_DECIMATE_FACTOR_MIN)
 #define ENTRIES_PER_SUMMARY_MIN         (SAMPLE_DECIMATE_FACTOR_MIN)
 #define SUMMARY_DECIMATE_FACTOR_MIN     (SAMPLE_DECIMATE_FACTOR_MIN)
@@ -44,24 +44,24 @@ struct level_s {
     struct jls_fsr_f32_summary_s * summary;
 };
 
-struct jls_wf_f32_s {
+struct jls_wr_fsr_s {
     struct jls_wr_s * wr;
-    struct jls_wf_f32_def_s def;
+    struct jls_signal_def_s def;
     uint32_t data_length;  // for data, in float32 values
     struct jls_fsr_f32_data_s * data;  // for level 0
     struct level_s * level[JLS_SUMMARY_LEVEL_COUNT];  // level 0 unused
     int64_t sample_id_offset;
 };
 
-static int32_t summaryN(struct jls_wf_f32_s * self, uint8_t level, int64_t pos);
-static int32_t summary1(struct jls_wf_f32_s * self, int64_t pos);
+static int32_t summaryN(struct jls_wr_fsr_s * self, uint8_t level, int64_t pos);
+static int32_t summary1(struct jls_wr_fsr_s * self, int64_t pos);
 
-static int32_t sample_buffer_alloc(struct jls_wf_f32_s * self) {
+static int32_t sample_buffer_alloc(struct jls_wr_fsr_s * self) {
     size_t sample_buffer_sz = sizeof(struct jls_fsr_f32_data_s) + sizeof(float) * self->def.samples_per_data;
     self->data = malloc(sample_buffer_sz);
     JLS_LOGD1("%d sample_buffer alloc %p", self->def.signal_id, (void *) self->data);
     if (!self->data) {
-        jls_wf_f32_close(self);
+        jls_wr_fsr_close(self);
         return JLS_ERROR_NOT_ENOUGH_MEMORY;
     }
     self->data->header.timestamp = 0;
@@ -72,14 +72,14 @@ static int32_t sample_buffer_alloc(struct jls_wf_f32_s * self) {
     return 0;
 }
 
-static void sample_buffer_free(struct jls_wf_f32_s * self) {
+static void sample_buffer_free(struct jls_wr_fsr_s * self) {
     if (self->data) {
         free(self->data);
     }
     self->data = NULL;
 }
 
-static int32_t summary_alloc(struct jls_wf_f32_s * self, uint8_t level) {
+static int32_t summary_alloc(struct jls_wr_fsr_s * self, uint8_t level) {
     uint32_t index_entries;
 
     if (level == 0) {
@@ -124,7 +124,7 @@ static int32_t summary_alloc(struct jls_wf_f32_s * self, uint8_t level) {
     return 0;
 }
 
-static void summary_free(struct jls_wf_f32_s * self, uint8_t level) {
+static void summary_free(struct jls_wr_fsr_s * self, uint8_t level) {
     if (self->level[level]) {
         free(self->level[level]);
         self->level[level] = NULL;
@@ -139,8 +139,50 @@ static uint32_t round_up_to_multiple(uint32_t x, uint32_t m) {
     return ((x + m - 1) / m) * m;
 }
 
-int32_t jls_wf_f32_align_def(struct jls_wf_f32_def_s * def) {
+int32_t jls_wr_fsr_validate(struct jls_signal_def_s * def) {
+    switch (def->data_type & 0xffff) {
+        case JLS_DATATYPE_I4: break;
+        case JLS_DATATYPE_I8: break;
+        case JLS_DATATYPE_I16: break;
+        case JLS_DATATYPE_I24: break;
+        case JLS_DATATYPE_I32: break;
+        case JLS_DATATYPE_I64: break;
+
+        case JLS_DATATYPE_U1: break;
+        case JLS_DATATYPE_U4: break;
+        case JLS_DATATYPE_U8: break;
+        case JLS_DATATYPE_U16: break;
+        case JLS_DATATYPE_U24: break;
+        case JLS_DATATYPE_U32: break;
+        case JLS_DATATYPE_U64: break;
+
+        case JLS_DATATYPE_F32: break;
+        case JLS_DATATYPE_F64: break;
+        default:
+            JLS_LOGW("Invalid data type: 0x%08x", def->data_type);
+            return JLS_ERROR_PARAMETER_INVALID;
+    }
+
+    // Check fixed-point specification
+    if (jls_datatype_parse_q(def->data_type)) {
+        switch (jls_datatype_parse_basetype(def->data_type)) {
+            case JLS_DATATYPE_BASETYPE_INT: break;
+            case JLS_DATATYPE_BASETYPE_UINT: break;
+            case JLS_DATATYPE_BASETYPE_FLOAT:
+                JLS_LOGW("Floating point cannot support q", def->data_type);
+                return JLS_ERROR_PARAMETER_INVALID;
+            default:
+                JLS_LOGW("Invalid data type: 0x%08x", def->data_type);
+                return JLS_ERROR_PARAMETER_INVALID;
+        }
+    }
+
+    uint8_t sample_size = jls_datatype_parse_size(def->data_type);
+    uint32_t samples_per_data_multiple = (SAMPLE_SIZE_BYTES_MAX * 8) / sample_size;
+
     uint32_t sample_decimate_factor = u32_max(def->sample_decimate_factor, SAMPLE_DECIMATE_FACTOR_MIN);
+    sample_decimate_factor = round_up_to_multiple(sample_decimate_factor, samples_per_data_multiple);
+
     uint32_t samples_per_data = u32_max(def->samples_per_data, SAMPLES_PER_DATA_MIN);
     uint32_t entries_per_summary = u32_max(def->entries_per_summary, ENTRIES_PER_SUMMARY_MIN);
     uint32_t summary_decimate_factor = u32_max(def->summary_decimate_factor, SUMMARY_DECIMATE_FACTOR_MIN);
@@ -176,7 +218,7 @@ int32_t jls_wf_f32_align_def(struct jls_wf_f32_def_s * def) {
     return 0;
 }
 
-static int32_t wr_data(struct jls_wf_f32_s * self) {
+static int32_t wr_data(struct jls_wr_fsr_s * self) {
     if (!self->data->header.entry_count) {
         return 0;
     }
@@ -194,7 +236,7 @@ static int32_t wr_data(struct jls_wf_f32_s * self) {
     return 0;
 }
 
-static int32_t wr_index(struct jls_wf_f32_s * self, uint8_t level) {
+static int32_t wr_index(struct jls_wr_fsr_s * self, uint8_t level) {
     if (!self->level[level]) {
         JLS_LOGW("No summary buffer, cannot write index");
         return 0;
@@ -212,7 +254,7 @@ static int32_t wr_index(struct jls_wf_f32_s * self, uint8_t level) {
     return jls_wr_index_prv(self->wr, self->def.signal_id, JLS_TRACK_TYPE_FSR, level, p_start, len);
 }
 
-static int32_t wr_summary(struct jls_wf_f32_s * self, uint8_t level) {
+static int32_t wr_summary(struct jls_wr_fsr_s * self, uint8_t level) {
     struct level_s * dst = self->level[level];
     if (!dst->summary->header.entry_count) {
         return 0;
@@ -238,7 +280,7 @@ static int32_t wr_summary(struct jls_wf_f32_s * self, uint8_t level) {
     return 0;
 }
 
-static int32_t summary_close(struct jls_wf_f32_s * self, uint8_t level) {
+static int32_t summary_close(struct jls_wr_fsr_s * self, uint8_t level) {
     struct level_s * dst = self->level[level];
     if (!dst) {
         return 0;
@@ -248,16 +290,16 @@ static int32_t summary_close(struct jls_wf_f32_s * self, uint8_t level) {
     return rc;
 }
 
-int32_t jls_wf_f32_open(struct jls_wf_f32_s ** instance, struct jls_wr_s * wr, const struct jls_wf_f32_def_s * def) {
-    struct jls_wf_f32_s * self = calloc(1, sizeof(struct jls_wf_f32_s));
+int32_t jls_wr_fsr_open(struct jls_wr_fsr_s ** instance, struct jls_wr_s * wr, const struct jls_signal_def_s * def) {
+    struct jls_wr_fsr_s * self = calloc(1, sizeof(struct jls_wr_fsr_s));
     if (!self) {
         return JLS_ERROR_NOT_ENOUGH_MEMORY;
     }
     self->wr = wr;
     self->def = *def;
-    int32_t rc = jls_wf_f32_align_def(&self->def);
+    int32_t rc = jls_wr_fsr_validate(&self->def);
     if (rc) {
-        jls_wf_f32_close(self);
+        jls_wr_fsr_close(self);
         return rc;
     }
 
@@ -265,7 +307,7 @@ int32_t jls_wf_f32_open(struct jls_wf_f32_s ** instance, struct jls_wr_s * wr, c
     return 0;
 }
 
-int32_t jls_wf_f32_close(struct jls_wf_f32_s * self) {
+int32_t jls_wr_fsr_close(struct jls_wr_fsr_s * self) {
     if (self) {
         if (self->data) {
             wr_data(self);  // write remaining sample data
@@ -281,7 +323,7 @@ int32_t jls_wf_f32_close(struct jls_wf_f32_s * self) {
     return 0;
 }
 
-static int32_t summaryN(struct jls_wf_f32_s * self, uint8_t level, int64_t pos) {
+static int32_t summaryN(struct jls_wr_fsr_s * self, uint8_t level, int64_t pos) {
     if (level < 2) {
         JLS_LOGE("invalid summaryN level: %d", (int) level);
         return JLS_ERROR_PARAMETER_INVALID;
@@ -339,7 +381,7 @@ static int32_t summaryN(struct jls_wf_f32_s * self, uint8_t level, int64_t pos) 
     return 0;
 }
 
-static int32_t summary1(struct jls_wf_f32_s * self, int64_t pos) {
+static int32_t summary1(struct jls_wr_fsr_s * self, int64_t pos) {
     const float * data = self->data->data;
     struct level_s * dst = self->level[1];
 
@@ -391,8 +433,10 @@ static int32_t summary1(struct jls_wf_f32_s * self, int64_t pos) {
     return 0;
 }
 
-int32_t jls_wf_f32_data(struct jls_wf_f32_s * self, int64_t sample_id, const float * data, uint32_t data_length) {
+int32_t jls_wr_fsr_data(struct jls_wr_fsr_s * self, int64_t sample_id, const void * data, uint32_t data_length) {
     struct jls_fsr_f32_data_s * b = self->data;
+    const uint8_t * data_u8 = (const uint8_t *) (data);
+    uint8_t sample_size_bits = jls_datatype_parse_size(self->def.data_type);
 
     if (!b) {
         ROE(sample_buffer_alloc(self));
@@ -411,9 +455,11 @@ int32_t jls_wf_f32_data(struct jls_wf_f32_s * self, int64_t sample_id, const flo
         if (data_length < length) {
             length = data_length;
         }
-        memcpy(&b->data[b->header.entry_count], data, length * sizeof(float));
+        // todo handle sample_size_bits < 8
+        size_t byte_length = length * (sample_size_bits >> 3);
+        memcpy(&b->data[b->header.entry_count], data_u8, byte_length);
         b->header.entry_count += length;
-        data += length;
+        data_u8 += byte_length;
         data_length -= length;
         if (b->header.entry_count >= self->data_length) {
             ROE(wr_data(self));

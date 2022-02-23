@@ -1,4 +1,4 @@
-# Copyright 2014-2021 Jetperch LLC
+# Copyright 2014-2022 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
 cmake_minimum_required (VERSION 3.1)
 set(PARENT_PROJECT_DIR ${PROJECT_SOURCE_DIR})
 project(JLS
-        VERSION 0.3.4
+        VERSION 0.4.0
         LANGUAGES C)
 SET(PROJECT_PREFIX JLS)
 SET(VERSION_STRING "${PROJECT_VERSION}")

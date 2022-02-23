@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2018-2021 Jetperch LLC
+# Copyright 2018-2022 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -86,7 +86,7 @@ extensions = [
             'src/reader.c',
             'src/statistics.c',
             'src/threaded_writer.c',
-            'src/wf_f32.c',
+            'src/wr_fsr.c',
             'src/wr_ts.c',
             'src/writer.c',
         ] + sources,
@@ -173,9 +173,9 @@ setuptools.setup(
         # Supported Python versions
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10',
         'Programming Language :: Python :: Implementation :: CPython',
         
         # Topics
@@ -196,7 +196,7 @@ setuptools.setup(
     include_dirs=[],
     
     # See https://packaging.python.org/guides/distributing-packages-using-setuptools/#python-requires
-    python_requires='~=3.7',
+    python_requires='~=3.8',
 
     setup_requires=[
         # https://developercommunity.visualstudio.com/content/problem/1207405/fmod-after-an-update-to-windows-2004-is-causing-a.html

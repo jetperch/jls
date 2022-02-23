@@ -1,4 +1,4 @@
-# Copyright 2014-2021 Jetperch LLC
+# Copyright 2014-2022 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ set(SOURCES
         reader.c
         statistics.c
         threaded_writer.c
-        wf_f32.c
+        wr_fsr.c
         wr_ts.c
         writer.c
 )

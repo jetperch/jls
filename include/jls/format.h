@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 Jetperch LLC
+ * Copyright 2021-2022 Jetperch LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -319,7 +319,7 @@ enum jls_tag_e {
 
 #define JLS_DATATYPE_BASETYPE_INT        (0x01)
 #define JLS_DATATYPE_BASETYPE_UNSIGNED   (0x02)
-#define JLS_DATATYPE_BASETYPE_UINT       (JLS_DATATYPE_INT | JLS_DATATYPE_UNSIGNED)
+#define JLS_DATATYPE_BASETYPE_UINT       (JLS_DATATYPE_BASETYPE_INT | JLS_DATATYPE_BASETYPE_UNSIGNED)
 #define JLS_DATATYPE_BASETYPE_FLOAT      (0x04)
 
 /**
@@ -327,9 +327,10 @@ enum jls_tag_e {
  *
  * @param basetype The datatype base type, one of [INT, UINT, FLOAT, BOOL]
  * @param size The size in bits.  Only the following options are supported:
- *      - INT: 4 * N where N is between 1 and 16, inclusive.
- *      - UINT: 1 (bool) or 4 * N where N is between 1 and 16, inclusive.
+ *      - INT: 4, 8, 16, 24, 32, 64
+ *      - UINT: 1, 4, 8, 16, 24, 32, 64
  *      - FLOAT: 32, 64
+ *      - BOOL = UINT 1
  * @param q The fixed-point location, only valid for INT and UINT.
  *      Set to 0 for normal, whole numbers.
  *      Set to 0 for FLOAT and BOOL.
@@ -339,13 +340,36 @@ enum jls_tag_e {
      (((uint32_t) ((size) & 0xff)) << 8) |   \
      (((uint32_t) ((q) & 0xff)) << 16))
 
+static inline uint8_t jls_datatype_parse_basetype(uint32_t dt) {
+    return (uint8_t) (dt & 0x0f);
+}
+
+static inline uint8_t jls_datatype_parse_size(uint32_t dt) {
+    return (uint8_t) ((dt >> 8) & 0xff);
+}
+
+static inline uint8_t jls_datatype_parse_q(uint32_t dt) {
+    return (uint8_t) ((dt >> 16) & 0xff);
+}
+
+#define JLS_DATATYPE_I4  JLS_DATATYPE_DEF(INT, 4, 0)
+#define JLS_DATATYPE_I8  JLS_DATATYPE_DEF(INT, 8, 0)
+#define JLS_DATATYPE_I16 JLS_DATATYPE_DEF(INT, 16, 0)
+#define JLS_DATATYPE_I24 JLS_DATATYPE_DEF(INT, 24, 0)
 #define JLS_DATATYPE_I32 JLS_DATATYPE_DEF(INT, 32, 0)
 #define JLS_DATATYPE_I64 JLS_DATATYPE_DEF(INT, 64, 0)
+
+#define JLS_DATATYPE_U1  JLS_DATATYPE_DEF(UINT, 1, 0)
+#define JLS_DATATYPE_U4  JLS_DATATYPE_DEF(UINT, 4, 0)
+#define JLS_DATATYPE_U8  JLS_DATATYPE_DEF(UINT, 8, 0)
+#define JLS_DATATYPE_U16 JLS_DATATYPE_DEF(UINT, 16, 0)
+#define JLS_DATATYPE_U24 JLS_DATATYPE_DEF(UINT, 24, 0)
 #define JLS_DATATYPE_U32 JLS_DATATYPE_DEF(UINT, 32, 0)
 #define JLS_DATATYPE_U64 JLS_DATATYPE_DEF(UINT, 64, 0)
+#define JLS_DATATYPE_BOOL JLS_DATATYPE_U1
+
 #define JLS_DATATYPE_F32 JLS_DATATYPE_DEF(FLOAT, 32, 0)
 #define JLS_DATATYPE_F64 JLS_DATATYPE_DEF(FLOAT, 64, 0)
-#define JLS_DATATYPE_BOOL JLS_DATATYPE_DEF(UINT, 1, 0)
 
 struct jls_source_def_s {
     // store unique source_id in chunk_meta
@@ -559,10 +583,24 @@ struct jls_fsr_index_s {
     uint64_t offsets[];         ///< The chunk file offsets, spaced by fixed time intervals.
 };
 
-/// The FSR float32 summary chunk format.
+/**
+ * @brief The float32 summary chunk format.
+ *
+ * This summary format is used by all types except u64, i64, f64.
+ */
 struct jls_fsr_f32_summary_s {
     struct jls_payload_header_s header;
     float data[];          ///< The summary data, each entry is 4 x f32: mean, std, min, max.
+};
+
+/**
+ * @brief The float64 summary chunk format.
+ *
+ * This summary format is used by u64, i64, f64.
+ */
+struct jls_fsr_f64_summary_s {
+    struct jls_payload_header_s header;
+    double data[];          ///< The summary data, each entry is 4 x f64: mean, std, min, max.
 };
 
 /**

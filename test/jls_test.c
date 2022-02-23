@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2021 Jetperch LLC
+ * Copyright 2014-2022 Jetperch LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,6 +29,7 @@
 #define SKIP_BASIC 0
 #define SKIP_REALWORLD 1
 
+#define ARRAY_SIZE(x) ( sizeof(x) / sizeof((x)[0]) )
 const char * filename = "jls_test_tmp.jls";
 const uint8_t USER_DATA_1[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
 const uint16_t CHUNK_META_1 = 0x0123;
@@ -423,8 +424,8 @@ static void test_signal(void **state) {
     assert_int_equal(SIGNAL_5.signal_type, signals[1].signal_type);
     assert_int_equal(SIGNAL_5.data_type, signals[1].data_type);
     assert_int_equal(SIGNAL_5.sample_rate, signals[1].sample_rate);
-    assert_int_equal(SIGNAL_5.samples_per_data, signals[1].samples_per_data);
-    assert_int_equal(SIGNAL_5.sample_decimate_factor, signals[1].sample_decimate_factor);
+    assert_int_equal(0x410, signals[1].samples_per_data);
+    assert_int_equal(0x68, signals[1].sample_decimate_factor);
     assert_int_equal(SIGNAL_5.entries_per_summary, signals[1].entries_per_summary);
     assert_int_equal(SIGNAL_5.annotation_decimate_factor, signals[1].annotation_decimate_factor);
     assert_int_equal(SIGNAL_5.utc_decimate_factor, signals[1].utc_decimate_factor);
@@ -605,6 +606,49 @@ static void test_fsr_f32_statistics(void **state) {
     remove(filename);
 }
 
+static void test_fsr_uint(void **state) {
+    (void) state;
+    struct jls_wr_s * wr = NULL;
+
+    uint32_t data_types[] = {
+            JLS_DATATYPE_U1, JLS_DATATYPE_U4, JLS_DATATYPE_U8, JLS_DATATYPE_U16,
+            JLS_DATATYPE_U24, JLS_DATATYPE_U32, JLS_DATATYPE_U64,
+    };
+
+    struct jls_signal_def_s signal_7 = {
+            .signal_id = 7,
+            .source_id = 3,
+            .signal_type = JLS_SIGNAL_TYPE_FSR,
+            .data_type = JLS_DATATYPE_F32,
+            .sample_rate = 100000,
+            .samples_per_data = 1000,
+            .sample_decimate_factor = 100,
+            .entries_per_summary = 200,
+            .summary_decimate_factor = 100,
+            .annotation_decimate_factor = 100,
+            .utc_decimate_factor = 100,
+            .name = "signal 7",
+            .units = "A",
+    };
+
+    for (uint32_t idx = 0; idx < ARRAY_SIZE(data_types); ++idx) {
+        // printf("idx = %d\n", idx);
+        signal_7.data_type = data_types[idx];
+        assert_int_equal(0, jls_wr_open(&wr, filename));
+        assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_3));
+        assert_int_equal(0, jls_wr_signal_def(wr, &signal_7));
+        // todo add data
+        assert_int_equal(0, jls_wr_close(wr));
+        assert_true(0);  // todo read & check data, statistics
+        remove(filename);
+    }
+}
+
+// todo static void test_fsr_int(void **state)
+// todo static void test_fsr_uint_fp(void **state)
+// todo static void test_fsr_int_fp(void **state)
+
+
 #if !SKIP_REALWORLD
 static void test_fsr_f32_statistics_real(void **state) {
     (void) state;
@@ -655,6 +699,8 @@ int main(void) {
 #endif
             cmocka_unit_test(test_fsr_f32),
             cmocka_unit_test(test_fsr_f32_statistics),
+
+            cmocka_unit_test(test_fsr_uint),
 
 #if !SKIP_REALWORLD
             cmocka_unit_test(test_fsr_f32_statistics_real),

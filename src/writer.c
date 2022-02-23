@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 Jetperch LLC
+ * Copyright 2021-2022 Jetperch LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@
 #include "jls/raw.h"
 #include "jls/format.h"
 #include "jls/wr_prv.h"
-#include "jls/wf_f32.h"
+#include "jls/wr_fsr.h"
 #include "jls/wr_ts.h"
 #include "jls/cdef.h"
 #include "jls/ec.h"
@@ -61,7 +61,7 @@ struct signal_info_s {
     char name[1024];
     char units[128];
     struct track_info_s tracks[JLS_TRACK_TYPE_COUNT];   // array index is jls_track_type_e
-    struct jls_wf_f32_s * signal_writer;
+    struct jls_wr_fsr_s * signal_writer;
 };
 
 struct buf_s {
@@ -164,7 +164,7 @@ int32_t jls_wr_close(struct jls_wr_s * self) {
         for (size_t i = 0; i < JLS_SIGNAL_COUNT; ++i) {
             struct signal_info_s * signal_info = &self->signal_info[i];
             if (signal_info->signal_writer) {
-                jls_wf_f32_close(signal_info->signal_writer);
+                jls_wr_fsr_close(signal_info->signal_writer);
             }
             for (size_t track_id = 0; track_id < JLS_TRACK_TYPE_COUNT; track_id++) {
                 struct jls_wr_ts_s * ts = signal_info->tracks[track_id].ts;
@@ -426,21 +426,9 @@ int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signal_def_s 
     snprintf(info->name, sizeof(info->name), "%s", signal->name);
     snprintf(info->units, sizeof(info->units), "%s", signal->units);
     info->signal_def.name = info->name;
-    struct jls_signal_def_s * def = &info->signal_def;
 
-    // Open the signal
-    struct jls_wf_f32_def_s writer_def = {
-            .signal_id = def->signal_id,
-            .samples_per_data = def->samples_per_data,
-            .sample_decimate_factor = def->sample_decimate_factor,
-            .entries_per_summary = def->entries_per_summary,
-            .summary_decimate_factor = def->summary_decimate_factor,
-    };
-    ROE(jls_wf_f32_align_def(&writer_def));
-    def->samples_per_data = writer_def.samples_per_data;
-    def->sample_decimate_factor = writer_def.sample_decimate_factor;
-    def->entries_per_summary = writer_def.entries_per_summary;
-    def->summary_decimate_factor = writer_def.summary_decimate_factor;
+    struct jls_signal_def_s * def = &info->signal_def;
+    ROE(jls_wr_fsr_validate(def));
 
     switch (def->signal_type) {
         case JLS_SIGNAL_TYPE_FSR:
@@ -458,12 +446,6 @@ int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signal_def_s 
         default:
             JLS_LOGE("Invalid signal type: %d", (int) def->signal_type);
             return JLS_ERROR_PARAMETER_INVALID;
-    }
-
-    if (def->data_type != JLS_DATATYPE_F32) {
-        JLS_LOGW("Only f32 datatype currently supported");
-        // todo: support other data types.
-        return JLS_ERROR_NOT_SUPPORTED;
     }
 
     // construct payload
@@ -519,7 +501,7 @@ int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signal_def_s 
         ROE(track_wr_head(self, &info->tracks[JLS_TRACK_TYPE_ANNOTATION]));
     }
 
-    ROE(jls_wf_f32_open(&info->signal_writer, self, &writer_def));
+    ROE(jls_wr_fsr_open(&info->signal_writer, self, def));
     return 0;
 }
 
@@ -696,7 +678,7 @@ int32_t jls_wr_fsr_f32(struct jls_wr_s * self, uint16_t signal_id,
                        int64_t sample_id, const float * data, uint32_t data_length) {
     ROE(signal_validate(self, signal_id));
     struct signal_info_s * info = &self->signal_info[signal_id];
-    return jls_wf_f32_data(info->signal_writer, sample_id, data, data_length);
+    return jls_wr_fsr_data(info->signal_writer, sample_id, data, data_length);
 }
 
 int32_t jls_wr_annotation(struct jls_wr_s * self, uint16_t signal_id, int64_t timestamp,
