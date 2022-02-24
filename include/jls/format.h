@@ -371,6 +371,9 @@ static inline uint8_t jls_datatype_parse_q(uint32_t dt) {
 #define JLS_DATATYPE_F32 JLS_DATATYPE_DEF(FLOAT, 32, 0)
 #define JLS_DATATYPE_F64 JLS_DATATYPE_DEF(FLOAT, 64, 0)
 
+/**
+ * @brief The source definition.
+ */
 struct jls_source_def_s {
     // store unique source_id in chunk_meta
     uint16_t source_id;          // 0 reserved for global annotations, must be unique per instance
@@ -382,6 +385,9 @@ struct jls_source_def_s {
     const char * serial_number;
 };
 
+/**
+ * @brief The signal definition.
+ */
 struct jls_signal_def_s {       // 0 reserved for VSR annotations
     // store unique signal_id in chunk_meta
     uint16_t signal_id;                 // 0 to JLS_SIGNAL_COUNT - 1, must be unique per instance

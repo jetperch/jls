@@ -45,7 +45,7 @@ struct jls_wr_s;
 /**
  * @brief Open a JLS file for writing.
  *
- * @param instance[out] The JLS writer instance.
+ * @param[out] instance The JLS writer instance.
  * @param path The JLS file path.
  * @return 0 or error code.
  *

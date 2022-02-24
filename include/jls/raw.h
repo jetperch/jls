@@ -53,7 +53,7 @@ struct jls_raw_s;
 /**
  * @brief Open a file and create a new JLS raw instance.
  *
- * @param instance[out] The new instance on success or NULL.
+ * @param[out] instance The new instance on success or NULL.
  * @param path The path to open.
  * @param mode The file open mode, which is one of "w", "r", "a".
  * @return 0 or error code.
@@ -110,7 +110,7 @@ int32_t jls_raw_wr_payload(struct jls_raw_s * self, uint32_t payload_length, con
  * @brief Read the current chunk and advance on success.
  *
  * @param self The JLS raw instance.
- * @param hdr[out] The chunk header.
+ * @param[out] hdr The chunk header.
  * @param payload_length_max The maximum length in bytes for payload.
  * @param payload The payload data.
  * @return 0 or error code.
@@ -121,7 +121,7 @@ int32_t jls_raw_rd(struct jls_raw_s * self, struct jls_chunk_header_s * hdr, uin
  * @brief Read the current chunk header.
  *
  * @param self The JLS raw instance.
- * @param h[out] The chunk header.
+ * @param[out] h The chunk header.
  * @return 0 or error code.
  */
 int32_t jls_raw_rd_header(struct jls_raw_s * self, struct jls_chunk_header_s * h);
@@ -130,7 +130,6 @@ int32_t jls_raw_rd_header(struct jls_raw_s * self, struct jls_chunk_header_s * h
  * @brief Read the current chunk payload and advance on success.
  *
  * @param self The JLS raw instance.
- * @param self The chunk header, normally from jls_raw_rd_header().
  * @param payload_length_max The maximum length in bytes for payload.
  * @param payload The payload data.
  * @return 0 or error code.

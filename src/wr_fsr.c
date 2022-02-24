@@ -227,7 +227,7 @@ static int32_t wr_data(struct jls_wr_fsr_s * self) {
     }
     uint8_t * p_start = (uint8_t *) self->data;
     uint8_t * p_end = (uint8_t *) &self->data->data[self->data->header.entry_count];
-    uint32_t payload_length = p_end - p_start;
+    uint32_t payload_length = (uint32_t) (p_end - p_start);
     int64_t pos = jls_wr_tell_prv(self->wr);
     ROE(jls_wr_data_prv(self->wr, self->def.signal_id, JLS_TRACK_TYPE_FSR, p_start, payload_length));
     ROE(summary1(self, pos));
@@ -250,7 +250,7 @@ static int32_t wr_index(struct jls_wr_fsr_s * self, uint8_t level) {
     }
     uint8_t * p_end = (uint8_t *) &idx->offsets[idx->header.entry_count];
     uint8_t * p_start = (uint8_t *) idx;
-    uint32_t len = p_end - p_start;
+    uint32_t len = (uint32_t) (p_end - p_start);
     return jls_wr_index_prv(self->wr, self->def.signal_id, JLS_TRACK_TYPE_FSR, level, p_start, len);
 }
 

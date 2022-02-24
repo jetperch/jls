@@ -45,7 +45,7 @@ struct jls_rd_s;
 /**
  * @brief Open a JLS file to read contents.
  *
- * @param instance[out] The new JLS read instance.
+ * @param[out] instance The new JLS read instance.
  * @param path The JLS file path.
  * @return 0 or error code.
  *
@@ -63,8 +63,8 @@ JLS_API void jls_rd_close(struct jls_rd_s * self);
  * @brief Get the array of sources in the file.
  *
  * @param self The reader instance.
- * @param sources[out] The array of sources.
- * @param count[out] The number of items in sources.
+ * @param[out] sources The array of sources.
+ * @param[out] count The number of items in sources.
  * @return 0 or error code.
  */
 JLS_API int32_t jls_rd_sources(struct jls_rd_s * self, struct jls_source_def_s ** sources, uint16_t * count);
@@ -73,8 +73,8 @@ JLS_API int32_t jls_rd_sources(struct jls_rd_s * self, struct jls_source_def_s *
  * @brief Get the array of signals in the file.
  *
  * @param self The reader instance.
- * @param signals[out] The array of signals.
- * @param count[out] The number of items in signals.
+ * @param[out] signals The array of signals.
+ * @param[out] count The number of items in signals.
  * @return 0 or error code.
  */
 JLS_API int32_t jls_rd_signals(struct jls_rd_s * self, struct jls_signal_def_s ** signals, uint16_t * count);
@@ -84,7 +84,7 @@ JLS_API int32_t jls_rd_signals(struct jls_rd_s * self, struct jls_signal_def_s *
  *
  * @param self The reader instance.
  * @param signal_id The signal id to get.
- * @param signal[out] The signal definition.
+ * @param[out] signal The signal definition.
  * @return 0 or error code.
  */
 JLS_API int32_t jls_rd_signal(struct jls_rd_s * self, uint16_t signal_id, struct jls_signal_def_s * signal);
@@ -94,7 +94,7 @@ JLS_API int32_t jls_rd_signal(struct jls_rd_s * self, uint16_t signal_id, struct
  *
  * @param self The reader instance.
  * @param signal_id The signal id.
- * @param samples[out] The number of samples in the signal.
+ * @param[out] samples The number of samples in the signal.
  * @return 0 or error code.
  */
 JLS_API int32_t jls_rd_fsr_length(struct jls_rd_s * self, uint16_t signal_id, int64_t * samples);
@@ -105,7 +105,7 @@ JLS_API int32_t jls_rd_fsr_length(struct jls_rd_s * self, uint16_t signal_id, in
  * @param self The reader instance.
  * @param signal_id The signal id.
  * @param start_sample_id The starting sample id to read.
- * @param data[out] The samples read.
+ * @param[out] data The samples read.
  * @param data_length The number of samples to read.  data is
  *      also at least this many entries (4 * data_length bytes).
  * @return 0 or error code
@@ -120,7 +120,7 @@ JLS_API int32_t jls_rd_fsr_f32(struct jls_rd_s * self, uint16_t signal_id, int64
  * @param signal_id The signal
  * @param start_sample_id The starting sample id to read.
  * @param increment The number of samples that form a single output summary.
- * @param data[out] The statistics information, in the shape of
+ * @param[out] data The statistics information, in the shape of
  *      data[data_length][JLS_SUMMARY_FSR_COUNT].  The elements are
  *      mean, standard_deviation, min, max.
  *      Use JLS_SUMMARY_FSR_MEAN, JLS_SUMMARY_FSR_STD,

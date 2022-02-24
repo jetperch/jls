@@ -158,7 +158,7 @@ static int32_t commit(struct jls_wr_ts_s * self, int level, int mode) {
     // write index
     uint8_t * p_end = (uint8_t *) &index->entries[index->header.entry_count];
     uint8_t * p_start = (uint8_t *) index;
-    uint32_t len = p_end - p_start;
+    uint32_t len = (uint32_t) (p_end - p_start);
     uint64_t offset = jls_wr_tell_prv(self->wr);
     ROE(jls_wr_index_prv(self->wr, self->signal_id, self->track_type, level, p_start, len));
 
@@ -189,7 +189,7 @@ static int32_t commit(struct jls_wr_ts_s * self, int level, int mode) {
     }
 
     // write summary.
-    len = p_end - p_start;
+    len = (uint32_t) (p_end - p_start);
     ROE(jls_wr_summary_prv(self->wr, self->signal_id, self->track_type, level, p_start, len));
 
     // When up is full, commit it

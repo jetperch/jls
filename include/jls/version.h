@@ -30,7 +30,7 @@
  * @ingroup jls
  * @defgroup jls_version Version
  *
- * @brief JLS Version.
+ * @brief JLS version.
  *
  * @{
  */

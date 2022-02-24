@@ -44,11 +44,11 @@ JLS_CPP_GUARD_START
  * @see https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
  */
 struct jls_statistics_s {
-    uint64_t k;    // number of samples
-    double mean;   // mean
-    double s;      // scaled running variance
-    double min;    // minimum value
-    double max;    // maximum value
+    uint64_t k;    ///< Number of samples.
+    double mean;   ///< mean (average value).
+    double s;      ///< Scaled running variance.
+    double min;    ///< Minimum value.
+    double max;    ///< Maximum value.
 };
 
 /**

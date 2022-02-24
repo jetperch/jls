@@ -44,10 +44,13 @@ JLS_CPP_GUARD_START
 #define JLS_BK_FLUSH_TIMEOUT_MS (20000)
 #define JLS_BK_CLOSE_TIMEOUT_MS (1000)
 
+/**
+ * @brief The backend instance.
+ */
 struct jls_bkf_s {
-    int64_t fpos;                   // the current file position, to reduce ftell calls.
-    int64_t fend;                   // the file end offset.
-    int fd;                         // The file descriptor
+    int64_t fpos;    ///< the current file position, to reduce ftell calls.
+    int64_t fend;    ///< the file end offset.
+    int fd;          ///< The file descriptor.
 };
 
 int32_t jls_bk_fopen(struct jls_bkf_s * self, const char * filename, const char * mode);
