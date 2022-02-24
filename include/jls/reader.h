@@ -30,9 +30,9 @@
 
 /**
  * @ingroup jls
- * @defgroup jls_writer Writer
+ * @defgroup jls_reader Reader
  *
- * @brief JLS writer.
+ * @brief JLS reader.
  *
  * @{
  */
