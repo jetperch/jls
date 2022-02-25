@@ -569,10 +569,17 @@ struct jls_payload_header_s {
     uint16_t rsv16;             ///< Reserved.
 };
 
-/// The FSR float32 data chunk format.
-struct jls_fsr_f32_data_s {
-    struct jls_payload_header_s header;
-    float data[];          ///< The summary data, each entry is 1 x f32.
+/// The FSR data chunk format.
+struct jls_fsr_data_s {
+    struct jls_payload_header_s header;  ///< The payload header.
+
+    /**
+     * @brief The summary data.
+     *
+     * Although data's type is float, the actual data type depends upon
+     * the signal definition.
+     */
+    float data[];
 };
 
 /**
@@ -590,17 +597,17 @@ struct jls_fsr_index_s {
 };
 
 /**
- * @brief The float32 summary chunk format.
+ * @brief The FSR summary chunk format with f32 values.
  *
  * This summary format is used by all types except u64, i64, f64.
  */
 struct jls_fsr_f32_summary_s {
-    struct jls_payload_header_s header;
+    struct jls_payload_header_s header; ///< The payload
     float data[];          ///< The summary data, each entry is 4 x f32: mean, std, min, max.
 };
 
 /**
- * @brief The float64 summary chunk format.
+ * @brief The FSR summary chunk format with f64 values.
  *
  * This summary format is used by u64, i64, f64.
  */

@@ -105,6 +105,22 @@ JLS_API int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signa
 JLS_API int32_t jls_wr_user_data(struct jls_wr_s * self, uint16_t chunk_meta,
         enum jls_storage_type_e storage_type, const uint8_t * data, uint32_t data_size);
 
+
+/**
+ * @brief Write fixed-rate sample data to a signal.
+ *
+ * @param self The JLS writer instance.
+ * @param signal_id The signal id.
+ * @param sample_id The sample id for data[0].
+ * @param data The sample data array.  Data must be packed with no spacing
+ *      between samples.  u1 stores 8 samples per byte, and u4 stores 2 samples
+ *      per byte.
+ * @param data_length The length of data in samples.
+ * @return 0 or error code
+ */
+JLS_API int32_t jls_wr_fsr(struct jls_wr_s * self, uint16_t signal_id,
+                           int64_t sample_id, const void * data, uint32_t data_length);
+
 /**
  * @brief Write sample data to a float32 FSR signal.
  *
@@ -142,10 +158,6 @@ JLS_API int32_t jls_wr_annotation(struct jls_wr_s * self,
                                   enum jls_storage_type_e storage_type,
                                   const uint8_t * data,
                                   uint32_t data_size);
-
-// todo jls_wr_fsr_int
-// JLS_API int32_t jls_wr_fsr_i32(struct jls_wr_s * self, uint16_t signal_id,
-//        int64_t sample_id, const void * data, uint32_t data_length);
 
 /**
  * @brief Add a mapping from sample_id to UTC timestamp for an FSR signal.

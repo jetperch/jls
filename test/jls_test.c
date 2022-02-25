@@ -610,10 +610,17 @@ static void test_fsr_uint(void **state) {
     (void) state;
     struct jls_wr_s * wr = NULL;
 
+    uint64_t source_data[1024];
+
     uint32_t data_types[] = {
             JLS_DATATYPE_U1, JLS_DATATYPE_U4, JLS_DATATYPE_U8, JLS_DATATYPE_U16,
             JLS_DATATYPE_U24, JLS_DATATYPE_U32, JLS_DATATYPE_U64,
     };
+
+
+    for (size_t idx = 0; idx < ARRAY_SIZE(source_data); ++idx) {
+        source_data[idx] = (uint64_t) idx;
+    }
 
     struct jls_signal_def_s signal_7 = {
             .signal_id = 7,
@@ -637,9 +644,28 @@ static void test_fsr_uint(void **state) {
         assert_int_equal(0, jls_wr_open(&wr, filename));
         assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_3));
         assert_int_equal(0, jls_wr_signal_def(wr, &signal_7));
-        // todo add data
+        uint32_t data_length = (sizeof(source_data) * 8) / jls_datatype_parse_size(signal_7.data_type);
+        assert_int_equal(0, jls_wr_fsr(wr, signal_7.signal_id, 0, source_data, data_length));
         assert_int_equal(0, jls_wr_close(wr));
-        assert_true(0);  // todo read & check data, statistics
+
+        struct jls_rd_s * rd = NULL;
+        assert_int_equal(0, jls_rd_open(&rd, filename));
+        struct jls_signal_def_s * signals = NULL;
+        uint16_t count = 0;
+        assert_int_equal(0, jls_rd_signals(rd, &signals, &count));
+        assert_int_equal(2, count);
+        assert_int_equal(0, signals[0].signal_id);
+        assert_int_equal(signal_7.signal_id, signals[1].signal_id);
+        int64_t samples = 0;
+        assert_int_equal(0, jls_rd_fsr_length(rd, signal_7.signal_id, &samples));
+        assert_int_equal(data_length, samples);
+
+
+        // get last few samples
+        //assert_int_equal(0, jls_rd_fsr_f32(rd, 5, sample_count - 5, data, 5));
+        //assert_memory_equal(signal + sample_count - 5, data, 5 * sizeof(float));
+
+        jls_rd_close(rd);
         remove(filename);
     }
 }

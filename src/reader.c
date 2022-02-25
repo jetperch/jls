@@ -851,7 +851,7 @@ int32_t jls_rd_fsr_f32(struct jls_rd_s * self, uint16_t signal_id, int64_t start
         } else if (rv) {
             return rv;
         }
-        struct jls_fsr_f32_data_s * r = (struct jls_fsr_f32_data_s *) self->payload.start;
+        struct jls_fsr_data_s * r = (struct jls_fsr_data_s *) self->payload.start;
         int64_t chunk_sample_id = r->header.timestamp;
         int64_t chunk_sample_count = r->header.entry_count;
         if (r->header.entry_size_bits != 8 * sizeof(r->data[0])) {
@@ -1061,7 +1061,7 @@ int32_t jls_rd_fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
 
     ROE(fsr_seek(self, signal_id, 0, start_sample_id));
     ROE(rd(self));
-    struct jls_fsr_f32_data_s * s = (struct jls_fsr_f32_data_s *) self->payload.start;
+    struct jls_fsr_data_s * s = (struct jls_fsr_data_s *) self->payload.start;
     int64_t chunk_sample_id = s->header.timestamp;
     if (s->header.entry_size_bits != sizeof(float) * 8) {
         JLS_LOGE("invalid data entry size: %d", (int) s->header.entry_size_bits);
@@ -1093,7 +1093,7 @@ int32_t jls_rd_fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
             if (self->chunk_cur.hdr.chunk_meta != signal_id) {
                 JLS_LOGW("unexpected chunk meta: %d", (int) self->chunk_cur.hdr.chunk_meta);
             }
-            s = (struct jls_fsr_f32_data_s *) self->payload.start;
+            s = (struct jls_fsr_data_s *) self->payload.start;
             if (s->header.entry_size_bits != sizeof(float) * 8) {
                 JLS_LOGE("invalid data entry size: %d", (int) s->header.entry_size_bits);
                 return JLS_ERROR_PARAMETER_INVALID;

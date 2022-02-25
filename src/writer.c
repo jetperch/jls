@@ -674,10 +674,20 @@ int32_t jls_wr_index_prv(struct jls_wr_s * self, uint16_t signal_id, enum jls_tr
     return 0;
 }
 
+JLS_API int32_t jls_wr_fsr(struct jls_wr_s * self, uint16_t signal_id,
+                           int64_t sample_id, const void * data, uint32_t data_length) {
+    ROE(signal_validate(self, signal_id));
+    struct signal_info_s * info = &self->signal_info[signal_id];
+    return jls_wr_fsr_data(info->signal_writer, sample_id, data, data_length);
+}
+
 int32_t jls_wr_fsr_f32(struct jls_wr_s * self, uint16_t signal_id,
                        int64_t sample_id, const float * data, uint32_t data_length) {
     ROE(signal_validate(self, signal_id));
     struct signal_info_s * info = &self->signal_info[signal_id];
+    if (info->signal_def.data_type != JLS_DATATYPE_F32) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
     return jls_wr_fsr_data(info->signal_writer, sample_id, data, data_length);
 }
 
