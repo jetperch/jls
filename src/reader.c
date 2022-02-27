@@ -820,9 +820,10 @@ int32_t jls_rd_fsr_length(struct jls_rd_s * self, uint16_t signal_id, int64_t * 
     return 0;
 }
 
-int32_t jls_rd_fsr_f32(struct jls_rd_s * self, uint16_t signal_id, int64_t start_sample_id,
-                       float * data, int64_t data_length) {
+int32_t jls_rd_fsr(struct jls_rd_s * self, uint16_t signal_id, int64_t start_sample_id,
+                   void * data, int64_t data_length) {
     int32_t rv = 0;
+    uint8_t * data_u8 = (uint8_t *) data;
     if (!is_signal_defined_type(self, signal_id, JLS_SIGNAL_TYPE_FSR)) {
         return JLS_ERROR_PARAMETER_INVALID;
     }
@@ -832,7 +833,10 @@ int32_t jls_rd_fsr_f32(struct jls_rd_s * self, uint16_t signal_id, int64_t start
         return JLS_ERROR_PARAMETER_INVALID;
     }
 
+    struct jls_signal_def_s * signal_def = &self->signal_def[signal_id];
     int64_t samples = 0;
+    uint8_t entry_size_bits = jls_datatype_parse_size(signal_def->data_type);
+
     ROE(jls_rd_fsr_length(self, signal_id, &samples));
     if ((start_sample_id + data_length) > samples) {
         return JLS_ERROR_PARAMETER_INVALID;
@@ -854,8 +858,9 @@ int32_t jls_rd_fsr_f32(struct jls_rd_s * self, uint16_t signal_id, int64_t start
         struct jls_fsr_data_s * r = (struct jls_fsr_data_s *) self->payload.start;
         int64_t chunk_sample_id = r->header.timestamp;
         int64_t chunk_sample_count = r->header.entry_count;
-        if (r->header.entry_size_bits != 8 * sizeof(r->data[0])) {
-            JLS_LOGE("Invalid f32 data");
+        if (r->header.entry_size_bits != entry_size_bits) {
+            JLS_LOGE("fsr entry size mismatch");
+            return JLS_ERROR_UNSPECIFIED;
         }
         int64_t idx_start = 0;
         if (start_sample_id > chunk_sample_id) {
@@ -865,12 +870,25 @@ int32_t jls_rd_fsr_f32(struct jls_rd_s * self, uint16_t signal_id, int64_t start
         if (data_length < chunk_sample_count) {
             chunk_sample_count = data_length;
         }
-        float * f32 = &r->data[0];
-        memcpy(data, f32 + idx_start, (size_t) chunk_sample_count * sizeof(float));
-        data += chunk_sample_count;
+        // todo support u1, u4, i4
+        uint8_t * u32 = &r->data[0];
+        size_t sz_bytes = (size_t) (chunk_sample_count * entry_size_bits + 7) / 8;
+        memcpy(data_u8, u32 + (idx_start * entry_size_bits) / 8, sz_bytes);
+        data_u8 += sz_bytes;
         data_length -= chunk_sample_count;
     }
     return 0;
+}
+
+JLS_API int32_t jls_rd_fsr_f32(struct jls_rd_s * self, uint16_t signal_id, int64_t start_sample_id,
+                               float * data, int64_t data_length) {
+    if (!is_signal_defined_type(self, signal_id, JLS_SIGNAL_TYPE_FSR)) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
+    if (self->signal_def[signal_id].data_type != JLS_DATATYPE_F32) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
+    return jls_rd_fsr(self, signal_id, start_sample_id, data, data_length);
 }
 
 static inline void floats_to_stats(struct jls_statistics_s * stats, float * data, int64_t count) {
