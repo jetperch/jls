@@ -21,6 +21,7 @@
 #include "jls/log.h"
 #include "jls/crc32c.h"
 #include "jls/statistics.h"
+#include "jls/bit_shift.h"
 #include "jls/util.h"
 #include <inttypes.h>
 #include <math.h>
@@ -822,6 +823,8 @@ int32_t jls_rd_fsr_length(struct jls_rd_s * self, uint16_t signal_id, int64_t * 
 
 int32_t jls_rd_fsr(struct jls_rd_s * self, uint16_t signal_id, int64_t start_sample_id,
                    void * data, int64_t data_length) {
+    const int64_t start_sample_id_orig = start_sample_id;
+    const int64_t data_length_orig = data_length;
     int32_t rv = 0;
     uint8_t * data_u8 = (uint8_t *) data;
     if (!is_signal_defined_type(self, signal_id, JLS_SIGNAL_TYPE_FSR)) {
@@ -840,6 +843,28 @@ int32_t jls_rd_fsr(struct jls_rd_s * self, uint16_t signal_id, int64_t start_sam
     ROE(jls_rd_fsr_length(self, signal_id, &samples));
     if ((start_sample_id + data_length) > samples) {
         return JLS_ERROR_PARAMETER_INVALID;
+    }
+
+    uint8_t shift_right_bits = 0;
+    if (entry_size_bits < 8) {
+        int64_t sample_id = start_sample_id;
+        switch (entry_size_bits) {
+            case 1:
+                sample_id &= ~0x07;
+                if (sample_id != start_sample_id) {
+                    shift_right_bits = (uint8_t) (start_sample_id - sample_id);
+                }
+                break;
+            case 4:
+                sample_id &= ~0x01;
+                if (sample_id != start_sample_id) {
+                    shift_right_bits = 4;
+                }
+                break;
+            default: return JLS_ERROR_PARAMETER_INVALID;
+        }
+        data_length += start_sample_id - sample_id;
+        start_sample_id = sample_id;
     }
 
     //JLS_LOGD3("jls_rd_fsr_f32(%d, %" PRIi64 ")", (int) signal_id, start_sample_id);
@@ -870,13 +895,18 @@ int32_t jls_rd_fsr(struct jls_rd_s * self, uint16_t signal_id, int64_t start_sam
         if (data_length < chunk_sample_count) {
             chunk_sample_count = data_length;
         }
-        // todo support u1, u4, i4
-        uint8_t * u32 = &r->data[0];
+        uint8_t * u8 = (uint8_t *) &r->data[0];
         size_t sz_bytes = (size_t) (chunk_sample_count * entry_size_bits + 7) / 8;
-        memcpy(data_u8, u32 + (idx_start * entry_size_bits) / 8, sz_bytes);
+        size_t u8_offset = (size_t) ((idx_start * entry_size_bits) / 8);
+        memcpy(data_u8, u8 + u8_offset, sz_bytes);
         data_u8 += sz_bytes;
         data_length -= chunk_sample_count;
     }
+
+    if (shift_right_bits) {
+        jls_bit_shift_array_right(shift_right_bits, data, (size_t) ((data_length_orig * entry_size_bits + shift_right_bits + 7) / 8));
+    }
+
     return 0;
 }
 
@@ -891,7 +921,7 @@ JLS_API int32_t jls_rd_fsr_f32(struct jls_rd_s * self, uint16_t signal_id, int64
     return jls_rd_fsr(self, signal_id, start_sample_id, data, data_length);
 }
 
-static inline void floats_to_stats(struct jls_statistics_s * stats, float * data, int64_t count) {
+static inline void f32_to_stats(struct jls_statistics_s * stats, float * data, int64_t count) {
     stats->k = count;
     stats->mean = data[JLS_SUMMARY_FSR_MEAN];
     stats->min = data[JLS_SUMMARY_FSR_MIN];
@@ -903,11 +933,30 @@ static inline void floats_to_stats(struct jls_statistics_s * stats, float * data
     }
 }
 
-static inline void stats_to_float(float * data, struct jls_statistics_s * stats) {
+static inline void stats_to_f32(float * data, struct jls_statistics_s * stats) {
     data[JLS_SUMMARY_FSR_MEAN] = (float) stats->mean;
     data[JLS_SUMMARY_FSR_MIN] = (float) stats->min;
     data[JLS_SUMMARY_FSR_MAX] = (float) stats->max;
     data[JLS_SUMMARY_FSR_STD] = (float) sqrt(jls_statistics_var(stats));
+}
+
+static inline void f64_to_stats(struct jls_statistics_s * stats, double * data, int64_t count) {
+    stats->k = count;
+    stats->mean = data[JLS_SUMMARY_FSR_MEAN];
+    stats->min = data[JLS_SUMMARY_FSR_MIN];
+    stats->max = data[JLS_SUMMARY_FSR_MAX];
+    if (count > 1) {
+        stats->s = ((double) data[JLS_SUMMARY_FSR_STD]) * data[JLS_SUMMARY_FSR_STD] * (count - 1);
+    } else {
+        stats->s = 0.0;
+    }
+}
+
+static inline void stats_to_f64(double * data, struct jls_statistics_s * stats) {
+    data[JLS_SUMMARY_FSR_MEAN] = stats->mean;
+    data[JLS_SUMMARY_FSR_MIN] = stats->min;
+    data[JLS_SUMMARY_FSR_MAX] = stats->max;
+    data[JLS_SUMMARY_FSR_STD] = sqrt(jls_statistics_var(stats));
 }
 
 static int32_t rd_stats_chunk(struct jls_rd_s * self, uint16_t signal_id, uint8_t level) {
@@ -977,7 +1026,7 @@ static int32_t fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
         ROE(jls_rd_fsr_f32_statistics(self, signal_id, start_sample_id, incr, f32_tmp4, 1));
         ROE(jls_raw_chunk_seek(self->raw, pos));
         ROE(rd_stats_chunk(self, signal_id, level));
-        floats_to_stats(&stats_accum, f32_tmp4, incr);
+        f32_to_stats(&stats_accum, f32_tmp4, incr);
         incr_remaining -= incr;
         start_sample_id += incr;
     }
@@ -1011,24 +1060,24 @@ static int32_t fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
         if (incr_remaining <= step_size) {
             if (data_length == 1) {
                 ROE(jls_rd_fsr_f32_statistics(self, signal_id, start_sample_id, incr_remaining, f32_tmp4, 1));
-                floats_to_stats(&stats_next, f32_tmp4, incr_remaining);
+                f32_to_stats(&stats_next, f32_tmp4, incr_remaining);
             } else {
-                floats_to_stats(&stats_next, src, incr_remaining);
+                f32_to_stats(&stats_next, src, incr_remaining);
             }
             jls_statistics_combine(&stats_accum, &stats_accum, &stats_next);
-            stats_to_float(data, &stats_accum);
+            stats_to_f32(data, &stats_accum);
             data += JLS_SUMMARY_FSR_COUNT;
             --data_length;
             int64_t incr = step_size - incr_remaining;
             if (incr) {
-                floats_to_stats(&stats_accum, src, incr);
+                f32_to_stats(&stats_accum, src, incr);
                 incr_remaining = increment - incr;
             } else {
                 jls_statistics_reset(&stats_accum);
                 incr_remaining = increment;
             }
         } else {
-            floats_to_stats(&stats_next, src, step_size);
+            f32_to_stats(&stats_next, src, step_size);
             jls_statistics_combine(&stats_accum, &stats_accum, &stats_next);
             incr_remaining -= step_size;
         }

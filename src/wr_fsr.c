@@ -550,6 +550,22 @@ int32_t jls_wr_fsr_data(struct jls_wr_fsr_s * self, int64_t sample_id, const voi
     uint8_t * dst_u8;
     uint8_t sample_size_bits = jls_datatype_parse_size(self->def.data_type);
 
+    // only support byte-aligned writes for now - enforce
+    switch (sample_size_bits) {
+        case 1:
+            if ((sample_id & 0x7) || (data_length & 0x7)) {
+                return JLS_ERROR_PARAMETER_INVALID;
+            }
+            break;
+        case 4:
+            if ((sample_id & 1) || (data_length & 1)) {
+                return JLS_ERROR_PARAMETER_INVALID;
+            }
+            break;
+        default:
+            break;
+    }
+
     if (!b) {
         ROE(sample_buffer_alloc(self));
         b = self->data;
@@ -563,7 +579,6 @@ int32_t jls_wr_fsr_data(struct jls_wr_fsr_s * self, int64_t sample_id, const voi
     }
 
     while (data_length) {
-        // todo handle sample_size_bits < 8, not byte aligned
         dst_u8 = (uint8_t *) &b->data[0];
         dst_u8 += (b->header.entry_count * sample_size_bits) / 8;
         uint32_t length = (uint32_t) (self->data_length - b->header.entry_count);

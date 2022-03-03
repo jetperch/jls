@@ -100,7 +100,24 @@ JLS_API int32_t jls_rd_signal(struct jls_rd_s * self, uint16_t signal_id, struct
 JLS_API int32_t jls_rd_fsr_length(struct jls_rd_s * self, uint16_t signal_id, int64_t * samples);
 
 /**
- * @brief Read float32 sample data.
+ * @brief Read fixed sample rate (FSR) data.
+ *
+ * @param self The reader instance.
+ * @param signal_id The signal id.
+ * @param start_sample_id The starting sample id to read.
+ * @param[out] data The samples read.
+ * @param data_length The number of samples to read.
+ *      data is at least this many samples.
+ *      For data types less than 8 bits long, you need to provide an
+ *      extra byte to allow for data shifting.  Therefore
+ *      data is at least 1 + (data_length * entry_size_bits) / 8 bytes.
+ * @return 0 or error code
+ */
+JLS_API int32_t jls_rd_fsr(struct jls_rd_s * self, uint16_t signal_id, int64_t start_sample_id,
+                           void * data, int64_t data_length);
+
+/**
+ * @brief Read fixed sample rate (FSR) float32 data.
  *
  * @param self The reader instance.
  * @param signal_id The signal id.

@@ -79,6 +79,7 @@ extensions = [
     setuptools.Extension('pyjls.binding',
         sources=[
             'pyjls/binding' + ext,
+            'src/bit_shift.c',
             'src/ec.c',
             'src/log.c',
             'src/msg_ring_buffer.c',

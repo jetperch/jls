@@ -29,6 +29,8 @@ function (ADD_CMOCKA_TEST _testName)
     add_test(${_testName} ${CMAKE_CURRENT_BINARY_DIR}/${_testName})
 endfunction (ADD_CMOCKA_TEST)
 
+ADD_CMOCKA_TEST(bit_shift_test)
+target_include_directories(bit_shift_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../include_prv)
 ADD_CMOCKA_TEST(crc32c_test)
 ADD_CMOCKA_TEST(raw_test)
 ADD_CMOCKA_TEST(jls_test)

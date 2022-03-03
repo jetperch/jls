@@ -610,16 +610,18 @@ static void test_fsr_uint(void **state) {
     (void) state;
     struct jls_wr_s * wr = NULL;
 
-    uint64_t source_data[1024];
+    uint64_t src_data_u64[1024];
+    uint64_t dst_data_u64[1024];
 
     uint32_t data_types[] = {
             JLS_DATATYPE_U1, JLS_DATATYPE_U4, JLS_DATATYPE_U8, JLS_DATATYPE_U16,
             JLS_DATATYPE_U24, JLS_DATATYPE_U32, JLS_DATATYPE_U64,
+            JLS_DATATYPE_I4, JLS_DATATYPE_I8, JLS_DATATYPE_I16,
+            JLS_DATATYPE_I24, JLS_DATATYPE_I32, JLS_DATATYPE_I64,
     };
 
-
-    for (size_t idx = 0; idx < ARRAY_SIZE(source_data); ++idx) {
-        source_data[idx] = (uint64_t) idx;
+    for (size_t idx = 0; idx < ARRAY_SIZE(src_data_u64); ++idx) {
+        src_data_u64[idx] = (uint64_t) idx;
     }
 
     struct jls_signal_def_s signal_7 = {
@@ -639,13 +641,12 @@ static void test_fsr_uint(void **state) {
     };
 
     for (uint32_t idx = 0; idx < ARRAY_SIZE(data_types); ++idx) {
-        // printf("idx = %d\n", idx);
         signal_7.data_type = data_types[idx];
         assert_int_equal(0, jls_wr_open(&wr, filename));
         assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_3));
         assert_int_equal(0, jls_wr_signal_def(wr, &signal_7));
-        uint32_t data_length = (sizeof(source_data) * 8) / jls_datatype_parse_size(signal_7.data_type);
-        assert_int_equal(0, jls_wr_fsr(wr, signal_7.signal_id, 0, source_data, data_length));
+        uint32_t data_length = (sizeof(src_data_u64) * 8) / jls_datatype_parse_size(signal_7.data_type);
+        assert_int_equal(0, jls_wr_fsr(wr, signal_7.signal_id, 0, src_data_u64, data_length));
         assert_int_equal(0, jls_wr_close(wr));
 
         struct jls_rd_s * rd = NULL;
@@ -660,17 +661,32 @@ static void test_fsr_uint(void **state) {
         assert_int_equal(0, jls_rd_fsr_length(rd, signal_7.signal_id, &samples));
         assert_int_equal(data_length, samples);
 
+        assert_int_equal(0, jls_rd_fsr(rd, signal_7.signal_id, 0, dst_data_u64, samples));
+        assert_memory_equal(src_data_u64, dst_data_u64, sizeof(src_data_u64));
 
-        // get last few samples
-        //assert_int_equal(0, jls_rd_fsr_f32(rd, 5, sample_count - 5, data, 5));
-        //assert_memory_equal(signal + sample_count - 5, data, 5 * sizeof(float));
+        if (idx == 0) {
+            uint64_t rd_u64[2];
+            assert_int_equal(0, jls_rd_fsr(rd, signal_7.signal_id, 64, rd_u64, 64));
+            assert_int_equal(src_data_u64[1], rd_u64[0]);
+            assert_int_equal(0, jls_rd_fsr(rd, signal_7.signal_id, 129, rd_u64, 64));
+            assert_int_equal((src_data_u64[2] >> 1) | (src_data_u64[3] << 63), rd_u64[0]);
+            assert_int_equal(0, jls_rd_fsr(rd, signal_7.signal_id, 511 * 64 + 3, rd_u64, 64));
+            assert_int_equal((src_data_u64[511] >> 3) | (src_data_u64[512] << 61), rd_u64[0]);
+        } else if (idx == 1) {
+            uint64_t rd_u64[2];
+            assert_int_equal(0, jls_rd_fsr(rd, signal_7.signal_id, 16, rd_u64, 16));
+            assert_int_equal(src_data_u64[1], rd_u64[0]);
+            assert_int_equal(0, jls_rd_fsr(rd, signal_7.signal_id, 33, rd_u64, 16));
+            assert_int_equal((src_data_u64[2] >> 4) | (src_data_u64[3] << 60), rd_u64[0]);
+            assert_int_equal(0, jls_rd_fsr(rd, signal_7.signal_id, 511 * 16 + 1, rd_u64, 16));
+            assert_int_equal((src_data_u64[511] >> 4) | (src_data_u64[512] << 60), rd_u64[0]);
+        }
 
         jls_rd_close(rd);
         remove(filename);
     }
 }
 
-// todo static void test_fsr_int(void **state)
 // todo static void test_fsr_uint_fp(void **state)
 // todo static void test_fsr_int_fp(void **state)
 
