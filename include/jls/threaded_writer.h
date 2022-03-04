@@ -52,6 +52,8 @@ JLS_API int32_t jls_twr_source_def(struct jls_twr_s * self, const struct jls_sou
 JLS_API int32_t jls_twr_signal_def(struct jls_twr_s * self, const struct jls_signal_def_s * signal);
 JLS_API int32_t jls_twr_user_data(struct jls_twr_s * self, uint16_t chunk_meta,
         enum jls_storage_type_e storage_type, const uint8_t * data, uint32_t data_size);
+JLS_API int32_t jls_twr_fsr(struct jls_twr_s * self, uint16_t signal_id,
+                            int64_t sample_id, const void * data, uint32_t data_length);
 JLS_API int32_t jls_twr_fsr_f32(struct jls_twr_s * self, uint16_t signal_id,
         int64_t sample_id, const float * data, uint32_t data_length);
 JLS_API int32_t jls_twr_annotation(struct jls_twr_s * self, uint16_t signal_id, int64_t timestamp,

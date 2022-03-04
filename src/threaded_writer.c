@@ -36,6 +36,7 @@ struct jls_twr_s {
     volatile int quit;
     volatile uint64_t flush_send_id;
     volatile uint64_t flush_processed_id;
+    uint8_t fsr_entry_size_bits[JLS_SIGNAL_COUNT];
     struct jls_mrb_s mrb;
     uint8_t mrb_buffer[];
 };
@@ -45,9 +46,10 @@ struct msg_header_user_data_s {
     uint8_t storage_type;
 };
 
-struct msg_header_fsr_f32_s {
+struct msg_header_fsr_s {
     uint16_t signal_id;
     int64_t sample_id;
+    uint32_t sample_count;
 };
 
 struct msg_header_annotation_s {
@@ -69,7 +71,7 @@ struct msg_header_s {
     uint8_t msg_type;
     union {
         struct msg_header_user_data_s user_data;
-        struct msg_header_fsr_f32_s fsr_f32;
+        struct msg_header_fsr_s fsr;
         struct msg_header_annotation_s annotation;
         struct msg_header_utc_s utc;
     } h;
@@ -80,7 +82,7 @@ enum message_e {
     MSG_CLOSE,          // no header data, no args
     MSG_FLUSH,          // no header data, no args
     MSG_USER_DATA,      // hdr.user_data, user_data
-    MSG_FSR_F32,        // hdr.fsr_f32, data
+    MSG_FSR,            // hdr.fsr_f32, data
     MSG_ANNOTATION,     // hdr.annotation, data
     MSG_UTC,            // hdr.utc, data
 };
@@ -131,9 +133,8 @@ int32_t jls_twr_run(struct jls_twr_s * self) {
                     rc = jls_wr_user_data(self->wr, hdr.h.user_data.chunk_meta, hdr.h.user_data.storage_type,
                                           payload, payload_sz);
                     break;
-                case MSG_FSR_F32:
-                    rc = jls_wr_fsr_f32(self->wr, hdr.h.fsr_f32.signal_id, hdr.h.fsr_f32.sample_id,
-                                        (const float *) payload, payload_sz / 4);
+                case MSG_FSR:
+                    rc = jls_wr_fsr(self->wr, hdr.h.fsr.signal_id, hdr.h.fsr.sample_id, payload, hdr.h.fsr.sample_count);
                     break;
                 case MSG_ANNOTATION:
                     rc = jls_wr_annotation(self->wr, hdr.h.annotation.signal_id, hdr.h.annotation.timestamp,
@@ -257,6 +258,7 @@ int32_t jls_twr_source_def(struct jls_twr_s * self, const struct jls_source_def_
 
 int32_t jls_twr_signal_def(struct jls_twr_s * self, const struct jls_signal_def_s * signal) {
     jls_bkt_process_lock(self->bk);
+    self->fsr_entry_size_bits[signal->signal_id] = jls_datatype_parse_size(signal->data_type);
     int32_t rv = jls_wr_signal_def(self->wr, signal);
     jls_bkt_process_unlock(self->bk);
     return rv;
@@ -277,19 +279,26 @@ int32_t jls_twr_user_data(struct jls_twr_s * self, uint16_t chunk_meta,
     return msg_send(self, &hdr, data, data_size);
 }
 
-int32_t jls_twr_fsr_f32(struct jls_twr_s * self, uint16_t signal_id,
-                        int64_t sample_id, const float * data, uint32_t data_length) {
+int32_t jls_twr_fsr(struct jls_twr_s * self, uint16_t signal_id,
+                    int64_t sample_id, const void * data, uint32_t data_length) {
     struct msg_header_s hdr = {
-            .msg_type = MSG_FSR_F32,
+            .msg_type = MSG_FSR,
             .h = {
-                    .fsr_f32 = {
+                    .fsr = {
                             .signal_id = signal_id,
                             .sample_id = sample_id,
+                            .sample_count = data_length,
                     }
             },
             .d = 0
     };
-    return msg_send(self, &hdr, (const uint8_t *) data, data_length * sizeof(float));
+    uint32_t length = (data_length * self->fsr_entry_size_bits[signal_id] + 7) / 8;
+    return msg_send(self, &hdr, (const uint8_t *) data, length);
+}
+
+int32_t jls_twr_fsr_f32(struct jls_twr_s * self, uint16_t signal_id,
+                        int64_t sample_id, const float * data, uint32_t data_length) {
+    return jls_twr_fsr(self, signal_id, sample_id, data, data_length);
 }
 
 int32_t jls_twr_annotation(struct jls_twr_s * self, uint16_t signal_id, int64_t timestamp,
