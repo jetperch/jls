@@ -80,6 +80,7 @@ extensions = [
         sources=[
             'pyjls/binding' + ext,
             'src/bit_shift.c',
+            'src/datatype.c',
             'src/ec.c',
             'src/log.c',
             'src/msg_ring_buffer.c',
@@ -92,7 +93,7 @@ extensions = [
             'src/writer.c',
         ] + sources,
         include_dirs=['include', 'include_prv', np.get_include()],
-        libraries = libraries,
+        libraries=libraries,
         extra_compile_args=[] + extra_compile_args,
     ),
 ]

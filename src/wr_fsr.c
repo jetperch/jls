@@ -16,6 +16,7 @@
 
 #include "jls/wr_fsr.h"
 #include "jls/cdef.h"
+#include "jls/datatype.h"
 #include "jls/wr_prv.h"
 #include "jls/ec.h"
 #include "jls/log.h"
@@ -423,76 +424,11 @@ static int32_t summaryN(struct jls_wr_fsr_s * self, uint8_t level, int64_t pos) 
     return 0;
 }
 
-static inline int8_t uint4_to_int8(uint8_t k) {
-    k = k & 0x0f;
-    if (k & 0x08) {
-        k |= 0xf0;
-    }
-    return (int8_t) k;
-}
-
-#define TO_DOUBLE(type_) { \
-    const type_ * s = (const type_ *) &self->data->data[0]; \
-    for (uint32_t i = 0; i < count; ++i) { \
-        *d++ = (double) *s++; \
-    } \
-    break; \
-}
-
 static void data_to_f64(struct jls_wr_fsr_s * self) {
-    double * d = self->data_f64;
+    void * src = &self->data->data[0];
+    double * dst = self->data_f64;
     const uint32_t count = self->data->header.entry_count;
-    switch (self->def.data_type & 0xffff) {
-        case JLS_DATATYPE_I4: {
-            const uint8_t *s = (const uint8_t *) &self->data->data[0];
-            for (uint32_t i = 0; i < count; i += 2) {
-                uint8_t k = s[i >> 1];
-                d[i + 0] = (double) uint4_to_int8(k);
-                d[i + 1] = (double) uint4_to_int8(k >> 4);
-            }
-            break;
-        }
-        case JLS_DATATYPE_I8: TO_DOUBLE(int8_t);
-        case JLS_DATATYPE_I16: TO_DOUBLE(int16_t);
-        // case JLS_DATATYPE_I24: break; todo
-        case JLS_DATATYPE_I32: TO_DOUBLE(int32_t);
-        case JLS_DATATYPE_I64: TO_DOUBLE(int64_t);
-        case JLS_DATATYPE_U1: {
-            const uint8_t *s = (const uint8_t *) &self->data->data[0];
-            for (uint32_t i = 0; i < (count / 8); ++i) {
-                uint8_t k = s[i];
-                *d++ = (double) ((k >> 0) & 1);
-                *d++ = (double) ((k >> 1) & 1);
-                *d++ = (double) ((k >> 2) & 1);
-                *d++ = (double) ((k >> 3) & 1);
-                *d++ = (double) ((k >> 4) & 1);
-                *d++ = (double) ((k >> 5) & 1);
-                *d++ = (double) ((k >> 6) & 1);
-                *d++ = (double) ((k >> 7) & 1);
-            }
-            break;
-        }
-        case JLS_DATATYPE_U4:  {
-            const uint8_t *s = (const uint8_t *) &self->data->data[0];
-            for (uint32_t i = 0; i < count; i += 2) {
-                uint8_t k = s[i >> 1];
-                d[i + 0] = (double) (k & 0x0f);
-                d[i + 1] = (double) ((k >> 4) & 0x0f);
-            }
-            break;
-        }
-        case JLS_DATATYPE_U8: TO_DOUBLE(uint8_t);
-        case JLS_DATATYPE_U16: TO_DOUBLE(uint16_t);
-        // case JLS_DATATYPE_U24: break;  todo
-        case JLS_DATATYPE_U32: TO_DOUBLE(uint32_t);
-        case JLS_DATATYPE_U64: TO_DOUBLE(uint64_t);
-
-        case JLS_DATATYPE_F32: TO_DOUBLE(float);
-        case JLS_DATATYPE_F64: TO_DOUBLE(double);
-        default:
-            JLS_LOGW("Invalid data type: 0x%08x", self->def.data_type);
-            break;
-    }
+    jls_dt_buffer_to_f64(src, self->def.data_type, dst, count);
 }
 
 static int32_t summary1(struct jls_wr_fsr_s * self, int64_t pos) {

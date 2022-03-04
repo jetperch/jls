@@ -1125,12 +1125,13 @@ int32_t jls_rd_fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
     ROE(f32_buf_alloc(self, (size_t) increment));
     struct f32_buf_s * b = self->f32_buf;
     int64_t buf_offset = 0;
+    uint8_t entry_size_bits = jls_datatype_parse_size(signal_def->data_type);
 
     ROE(fsr_seek(self, signal_id, 0, start_sample_id));
     ROE(rd(self));
     struct jls_fsr_data_s * s = (struct jls_fsr_data_s *) self->payload.start;
     int64_t chunk_sample_id = s->header.timestamp;
-    if (s->header.entry_size_bits != sizeof(float) * 8) {
+    if (s->header.entry_size_bits != entry_size_bits) {
         JLS_LOGE("invalid data entry size: %d", (int) s->header.entry_size_bits);
         return JLS_ERROR_PARAMETER_INVALID;
     }
@@ -1140,8 +1141,8 @@ int32_t jls_rd_fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
         src += start_sample_id - chunk_sample_id;
     }
     double v_mean = 0.0;
-    float v_min = FLT_MAX;
-    float v_max = -FLT_MAX;
+    double v_min = DBL_MAX;
+    double v_max = -DBL_MAX;
     double v_var = 0.0;
     double mean_scale = 1.0 / increment;
     double var_scale = 1.0;
@@ -1161,7 +1162,7 @@ int32_t jls_rd_fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
                 JLS_LOGW("unexpected chunk meta: %d", (int) self->chunk_cur.hdr.chunk_meta);
             }
             s = (struct jls_fsr_data_s *) self->payload.start;
-            if (s->header.entry_size_bits != sizeof(float) * 8) {
+            if (s->header.entry_size_bits != entry_size_bits) {
                 JLS_LOGE("invalid data entry size: %d", (int) s->header.entry_size_bits);
                 return JLS_ERROR_PARAMETER_INVALID;
             }
@@ -1189,15 +1190,15 @@ int32_t jls_rd_fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
             v_var *= var_scale;
 
             data[JLS_SUMMARY_FSR_MEAN] = (float) v_mean;
-            data[JLS_SUMMARY_FSR_MIN] = v_min;
-            data[JLS_SUMMARY_FSR_MAX] = v_max;
+            data[JLS_SUMMARY_FSR_MIN] = (float) v_min;
+            data[JLS_SUMMARY_FSR_MAX] = (float) v_max;
             data[JLS_SUMMARY_FSR_STD] = (float) sqrt(v_var);
             data += JLS_SUMMARY_FSR_COUNT;
 
             buf_offset = 0;
             v_mean = 0.0;
-            v_min = FLT_MAX;
-            v_max = -FLT_MAX;
+            v_min = DBL_MAX;
+            v_max = -DBL_MAX;
             --data_length;
         }
     }

@@ -16,6 +16,7 @@ include_directories(../include_prv)
 
 set(SOURCES
         bit_shift.c
+        datatype.c
         ec.c
         log.c
         msg_ring_buffer.c
