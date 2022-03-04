@@ -442,6 +442,7 @@ static int32_t summary1(struct jls_wr_fsr_s * self, int64_t pos) {
 
     double * data = self->data_f64;
     const double scale = 1.0 / self->def.sample_decimate_factor;
+    const double var_scale = 1.0 / (self->def.sample_decimate_factor - 1);  // for sample variance
     // JLS_LOGI("1 add %" PRIi64 " @ %" PRIi64 " %p", pos, dst->index->offset, &dst->index->data[dst->index->offset]);
     dst->index->offsets[dst->index->header.entry_count++] = pos;
 
@@ -470,7 +471,7 @@ static int32_t summary1(struct jls_wr_fsr_s * self, int64_t pos) {
             v_var += v * v;
             ++sample_idx;
         }
-        v_var *= scale;
+        v_var *= var_scale;
         summary_entry_add(self, 1, v_mean, v_min, v_max, v_var);
     }
 

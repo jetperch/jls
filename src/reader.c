@@ -17,6 +17,7 @@
 #include "jls/reader.h"
 #include "jls/raw.h"
 #include "jls/format.h"
+#include "jls/datatype.h"
 #include "jls/ec.h"
 #include "jls/log.h"
 #include "jls/crc32c.h"
@@ -34,7 +35,7 @@
 #define PAYLOAD_BUFFER_SIZE_DEFAULT (1 << 25)   // 32 MB
 #define STRING_BUFFER_SIZE_DEFAULT (1 << 23)    // 8 MB
 #define ANNOTATIONS_SIZE_DEFAULT (1 << 20)      // 1 MB
-#define F32_BUF_LENGTH_MIN (1 << 16)
+#define F64_BUF_LENGTH_MIN (1 << 16)
 #define SIGNAL_MASK  (0x0fff)
 #define DECIMATE_PER_DURATION (25)
 
@@ -94,10 +95,11 @@ struct strings_s {
     char * end;
 };
 
-struct f32_buf_s {
-    float * start;
-    float * end;
-    size_t alloc_length;  // in float
+struct f64_buf_s {
+    double * start;
+    double * end;
+    size_t alloc_length;  // in double
+    double buffer[];
 };
 
 struct signal_s {
@@ -122,7 +124,8 @@ struct jls_rd_s {
     struct payload_s payload;
     struct strings_s * strings_tail;
     struct strings_s * strings_head;
-    struct f32_buf_s * f32_buf;
+    struct f64_buf_s * f64_sample_buf;
+    struct f64_buf_s * f64_stats_buf;
 
     struct chunk_s source_head;  // source_def
     struct chunk_s signal_head;  // signal_det, track_*_def, track_*_head
@@ -158,29 +161,27 @@ static void strings_free(struct jls_rd_s * self) {
     }
 }
 
-static void f32_buf_free(struct jls_rd_s * self) {
-    if (self->f32_buf) {
-        free(self->f32_buf);
-        self->f32_buf = NULL;
+static int32_t f64_buf_alloc(size_t length, struct f64_buf_s ** buf) {
+    if (*buf) {
+        if ((*buf)->alloc_length >= (size_t) length) {
+            return 0;
+        } else {
+            free(*buf);
+            *buf = NULL;
+        }
     }
-}
 
-static int32_t f32_buf_alloc(struct jls_rd_s * self, size_t length) {
-    if ((self->f32_buf) && (self->f32_buf->alloc_length >= length)) {
-        return 0;
+    if (length < F64_BUF_LENGTH_MIN) {
+        length = F64_BUF_LENGTH_MIN;
     }
-    f32_buf_free(self);
-    if (length < F32_BUF_LENGTH_MIN) {
-        length = F32_BUF_LENGTH_MIN;
-    }
-    struct f32_buf_s * b = malloc(sizeof(struct f32_buf_s) + length * sizeof(float));
+    struct f64_buf_s * b = malloc(sizeof(struct f64_buf_s) + length * sizeof(double));
     if (!b) {
         return JLS_ERROR_NOT_ENOUGH_MEMORY;
     }
-    b->start = (float *) &b[1];
-    b->end = b->start + length;
+    b->start = b->buffer;
+    b->end = b->buffer + length;
     b->alloc_length = length;
-    self->f32_buf = b;
+    *buf = b;
     return 0;
 }
 
@@ -587,6 +588,14 @@ void jls_rd_close(struct jls_rd_s * self) {
         if (self->payload.start) {
             free(self->payload.start);
             self->payload.start = NULL;
+        }
+        if (self->f64_stats_buf) {
+            free(self->f64_stats_buf);
+            self->f64_stats_buf = NULL;
+        }
+        if (self->f64_sample_buf) {
+            free(self->f64_sample_buf);
+            self->f64_sample_buf = NULL;
         }
         self->raw = NULL;
         free(self);
@@ -1005,6 +1014,7 @@ static int32_t fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
 
     struct jls_fsr_f32_summary_s * summary = (struct jls_fsr_f32_summary_s *) self->payload.start;
     if (summary->header.entry_size_bits != JLS_SUMMARY_FSR_COUNT * sizeof(float) * 8) {
+        // float64 statistics not yet supported
         JLS_LOGE("invalid summary entry size: %d", (int) summary->header.entry_size_bits);
         return JLS_ERROR_PARAMETER_INVALID;
     }
@@ -1122,10 +1132,14 @@ int32_t jls_rd_fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
     JLS_LOGD2("f32(signal_id=%d, start_id=%" PRIi64 ", incr=%" PRIi64 ", level=0, len=%" PRIi64 ")",
               (int) signal_id, start_sample_id, increment, data_length);
 
-    ROE(f32_buf_alloc(self, (size_t) increment));
-    struct f32_buf_s * b = self->f32_buf;
+    ROE(f64_buf_alloc((size_t) increment, &self->f64_stats_buf));
+    ROE(f64_buf_alloc((size_t) signal_def->samples_per_data, &self->f64_sample_buf));
     int64_t buf_offset = 0;
     uint8_t entry_size_bits = jls_datatype_parse_size(signal_def->data_type);
+    if (entry_size_bits > 32) {
+        JLS_LOGE("entry_size > 64 (float64 stats) not yet supported");
+        return JLS_ERROR_UNSUPPORTED_FILE;
+    }
 
     ROE(fsr_seek(self, signal_id, 0, start_sample_id));
     ROE(rd(self));
@@ -1135,8 +1149,9 @@ int32_t jls_rd_fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
         JLS_LOGE("invalid data entry size: %d", (int) s->header.entry_size_bits);
         return JLS_ERROR_PARAMETER_INVALID;
     }
-    float * src = &s->data[0];
-    float * src_end = &s->data[s->header.entry_count];
+    jls_dt_buffer_to_f64(&s->data[0], signal_def->data_type, self->f64_sample_buf->start, signal_def->samples_per_data);
+    double * src = &self->f64_sample_buf->start[0];
+    double * src_end = &self->f64_sample_buf->start[s->header.entry_count];
     if (start_sample_id > chunk_sample_id) {
         src += start_sample_id - chunk_sample_id;
     }
@@ -1149,7 +1164,7 @@ int32_t jls_rd_fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
     if (increment > 1) {
         var_scale = 1.0 / (increment - 1.0);
     }
-    float v;
+    double v;
 
     while (data_length > 0) {
         if (src >= src_end) {
@@ -1167,8 +1182,9 @@ int32_t jls_rd_fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
                 return JLS_ERROR_PARAMETER_INVALID;
             }
             chunk_sample_id = s->header.timestamp;
-            src = &s->data[0];
-            src_end = &s->data[s->header.entry_count];
+            jls_dt_buffer_to_f64(&s->data[0], signal_def->data_type, self->f64_sample_buf->start, signal_def->samples_per_data);
+            src = &self->f64_sample_buf->start[0];
+            src_end = &self->f64_sample_buf->start[s->header.entry_count];
         }
         v = *src++;
         v_mean += v;
@@ -1178,13 +1194,13 @@ int32_t jls_rd_fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
         if (v > v_max) {
             v_max = v;
         }
-        b->start[buf_offset++] = v;
+        self->f64_stats_buf->start[buf_offset++] = v;
 
         if (buf_offset >= increment) {
             v_mean *= mean_scale;
             v_var = 0.0;
             for (int64_t i = 0; i < increment; ++i) {
-                double v_diff = b->start[i] - v_mean;
+                double v_diff = self->f64_stats_buf->start[i] - v_mean;
                 v_var += v_diff * v_diff;
             }
             v_var *= var_scale;
