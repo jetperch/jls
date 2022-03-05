@@ -100,9 +100,9 @@ cdef extern from "jls/threaded_writer.h":
     int32_t jls_twr_signal_def(jls_twr_s * self, const jls_signal_def_s * signal)
     int32_t jls_twr_user_data(jls_twr_s * self, uint16_t chunk_meta,
             jls_storage_type_e storage_type, const uint8_t * data, uint32_t data_size)
-    int32_t jls_twr_fsr_f32(jls_twr_s * self, uint16_t signal_id,
-            int64_t sample_id, const float * data, uint32_t data_length)
-    int32_t jls_twr_annotation(jls_twr_s * self, uint16_t signal_id, 
+    int32_t jls_twr_fsr(jls_twr_s * self, uint16_t signal_id,
+            int64_t sample_id, const void * data, uint32_t data_length)
+    int32_t jls_twr_annotation(jls_twr_s * self, uint16_t signal_id,
             int64_t timestamp,
             float y,
             jls_annotation_type_e annotation_type,
@@ -121,7 +121,7 @@ cdef extern from "jls/reader.h":
     int32_t jls_rd_signals(jls_rd_s * self, jls_signal_def_s ** signals, uint16_t * count)
     int32_t jls_rd_signal(jls_rd_s * self, uint16_t signal_id, jls_signal_def_s * signal)
     int32_t jls_rd_fsr_length(jls_rd_s * self, uint16_t signal_id, int64_t * samples)
-    int32_t jls_rd_fsr_f32(jls_rd_s * self, uint16_t signal_id, int64_t start_sample_id, float * data, int64_t data_length)
+    int32_t jls_rd_fsr(jls_rd_s * self, uint16_t signal_id, int64_t start_sample_id, void * data, int64_t data_length)
     int32_t jls_rd_fsr_f32_statistics(jls_rd_s * self, uint16_t signal_id,
         int64_t start_sample_id, int64_t increment, float * data, int64_t data_length)
     ctypedef int32_t (*jls_rd_annotation_cbk_fn)(void * user_data, const jls_annotation_s * annotation)

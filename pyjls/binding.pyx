@@ -57,7 +57,40 @@ class _DataTypeBase:
 
 
 class DataType:
+    U1 = _data_type_def(_DataTypeBase.UINT, 1, 0)
+    U4 = _data_type_def(_DataTypeBase.UINT, 4, 0)
+    U8 = _data_type_def(_DataTypeBase.UINT, 8, 0)
+    U16 = _data_type_def(_DataTypeBase.UINT, 16, 0)
+    U32 = _data_type_def(_DataTypeBase.UINT, 32, 0)
+    U64 = _data_type_def(_DataTypeBase.UINT, 64, 0)
+
+    I4 = _data_type_def(_DataTypeBase.INT, 4, 0)
+    I8 = _data_type_def(_DataTypeBase.INT, 8, 0)
+    I16 = _data_type_def(_DataTypeBase.INT, 16, 0)
+    I32 = _data_type_def(_DataTypeBase.INT, 32, 0)
+    I64 = _data_type_def(_DataTypeBase.INT, 64, 0)
+
     F32 = _data_type_def(_DataTypeBase.FLOAT, 32, 0)
+    F64 = _data_type_def(_DataTypeBase.FLOAT, 64, 0)
+
+
+_data_type_map = {
+    DataType.U1: np.uint8,      # packed
+    DataType.U4: np.uint8,      # packed
+    DataType.U8: np.uint8,
+    DataType.U16: np.uint16,
+    DataType.U32: np.uint32,
+    DataType.U64: np.uint64,
+
+    DataType.I4: np.uint8,      # packed
+    DataType.I8: np.int8,
+    DataType.I16: np.int16,
+    DataType.I32: np.int32,
+    DataType.I64: np.int64,
+
+    DataType.F32: np.float32,
+    DataType.F64: np.float64,
+}
 
 
 class AnnotationType:
@@ -263,11 +296,30 @@ cdef class Writer:
             raise RuntimeError(f'user_data failed {rc}')
 
     def fsr_f32(self, signal_id, sample_id, data):
+        return self.fsr(signal_id, sample_id, data)
+
+    def fsr(self, signal_id, sample_id, data):
         cdef int32_t rc
-        cdef np.float32_t [::1] f32 = data
-        rc = c_jls.jls_twr_fsr_f32(self._wr, signal_id, sample_id, &f32[0], len(data))
+        cdef np.uint8_t [::1] u8
+        cdef uint32_t data_type
+        cdef uint32_t entry_size_bits
+        cdef uint32_t length
+
+        data_type = self._signals[signal_id].data_type
+        entry_size_bits = (data_type >> 8) & 0xff
+        np_type = _data_type_map[data_type & 0xffff]
+        if np_type != data.dtype:
+            raise ValueError(f'Data type mismatch {data.dtype} != {np_type}')
+        data_u8 = data.view(dtype=np.uint8)
+        u8 = data_u8
+        length = len(data)
+        if entry_size_bits == 4:
+            length *= 2
+        elif entry_size_bits == 1:
+            length *= 8
+        rc = c_jls.jls_twr_fsr(self._wr, signal_id, sample_id, &u8[0], length)
         if rc:
-            raise RuntimeError(f'fsr_f32 failed {rc}')
+            raise RuntimeError(f'fsr failed {rc}')
 
     def annotation(self, signal_id, timestamp, y, annotation_type, group_id, data):
         cdef int32_t rc
@@ -375,10 +427,26 @@ cdef class Reader:
 
     def fsr(self, signal_id, start_sample_id, length):
         cdef int32_t rc
-        cdef np.float32_t [::1] c_data
-        data = np.empty(length, dtype=np.float32)
-        c_data = data
-        rc = c_jls.jls_rd_fsr_f32(self._rd, signal_id, start_sample_id, &c_data[0], length)
+        cdef np.uint8_t [::1] u8
+        cdef uint32_t data_type
+        cdef uint32_t entry_size_bits
+        cdef uint32_t u8_length
+
+        data_type = self._signals[signal_id].data_type
+        entry_size_bits = (data_type >> 8) & 0xff
+        np_type = _data_type_map[data_type & 0xffff]
+        u8_length = length
+        if entry_size_bits == 4:
+            u8_length = (length + 1) // 2
+        elif entry_size_bits == 1:
+            u8_length = (length + 7) // 8
+        else:
+            u8_length *= entry_size_bits // 8
+
+        data_u8 = np.empty(u8_length, dtype=np.uint8)
+        data = data_u8.view(dtype=np_type)
+        u8 = data_u8
+        rc = c_jls.jls_rd_fsr(self._rd, signal_id, start_sample_id, &u8[0], length)
         if rc:
             raise RuntimeError(f'fsr failed {rc}')
         return data

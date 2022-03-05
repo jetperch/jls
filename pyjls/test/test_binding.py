@@ -12,11 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from pyjls.binding import Writer, Reader, SummaryFSR, jls_inject_log
+from pyjls.binding import Writer, Reader, SummaryFSR, DataType, jls_inject_log
 import io
 import logging
 from logging import StreamHandler
-import numpy as np
 import os
 import tempfile
 import unittest
@@ -70,7 +69,7 @@ class TestBinding(unittest.TestCase):
             w.source_def(source_id=1, name='name', vendor='vendor', model='model',
                          version='version', serial_number='serial_number')
             w.signal_def(3, source_id=1, sample_rate=1000000, name='current', units='A')
-            w.fsr_f32(3, 0, data)
+            w.fsr(3, 0, data)
 
         with Reader(self._path) as r:
             self.assertEqual(2, len(r.sources))
@@ -101,12 +100,41 @@ class TestBinding(unittest.TestCase):
             self.assertEqual(len(data), s.length)
 
             np.testing.assert_allclose(data, r.fsr(3, 0, len(data)))
-            e_std = np.std(data, dtype=np.float64) * (len(data) / (len(data) - 1))
             stats = r.fsr_statistics(3, 0, len(data), 1)
             np.testing.assert_allclose(np.mean(data, dtype=np.float64), stats[0, SummaryFSR.MEAN])
             np.testing.assert_allclose(np.min(data), stats[0, SummaryFSR.MIN])
             np.testing.assert_allclose(np.max(data), stats[0, SummaryFSR.MAX])
-            np.testing.assert_allclose(e_std, stats[0, SummaryFSR.STD], rtol=1e-4)
+            np.testing.assert_allclose(np.std(data, ddof=1), stats[0, SummaryFSR.STD], rtol=1e-6)
+
+    def test_fsr_u1(self):
+        data = np.zeros(1024, dtype=np.uint8)
+        data[1::2] = 1
+        src = np.packbits(data, bitorder='little')
+
+        with Writer(self._path) as w:
+            w.source_def(source_id=1, name='name', vendor='vendor', model='model',
+                         version='version', serial_number='serial_number')
+            w.signal_def(3, source_id=1, data_type=DataType.U1, sample_rate=1000000, name='current', units='A')
+            w.fsr(3, 0, src)
+
+        with Reader(self._path) as r:
+            self.assertEqual(2, len(r.sources))
+            self.assertEqual([0, 1], sorted(r.sources.keys()))
+            self.assertEqual(1, r.sources[1].source_id)
+            self.assertEqual(2, len(r.signals))
+            s = r.signals[3]
+            self.assertEqual(DataType.U1, r.signals[3].data_type)
+            self.assertEqual(len(data), s.length)
+
+            dst = r.fsr(3, 0, s.length)
+            dst_data = np.unpackbits(dst, count=s.length, bitorder='little')
+            np.testing.assert_allclose(data, dst_data)
+
+            stats = r.fsr_statistics(3, 0, s.length, 1)
+            np.testing.assert_allclose(np.mean(data), stats[0, SummaryFSR.MEAN])
+            np.testing.assert_allclose(np.min(data), stats[0, SummaryFSR.MIN])
+            np.testing.assert_allclose(np.max(data), stats[0, SummaryFSR.MAX])
+            np.testing.assert_allclose(np.std(data, ddof=1), stats[0, SummaryFSR.STD], rtol=1e-6)
 
     def test_user_data(self):
         data = [
