@@ -458,14 +458,14 @@ cdef class Reader:
         :param start_sample_id: The starting sample id to read.
         :param increment: The number of samples represented per return value.
         :param length: The number of return values to generate.
-        :return The 2-D array[summary][stat] where the stat column is defined by SummaryFSR.
+        :return The 2-D array[summary][stat] of np.float32 where the stat column is defined by SummaryFSR.
         """
 
         cdef int32_t rc
-        cdef np.float32_t [:, :] c_data
-        data = np.empty((length, c_jls.JLS_SUMMARY_FSR_COUNT), dtype=np.float32)
+        cdef np.float64_t [:, :] c_data
+        data = np.empty((length, c_jls.JLS_SUMMARY_FSR_COUNT), dtype=np.float64)
         c_data = data
-        rc = c_jls.jls_rd_fsr_f32_statistics(self._rd, signal_id, start_sample_id, increment, &c_data[0, 0], length)
+        rc = c_jls.jls_rd_fsr_statistics(self._rd, signal_id, start_sample_id, increment, &c_data[0, 0], length)
         if rc:
             raise RuntimeError(f'fsr_statistics failed {rc}')
         return data

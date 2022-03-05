@@ -6,12 +6,15 @@ This file contains the list of changes made to the JLS project.
 
 ## 0.4.0
 
-2022 Feb 23 [in progress]
+2022 Mar 5 [in progress]
 
-* Added support for additional data types:  [in progress]
+* Added support for additional data types (was only f32):
   * Signed Integer: i4, i8, i16, i24, i32, i64
   * Unsigned Integer: u1, u4, u8, u16, u24, u32, u64
   * Float: f64
+  * Fixed point signed & unsigned integers.
+* Renamed jls_rd_fsr_f32_statistics to jls_rd_fsr_statistics, which now
+  always returns statistics as double (f64). 
 
 
 ## 0.3.4

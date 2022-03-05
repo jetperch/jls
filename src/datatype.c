@@ -18,6 +18,7 @@
 #include "jls/format.h"
 #include "jls/ec.h"
 #include "jls/log.h"
+#include <math.h>
 
 
 static inline int8_t uint4_to_int8(uint8_t k) {
@@ -87,6 +88,15 @@ int32_t jls_dt_buffer_to_f64(const void * src, uint32_t src_datatype, double * d
         default:
             JLS_LOGW("Invalid data type: 0x%08x", src_datatype);
             return JLS_ERROR_PARAMETER_INVALID;
+    }
+
+    // fixed point support
+    int8_t fp = (src_datatype & 0xff) >> 16;
+    if ((src_datatype & JLS_DATATYPE_BASETYPE_UINT) && fp) {
+        double scale = pow(2.0, fp);
+        for (uint32_t i = 0; i < samples; ++i) {
+            dst[i] *= scale;
+        }
     }
     return 0;
 }

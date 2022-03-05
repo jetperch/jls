@@ -62,6 +62,19 @@ static inline uint8_t sample_size_bits(struct jls_wr_fsr_s * self) {
     return jls_datatype_parse_size(self->def.data_type);
 }
 
+static inline uint8_t summary_entry_size(struct jls_wr_fsr_s * self) {
+    switch (self->def.data_type & 0xffff) {
+        case JLS_DATATYPE_I32: // intentional fall-through
+        case JLS_DATATYPE_I64: // intentional fall-through
+        case JLS_DATATYPE_U32: // intentional fall-through
+        case JLS_DATATYPE_U64: // intentional fall-through
+        case JLS_DATATYPE_F64:
+            return 64;
+        default:
+            return 32;
+    }
+}
+
 static int32_t sample_buffer_alloc(struct jls_wr_fsr_s * self) {
     size_t sample_buffer_sz = sizeof(struct jls_payload_header_s) + (sample_size_bits(self) * self->def.samples_per_data) / 8;
     self->data = malloc(sample_buffer_sz);
@@ -106,7 +119,7 @@ static int32_t summary_alloc(struct jls_wr_fsr_s * self, uint8_t level) {
         index_entries = self->def.summary_decimate_factor;
     }
 
-    size_t dt_sz_bits = (sample_size_bits(self) > 32) ? 64 : 32;
+    size_t dt_sz_bits = summary_entry_size(self);
     size_t buffer_sz = sizeof(struct jls_fsr_f32_summary_s)
             + (self->def.entries_per_summary * JLS_SUMMARY_FSR_COUNT * dt_sz_bits) / 8;
     size_t index_sz = sizeof(struct jls_fsr_index_s) + index_entries * sizeof(int64_t);
@@ -280,7 +293,7 @@ static int32_t wr_summary(struct jls_wr_fsr_s * self, uint8_t level) {
     ROE(wr_index(self, level));
 
     uint8_t * p_start = (uint8_t *) dst->summary;
-    uint8_t * p_end = (uint8_t *) &dst->summary->data[JLS_SUMMARY_FSR_COUNT * dst->summary->header.entry_count];
+    uint8_t * p_end = (uint8_t *) dst->summary->data[dst->summary->header.entry_count];
     uint32_t payload_len = (uint32_t) (p_end - p_start);
     ROE(jls_wr_summary_prv(self->wr, self->def.signal_id, JLS_TRACK_TYPE_FSR, level, p_start, payload_len));
     ROE(summaryN(self, level + 1, pos_next));
@@ -344,7 +357,7 @@ static void summary_entry_add(struct jls_wr_fsr_s * self, uint8_t level,
         double v_mean, double v_min, double v_max, double v_var) {
     struct level_s * dst = self->level[level];
     uint32_t dst_offset = dst->summary->header.entry_count * JLS_SUMMARY_FSR_COUNT;
-    if (sample_size_bits(self) > 32) {
+    if (summary_entry_size(self) == 64) {
         double * data = (double *) dst->summary->data;
         data[dst_offset + JLS_SUMMARY_FSR_MEAN] = v_mean;
         data[dst_offset + JLS_SUMMARY_FSR_MIN] = v_min;
@@ -410,11 +423,11 @@ static int32_t summaryN(struct jls_wr_fsr_s * self, uint8_t level, int64_t pos) 
     dst->index->offsets[dst->index->header.entry_count++] = pos;
 
     uint32_t summaries_per = (uint32_t) (src->summary->header.entry_count / self->def.summary_decimate_factor);
-    if (sample_size_bits(self) > 32) {
-        double * src_data = ((struct jls_fsr_f64_summary_s *) src->summary)->data;
+    if (summary_entry_size(self) == 64) {
+        double * src_data = ((struct jls_fsr_f64_summary_s *) src->summary)->data[0];
         SUMMARYN_BODY_TEMPLATE();
     } else {
-        float * src_data = src->summary->data;
+        float * src_data = src->summary->data[0];
         SUMMARYN_BODY_TEMPLATE();
     }
 

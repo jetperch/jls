@@ -122,8 +122,8 @@ cdef extern from "jls/reader.h":
     int32_t jls_rd_signal(jls_rd_s * self, uint16_t signal_id, jls_signal_def_s * signal)
     int32_t jls_rd_fsr_length(jls_rd_s * self, uint16_t signal_id, int64_t * samples)
     int32_t jls_rd_fsr(jls_rd_s * self, uint16_t signal_id, int64_t start_sample_id, void * data, int64_t data_length)
-    int32_t jls_rd_fsr_f32_statistics(jls_rd_s * self, uint16_t signal_id,
-        int64_t start_sample_id, int64_t increment, float * data, int64_t data_length)
+    int32_t jls_rd_fsr_statistics(jls_rd_s * self, uint16_t signal_id,
+        int64_t start_sample_id, int64_t increment, double * data, int64_t data_length)
     ctypedef int32_t (*jls_rd_annotation_cbk_fn)(void * user_data, const jls_annotation_s * annotation)
     int32_t jls_rd_annotations(jls_rd_s * self, uint16_t signal_id,
         int64_t timestamp, jls_rd_annotation_cbk_fn cbk_fn, void * cbk_user_data)

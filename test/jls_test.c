@@ -90,6 +90,22 @@ const struct jls_signal_def_s SIGNAL_6 = {
         .units = "V",
 };
 
+const struct jls_signal_def_s SIGNAL_8 = {
+        .signal_id = 8,
+        .source_id = 3,
+        .signal_type = JLS_SIGNAL_TYPE_FSR,
+        .data_type = JLS_DATATYPE_F64,
+        .sample_rate = 100000,
+        .samples_per_data = 1000,
+        .sample_decimate_factor = 100,
+        .entries_per_summary = 200,
+        .summary_decimate_factor = 100,
+        .annotation_decimate_factor = 100,
+        .utc_decimate_factor = 100,
+        .name = "signal 8",
+        .units = "A",
+};
+
 #if !SKIP_BASIC
 static void test_source(void **state) {
     (void) state;
@@ -538,7 +554,7 @@ static void test_fsr_f32(void **state) {
     remove(filename);
 }
 
-static void compare_stats(float * data, float * src, size_t src_length) {
+static void compare_stats_f32(double * data, float * src, size_t src_length) {
     struct jls_statistics_s s1;
     jls_statistics_reset(&s1);
     jls_statistics_compute_f32(&s1, src, src_length);
@@ -560,46 +576,74 @@ static void test_fsr_f32_statistics(void **state) {
     assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_3));
     assert_int_equal(0, jls_wr_signal_def(wr, &SIGNAL_5));
     assert_true(sample_count <= UINT32_MAX);
-    assert_int_equal(0, jls_wr_fsr_f32(wr, 5, 0, signal, (uint32_t) sample_count));
+    assert_int_equal(0, jls_wr_fsr(wr, 5, 0, signal, (uint32_t) sample_count));
     assert_int_equal(0, jls_wr_close(wr));
 
     struct jls_rd_s * rd = NULL;
     assert_int_equal(0, jls_rd_open(&rd, filename));
 
-    float data[2000][4];
+    double data[2000][JLS_SUMMARY_FSR_COUNT];
     // within a single data chunk
-    assert_int_equal(0, jls_rd_fsr_f32_statistics(rd, 5, 0, 10, data[0], 100));
-    compare_stats(data[0], signal, 10);
-    compare_stats(data[1], signal + 10, 10);
+    assert_int_equal(0, jls_rd_fsr_statistics(rd, 5, 0, 10, data[0], 100));
+    compare_stats_f32(data[0], signal, 10);
+    compare_stats_f32(data[1], signal + 10, 10);
 
     // offset from start of chunk
-    assert_int_equal(0, jls_rd_fsr_f32_statistics(rd, 5, 15, 10, data[0], 2));
-    compare_stats(data[0], signal + 15, 10);
-    compare_stats(data[1], signal + 25, 10);
+    assert_int_equal(0, jls_rd_fsr_statistics(rd, 5, 15, 10, data[0], 2));
+    compare_stats_f32(data[0], signal + 15, 10);
+    compare_stats_f32(data[1], signal + 25, 10);
 
     // span chunk 2 to 3
-    assert_int_equal(0, jls_rd_fsr_f32_statistics(rd, 5, 1999, 2, data[0], 2));
-    compare_stats(data[0], signal + 1999, 2);
-    compare_stats(data[1], signal + 2001, 2);
+    assert_int_equal(0, jls_rd_fsr_statistics(rd, 5, 1999, 2, data[0], 2));
+    compare_stats_f32(data[0], signal + 1999, 2);
+    compare_stats_f32(data[1], signal + 2001, 2);
 
     // Span chunk 2 through 4
-    assert_int_equal(0, jls_rd_fsr_f32_statistics(rd, 5, 1999, 1002, data[0], 2));
-    compare_stats(data[0], signal + 1999, 1002);
-    compare_stats(data[1], signal + 3001, 1002);
+    assert_int_equal(0, jls_rd_fsr_statistics(rd, 5, 1999, 1002, data[0], 2));
+    compare_stats_f32(data[0], signal + 1999, 1002);
+    compare_stats_f32(data[1], signal + 3001, 1002);
 
     // Span chunk 2 through 12
-    assert_int_equal(0, jls_rd_fsr_f32_statistics(rd, 5, 1999, 10002, data[0], 1));
-    compare_stats(data[0], signal + 1999, 10002);
+    assert_int_equal(0, jls_rd_fsr_statistics(rd, 5, 1999, 10002, data[0], 1));
+    compare_stats_f32(data[0], signal + 1999, 10002);
 
     // Using summaries needing raw samples before and after
-    assert_int_equal(0, jls_rd_fsr_f32_statistics(rd, 5, 750, 10000, data[0], 1));
-    compare_stats(data[0], signal + 750, 10000);
+    assert_int_equal(0, jls_rd_fsr_statistics(rd, 5, 750, 10000, data[0], 1));
+    compare_stats_f32(data[0], signal + 750, 10000);
 
     // get out of range statistics
-    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_fsr_f32_statistics(rd, 5, -25, 10, data[0], 1));
-    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_fsr_f32_statistics(rd, 5, -5, 10, data[0], 1));
-    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_fsr_f32_statistics(rd, 5, sample_count - 5, 10, data[0], 1));
-    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_fsr_f32_statistics(rd, 5, sample_count + 5, 10, data[0], 1));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_fsr_statistics(rd, 5, -25, 10, data[0], 1));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_fsr_statistics(rd, 5, -5, 10, data[0], 1));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_fsr_statistics(rd, 5, sample_count - 5, 10, data[0], 1));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_fsr_statistics(rd, 5, sample_count + 5, 10, data[0], 1));
+
+    jls_rd_close(rd);
+    free(signal);
+    remove(filename);
+}
+
+static void test_fsr_f64(void **state) {
+    (void) state;
+    struct jls_wr_s * wr = NULL;
+    const size_t sample_count = WINDOW_SIZE * 1000;
+    double * signal = malloc(sample_count * sizeof(double));
+    for (int64_t i = 0; i < sample_count; ++i) {
+        signal[i] = sin(i * 0.001);
+    }
+
+    assert_int_equal(0, jls_wr_open(&wr, filename));
+    assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_3));
+    assert_int_equal(0, jls_wr_signal_def(wr, &SIGNAL_8));
+    assert_true(sample_count <= UINT32_MAX);
+    assert_int_equal(0, jls_wr_fsr(wr, SIGNAL_8.signal_id, 0, signal, (uint32_t) sample_count));
+    assert_int_equal(0, jls_wr_close(wr));
+
+    struct jls_rd_s * rd = NULL;
+    assert_int_equal(0, jls_rd_open(&rd, filename));
+
+    //double data[JLS_SUMMARY_FSR_COUNT];
+    //assert_int_equal(0, jls_rd_fsr_f64_statistics(rd, SIGNAL_8.signal_id, 0, 1000, data[0], 1));
+    //compare_stats(data, signal, 1000);
 
     jls_rd_close(rd);
     free(signal);
@@ -736,14 +780,14 @@ static void test_fsr_statistics_u1(void **state) {
     assert_int_equal(0, jls_rd_fsr_length(rd, signal_7.signal_id, &samples));
     assert_int_equal(1024 * data_length, samples);
 
-    float f32[1024 * JLS_SUMMARY_FSR_COUNT];
-    assert_int_equal(0, jls_rd_fsr_f32_statistics(rd, signal_7.signal_id, 0, 1024, f32, 2));
+    double f32[1024 * JLS_SUMMARY_FSR_COUNT];
+    assert_int_equal(0, jls_rd_fsr_statistics(rd, signal_7.signal_id, 0, 1024, f32, 2));
     assert_float_equal(0.75f, f32[JLS_SUMMARY_FSR_MEAN], 1e-15);
     assert_float_equal(0.433224f, f32[JLS_SUMMARY_FSR_STD], 1e-6);
     assert_float_equal(0.0f, f32[JLS_SUMMARY_FSR_MIN], 1e-15);
     assert_float_equal(1.0f, f32[JLS_SUMMARY_FSR_MAX], 1e-15);
 
-    assert_int_equal(0, jls_rd_fsr_f32_statistics(rd, signal_7.signal_id, 0, 1024, f32, 1024));
+    assert_int_equal(0, jls_rd_fsr_statistics(rd, signal_7.signal_id, 0, 1024, f32, 1024));
     assert_float_equal(0.75f, f32[JLS_SUMMARY_FSR_MEAN], 1e-15);
     assert_float_equal(0.433224f, f32[JLS_SUMMARY_FSR_STD], 1e-6);
     assert_float_equal(0.0f, f32[JLS_SUMMARY_FSR_MIN], 1e-15);
@@ -761,7 +805,7 @@ static void test_fsr_f32_statistics_real(void **state) {
     assert_int_equal(0, jls_rd_open(&rd, "C:\\repos\\Jetperch\\out.jls"));
 
     float data[596][JLS_SUMMARY_FSR_COUNT];
-    assert_int_equal(0, jls_rd_fsr_f32_statistics(rd, 1, 393783914LL, 96563, &data[0][0], 596));
+    assert_int_equal(0, jls_rd_fsr_statistics(rd, 1, 393783914LL, 96563, &data[0][0], 596));
     jls_rd_close(rd);
 }
 
@@ -804,6 +848,7 @@ int main(void) {
 #endif
             cmocka_unit_test(test_fsr_f32),
             cmocka_unit_test(test_fsr_f32_statistics),
+            cmocka_unit_test(test_fsr_f64),
 
             cmocka_unit_test(test_fsr_samples_int_uint),
             cmocka_unit_test(test_fsr_statistics_u1),

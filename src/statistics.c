@@ -119,7 +119,7 @@ double jls_statistics_var(struct jls_statistics_s *s) {
     if (s->k <= 1) {
         return 0.0;
     }
-    return s->s / (double) (s->k - 1); // use k - 1 = Bessel's correction
+    return s->s / (double) (s->k - 1); // use k - 1 = Bessel's correction for sample variance
 }
 
 void jls_statistics_copy(struct jls_statistics_s *tgt,

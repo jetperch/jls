@@ -331,9 +331,11 @@ enum jls_tag_e {
  *      - UINT: 1, 4, 8, 16, 24, 32, 64
  *      - FLOAT: 32, 64
  *      - BOOL = UINT 1
- * @param q The fixed-point location, only valid for INT and UINT.
+ * @param q The signed fixed-point location, only valid for INT and UINT.
  *      Set to 0 for normal, whole numbers.
  *      Set to 0 for FLOAT and BOOL.
+ *      The fixed point is between bits q and q-1.  The value is scaled
+ *      by 2 ** -q.
  */
 #define JLS_DATATYPE_DEF(basetype, size, q)     \
     (((JLS_DATATYPE_BASETYPE_##basetype) & 0x0f) |        \
@@ -599,11 +601,11 @@ struct jls_fsr_index_s {
 /**
  * @brief The FSR summary chunk format with f32 values.
  *
- * This summary format is used by all types except u64, i64, f64.
+ * This summary format is used by all types except u32, u64, i32, i64, f64.
  */
 struct jls_fsr_f32_summary_s {
-    struct jls_payload_header_s header; ///< The payload
-    float data[];          ///< The summary data, each entry is 4 x f32: mean, std, min, max.
+    struct jls_payload_header_s header;  ///< The payload
+    float data[][JLS_SUMMARY_FSR_COUNT]; ///< The summary data, each entry is 4 x f32: mean, std, min, max.
 };
 
 /**
@@ -612,8 +614,8 @@ struct jls_fsr_f32_summary_s {
  * This summary format is used by u64, i64, f64.
  */
 struct jls_fsr_f64_summary_s {
-    struct jls_payload_header_s header;
-    double data[];          ///< The summary data, each entry is 4 x f64: mean, std, min, max.
+    struct jls_payload_header_s header;   ///< The payload
+    double data[][JLS_SUMMARY_FSR_COUNT]; ///< The summary data, each entry is 4 x f64: mean, std, min, max.
 };
 
 /**

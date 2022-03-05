@@ -131,10 +131,10 @@ JLS_API int32_t jls_rd_fsr_f32(struct jls_rd_s * self, uint16_t signal_id, int64
                                float * data, int64_t data_length);
 
 /**
- * @brief Read float32 and provide statistics data.
+ * @brief Read the statistics data for a fixed sampling rate signal.
  *
  * @param self The reader instance.
- * @param signal_id The signal
+ * @param signal_id The FSR signal.
  * @param start_sample_id The starting sample id to read.
  * @param increment The number of samples that form a single output summary.
  * @param[out] data The statistics information, in the shape of
@@ -144,7 +144,7 @@ JLS_API int32_t jls_rd_fsr_f32(struct jls_rd_s * self, uint16_t signal_id, int64
  *      JLS_SUMMARY_FSR_MIN, and JLS_SUMMARY_FSR_MAX to index the values.
  * @param data_length The number of statistics points to populate.  data
  *      is at least JLS_SUMMARY_FSR_COUNT * data_length elements, each
- *      of float32 type (4 bytes).
+ *      of float64 type (8 bytes).
  *      This argument allows efficient computation over many consecutive
  *      windows, as is common for displaying waveforms.
  * @return 0 or error code.
@@ -154,11 +154,11 @@ JLS_API int32_t jls_rd_fsr_f32(struct jls_rd_s * self, uint16_t signal_id, int64
  * are computed exactly.  The internal boundaries are approximated,
  * perfect for waveform display, but perhaps not suitable for other use
  * cases.  If you need sample accurate statistics over multiple
- * increments, all this function repeatedly with data_length 1.
+ * increments, call this function repeatedly with data_length 1.
  */
-JLS_API int32_t jls_rd_fsr_f32_statistics(struct jls_rd_s * self, uint16_t signal_id,
-                                          int64_t start_sample_id, int64_t increment,
-                                          float * data, int64_t data_length);
+JLS_API int32_t jls_rd_fsr_statistics(struct jls_rd_s * self, uint16_t signal_id,
+                                      int64_t start_sample_id, int64_t increment,
+                                      double * data, int64_t data_length);
 
 /**
  * @brief The function called for each annotation.
