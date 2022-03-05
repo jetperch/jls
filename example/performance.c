@@ -224,7 +224,8 @@ static int32_t json_signal_def(struct jls_rd_s * rd, uint16_t signal_id, FILE * 
 
 static int32_t profile_fsr_signal(struct jls_rd_s * rd, uint16_t signal_id, FILE * json) {
     int64_t length = 0;
-    static float data[100000];
+    static double data_f64[100000];
+    float * data_f32 = (float *) data_f64;
     const int64_t read_lengths[] = {1, 100, 1000, 10000, 100000};
     RPE(jls_rd_fsr_length(rd, signal_id, &length));
     fprintf(json, "\n{");
@@ -237,7 +238,7 @@ static int32_t profile_fsr_signal(struct jls_rd_s * rd, uint16_t signal_id, FILE
         int64_t step_sz = (length - 1 - sample_count) / step_count;
         int64_t t_start = jls_time_rel();
         for (int64_t sample = 0; sample < length; sample += step_sz) {
-            RPE(jls_rd_fsr_f32(rd, signal_id, sample, data, sample_count));
+            RPE(jls_rd_fsr_f32(rd, signal_id, sample, data_f32, sample_count));
         }
         int64_t t_end = jls_time_rel();
         double t_duration = JLS_TIME_TO_F64(t_end - t_start);
@@ -271,7 +272,7 @@ static int32_t profile_fsr_signal(struct jls_rd_s * rd, uint16_t signal_id, FILE
             for (int64_t sample = 0; sample < (length - increment); sample += offset_sz) {
                 int64_t max_len = (length - sample) / increment;
                 int64_t data_length = (max_len < samples) ? max_len : samples;
-                RPE(jls_rd_fsr_f32_statistics(rd, signal_id, sample, increment, data, data_length));
+                RPE(jls_rd_fsr_statistics(rd, signal_id, sample, increment, data_f64, data_length));
                 ++iter_count;
             }
             int64_t t_end = jls_time_rel();

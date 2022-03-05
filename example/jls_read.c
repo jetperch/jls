@@ -152,10 +152,10 @@ static int statistic(const char * filename, uint16_t signal_id, int64_t start, i
         return 1;
     }
     RPE(jls_rd_open(&rd, filename));
-    float * data = calloc((size_t) len * 4, sizeof(float));
-    RPE(jls_rd_fsr_f32_statistics(rd, signal_id, start, incr, data, len));
+    double * data = calloc((size_t) len * 4, sizeof(double));
+    RPE(jls_rd_fsr_statistics(rd, signal_id, start, incr, data, len));
     for (int64_t k = 0; k < len; ++k) {
-        float * data_k = data + k * 4;
+        double * data_k = data + k * 4;
         printf("mean = %f, std=%f, min=%f, max=%f\n",
                data_k[JLS_SUMMARY_FSR_MEAN], data_k[JLS_SUMMARY_FSR_STD],
                data_k[JLS_SUMMARY_FSR_MIN], data_k[JLS_SUMMARY_FSR_MAX]);

@@ -85,7 +85,7 @@ permissive [Apache 2.0](LICENSE).
 Items marked with 🔜 are under development and coming soon.
 Items marked with ⏳ are planned for future release.
 
-As of Feb 2022, the JLS v2 file structure is well-defined.
+As of March 2022, the JLS v2 file structure is well-defined.
 However, the datatype and compression storage formats are not 
 yet defined, and the software still needs to grow to support 
 the target feature set.
