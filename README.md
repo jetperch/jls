@@ -28,7 +28,7 @@ simultaneous, one-dimensional signals. This repository contains:
 * Language bindings for Python
 
 > **⚠ CAUTION ⚠**  
-> We are actively developing this library.  Many features are not 
+> We are actively developing this library.  Some features are not 
 > yet implemented.
 
 
@@ -85,10 +85,8 @@ permissive [Apache 2.0](LICENSE).
 Items marked with 🔜 are under development and coming soon.
 Items marked with ⏳ are planned for future release.
 
-As of March 2022, the JLS v2 file structure is well-defined.
-However, the datatype and compression storage formats are not 
-yet defined, and the software still needs to grow to support 
-the target feature set.
+As of March 2022, the JLS v2 file structure is well-defined and stable.
+However, the compression storage formats are not yet defined.
 
 
 ## Why JLS?
