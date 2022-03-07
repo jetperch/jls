@@ -33,7 +33,6 @@
 const char * filename = "jls_test_tmp.jls";
 const uint8_t USER_DATA_1[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
 const uint16_t CHUNK_META_1 = 0x0123;
-const uint8_t USER_DATA_2[] = {0x11, 0x22, 0xab, 0x34, 0x45, 0x46, 0x42, 42, 42, 3, 7};
 const uint16_t CHUNK_META_2 = 0x0BEE;
 const uint16_t CHUNK_META_3 = 0x0ABC;
 const char STRING_1[] = "hello world";

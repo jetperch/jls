@@ -93,7 +93,7 @@ const struct jls_signal_def_s SIGNAL_1 = {
         .units = "A",
 };
 
-static int _isspace(char c) {
+static int isspace_(char c) {
     if ((c == ' ') || ((c >= 9) && (c <= 13))) {
         return 1;
     }
@@ -105,7 +105,7 @@ static int cstr_to_i64(const char * src, int64_t * value) {
     if ((NULL == src) || (NULL == value)) {
         return 1;
     }
-    while (*src && _isspace((uint8_t) *src)) {
+    while (*src && isspace_((uint8_t) *src)) {
         ++src;
     }
     if (!*src) { // empty string.
@@ -116,7 +116,7 @@ static int cstr_to_i64(const char * src, int64_t * value) {
         ++src;
     }
     while (*src) {
-        if (!_isspace((uint8_t) *src++)) { // did not parse full string
+        if (!isspace_((uint8_t) *src++)) { // did not parse full string
             return 1;
         }
     }
@@ -232,7 +232,7 @@ static int32_t profile_fsr_signal(struct jls_rd_s * rd, uint16_t signal_id, FILE
     json_signal_def(rd, signal_id, json);
 
     fprintf(json, ",\n  \"read_samples\": [");
-    for (uint8_t read_idx = 0; read_idx < ARRAY_SIZE(read_lengths); ++read_idx) {
+    for (size_t read_idx = 0; read_idx < ARRAY_SIZE(read_lengths); ++read_idx) {
         int64_t sample_count = read_lengths[read_idx];
         int64_t step_count = 100;
         int64_t step_sz = (length - 1 - sample_count) / step_count;
@@ -257,7 +257,7 @@ static int32_t profile_fsr_signal(struct jls_rd_s * rd, uint16_t signal_id, FILE
     int64_t increment = 1;
     printf("#signal,increment,length,time\n");
     while (increment < length) {
-        for (uint8_t summary_idx = 0; summary_idx < ARRAY_SIZE(summary_lengths); ++summary_idx) {
+        for (size_t summary_idx = 0; summary_idx < ARRAY_SIZE(summary_lengths); ++summary_idx) {
             int64_t samples = summary_lengths[summary_idx];
             int64_t count = length / increment - samples;
             if (count <= 0) {

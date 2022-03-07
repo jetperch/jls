@@ -91,7 +91,7 @@ int32_t jls_dt_buffer_to_f64(const void * src, uint32_t src_datatype, double * d
     }
 
     // fixed point support
-    int8_t fp = (src_datatype & 0xff) >> 16;
+    int8_t fp = (int8_t) ((src_datatype & 0xff) >> 16);
     if ((src_datatype & JLS_DATATYPE_BASETYPE_UINT) && fp) {
         double scale = pow(2.0, fp);
         for (uint32_t i = 0; i < samples; ++i) {

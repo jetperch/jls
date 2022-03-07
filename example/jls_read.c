@@ -98,7 +98,7 @@ static int usage() {
         return usage(); \
     }
 
-static int _isspace(char c) {
+static int isspace_(char c) {
     if ((c == ' ') || ((c >= 9) && (c <= 13))) {
         return 1;
     }
@@ -110,7 +110,7 @@ static int cstr_to_i64(const char * src, int64_t * value) {
     if ((NULL == src) || (NULL == value)) {
         return 1;
     }
-    while (*src && _isspace((uint8_t) *src)) {
+    while (*src && isspace_((uint8_t) *src)) {
         ++src;
     }
     if (!*src) { // empty string.
@@ -121,7 +121,7 @@ static int cstr_to_i64(const char * src, int64_t * value) {
         ++src;
     }
     while (*src) {
-        if (!_isspace((uint8_t) *src++)) { // did not parse full string
+        if (!isspace_((uint8_t) *src++)) { // did not parse full string
             return 1;
         }
     }

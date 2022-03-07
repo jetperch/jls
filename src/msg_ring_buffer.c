@@ -88,7 +88,7 @@ uint8_t * jls_mrb_alloc(struct jls_mrb_s * self, uint32_t size) {
     return p;
 }
 
-static inline uint32_t get_sz(uint8_t * p) {
+static inline uint32_t get_sz(uint8_t const * p) {
     return ((uint32_t) p[0])
             | (((uint32_t) p[1]) << 8)
             | (((uint32_t) p[2]) << 16)

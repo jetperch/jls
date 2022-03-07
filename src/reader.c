@@ -929,7 +929,7 @@ JLS_API int32_t jls_rd_fsr_f32(struct jls_rd_s * self, uint16_t signal_id, int64
     return jls_rd_fsr(self, signal_id, start_sample_id, data, data_length);
 }
 
-static inline void f32_to_stats(struct jls_statistics_s * stats, float * data, int64_t count) {
+static inline void f32_to_stats(struct jls_statistics_s * stats, const float * data, int64_t count) {
     stats->k = count;
     stats->mean = data[JLS_SUMMARY_FSR_MEAN];
     stats->min = data[JLS_SUMMARY_FSR_MIN];
@@ -948,7 +948,7 @@ static inline void stats_to_f64(double * data, struct jls_statistics_s * stats) 
     data[JLS_SUMMARY_FSR_STD] = sqrt(jls_statistics_var(stats));
 }
 
-static inline void f64_to_stats(struct jls_statistics_s * stats, double * data, int64_t count) {
+static inline void f64_to_stats(struct jls_statistics_s * stats, const double * data, int64_t count) {
     stats->k = count;
     stats->mean = data[JLS_SUMMARY_FSR_MEAN];
     stats->min = data[JLS_SUMMARY_FSR_MIN];
