@@ -20,11 +20,11 @@ name: Ubuntu Linux amd64
 on: [push, pull_request, release]
 
 concurrency:
-  group: dut
+  group: linux-amd64
   cancel-in-progress: false
 
 jobs:
-  build-windows:
+  build-ubuntu-amd64:
     runs-on: ubuntu-latest
 
     steps:
@@ -32,13 +32,13 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Configure build using CMake
-        run: cmake -S . -B cmake_build -G "Unix Makefiles" -DCMAKE_CONFIGURATION_TYPES=Release
+        run: cmake -S . -B cmake_build -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release
 
       - name: Build native
-        run: cmake --build cmake_build --config Release --target ALL_BUILD
+        run: cmake --build cmake_build
 
       - name: Run native tests
-        run: cmake --build cmake_build --config Release --target RUN_TESTS
+        run: cmake --build cmake_build --target test
 
       - name: Install python dependencies
         run: pip3 install -U -r requirements.txt
