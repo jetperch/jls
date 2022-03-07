@@ -16,7 +16,7 @@
 # See documentation: https://docs.github.com/en/actions
 # CMake example: https://github.com/Mizux/cmake-cpp/blob/main/.github/workflows/amd64_windows.yml
 
-name: Windows amd64
+name: Ubuntu Linux amd64
 on: [push, pull_request, release]
 
 concurrency:
@@ -25,30 +25,14 @@ concurrency:
 
 jobs:
   build-windows:
-    runs-on: windows-latest
-    strategy:
-      matrix:
-        python-version: [3.9]
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout the code
         uses: actions/checkout@v2
 
-      - name: Configure python
-        uses: actions/setup-python@v2
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Install Windows dependencies
-        if: runner.os == 'Windows'
-        shell: cmd
-        run: |
-          echo Path = %Path%
-          cmake --version
-          python3 -VV
-
-      - name: Configure native build using CMake
-        run: cmake -S . -B cmake_build -G "Visual Studio 17 2022" -DCMAKE_CONFIGURATION_TYPES=Release
+      - name: Configure build using CMake
+        run: cmake -S . -B cmake_build -G "Unix Makefiles" -DCMAKE_CONFIGURATION_TYPES=Release
 
       - name: Build native
         run: cmake --build cmake_build --config Release --target ALL_BUILD
@@ -74,5 +58,5 @@ jobs:
       - name: Upload python packages
         uses: actions/upload-artifact@v2
         with:
-          name: windows_amd64
+          name: ubuntu_amd64
           path: dist/*

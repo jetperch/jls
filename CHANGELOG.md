@@ -4,6 +4,13 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.4.1
+
+2022 Mar 7 [in progress]
+
+* Fixed build for Linux and macOS.
+
+
 ## 0.4.0
 
 2022 Mar 5
