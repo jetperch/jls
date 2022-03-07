@@ -14,10 +14,18 @@
 # limitations under the License.
 -->
 
-# JLS
+main:
+[![Windows amd64](https://github.com/jetperch/jls/actions/workflows/windows_amd64.yml/badge.svg?branch=main)](https://github.com/jetperch/jls/actions/workflows/windows_amd64.yml)
+[![macOS amd64](https://github.com/jetperch/jls/actions/workflows/macos_amd64.yml/badge.svg?branch=main)](https://github.com/jetperch/jls/actions/workflows/macos_amd64.yml)
+[![Ubuntu Linux amd64](https://github.com/jetperch/jls/actions/workflows/linux_amd64.yml/badge.svg?branch=main)](https://github.com/jetperch/jls/actions/workflows/linux_amd64.yml)
 
-main: [![Build Status](https://travis-ci.org/jetperch/jls.svg?branch=main)](https://travis-ci.org/jetperch/jls)
-develop: [![Build Status](https://travis-ci.org/jetperch/jls.svg?branch=develop)](https://travis-ci.org/jetperch/jls)
+develop:
+[![Windows amd64](https://github.com/jetperch/jls/actions/workflows/windows_amd64.yml/badge.svg?branch=develop)](https://github.com/jetperch/jls/actions/workflows/windows_amd64.yml)
+[![macOS amd64](https://github.com/jetperch/jls/actions/workflows/macos_amd64.yml/badge.svg?branch=develop)](https://github.com/jetperch/jls/actions/workflows/macos_amd64.yml)
+[![Ubuntu Linux amd64](https://github.com/jetperch/jls/actions/workflows/linux_amd64.yml/badge.svg?branch=develop)](https://github.com/jetperch/jls/actions/workflows/linux_amd64.yml)
+
+
+# JLS
 
 Welcome to the [Joulescope®](https://www.joulescope.com) File Format project.
 The goal of this project is to provide performant data storage for huge, 

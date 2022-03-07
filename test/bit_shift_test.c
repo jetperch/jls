@@ -37,24 +37,24 @@ static void test_0(void **state) {
 
 static void test_n(void **state) {
     (void) state;
-    for (int i = 1; i < 9; ++i) {
+    for (int i = 1; i < 8; ++i) {
         uint32_t data_u32[] = U32_INIT_01;
         assert_int_equal(0, jls_bit_shift_array_right(i, data_u32, sizeof(data_u32)));
         assert_int_equal((U32_01[0] >> i) | (U32_01[1] << (32 - i)), data_u32[0]);
     }
 }
 
-static void test_9(void **state) {
+static void test_8(void **state) {
     (void) state;
     uint32_t data_u32[] = U32_INIT_01;
-    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_bit_shift_array_right(9, data_u32, sizeof(data_u32)));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_bit_shift_array_right(8, data_u32, sizeof(data_u32)));
 }
 
 int main(void) {
     const struct CMUnitTest tests[] = {
             cmocka_unit_test(test_0),
             cmocka_unit_test(test_n),
-            cmocka_unit_test(test_9),
+            cmocka_unit_test(test_8),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);

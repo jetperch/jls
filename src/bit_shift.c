@@ -21,7 +21,7 @@ int32_t jls_bit_shift_array_right(uint8_t bits, void * data, size_t size) {
     if ((bits == 0) || (size == 0)) {
         return 0;
     }
-    if (bits > 8) {
+    if (bits >= 8) {
         return JLS_ERROR_PARAMETER_INVALID;
     }
 
