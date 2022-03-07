@@ -832,7 +832,6 @@ int32_t jls_rd_fsr_length(struct jls_rd_s * self, uint16_t signal_id, int64_t * 
 
 int32_t jls_rd_fsr(struct jls_rd_s * self, uint16_t signal_id, int64_t start_sample_id,
                    void * data, int64_t data_length) {
-    const int64_t start_sample_id_orig = start_sample_id;
     const int64_t data_length_orig = data_length;
     int32_t rv = 0;
     uint8_t * data_u8 = (uint8_t *) data;

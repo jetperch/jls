@@ -25,6 +25,7 @@
 #define JLS_PRIV_SHIFT_H__
 
 #include <stdint.h>
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {

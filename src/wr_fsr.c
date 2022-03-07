@@ -199,7 +199,7 @@ int32_t jls_wr_fsr_validate(struct jls_signal_def_s * def) {
             case JLS_DATATYPE_BASETYPE_INT: break;
             case JLS_DATATYPE_BASETYPE_UINT: break;
             case JLS_DATATYPE_BASETYPE_FLOAT:
-                JLS_LOGW("Floating point cannot support q", def->data_type);
+                JLS_LOGW("Floating point cannot support q");
                 return JLS_ERROR_PARAMETER_INVALID;
             default:
                 JLS_LOGW("Invalid data type: 0x%08x", def->data_type);

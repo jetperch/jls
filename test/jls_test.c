@@ -627,7 +627,7 @@ static void test_fsr_f64(void **state) {
     struct jls_wr_s * wr = NULL;
     const size_t sample_count = WINDOW_SIZE * 1000;
     double * signal = malloc(sample_count * sizeof(double));
-    for (int64_t i = 0; i < sample_count; ++i) {
+    for (size_t i = 0; i < sample_count; ++i) {
         signal[i] = sin(i * 0.001);
     }
 

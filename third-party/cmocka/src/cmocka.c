@@ -2765,6 +2765,9 @@ static int cmocka_run_one_test_or_fixture(const char *function_name,
          heap_check_point : check_point_allocated_blocks());
     int handle_exceptions = 1;
     void *current_state = NULL;
+#if defined(__GNUC__) && (__GNUC__ >= 7)
+#  pragma GCC diagnostic ignored "-Wclobbered"
+#endif
     int rc = 0;
 
     /* FIXME check only one test or fixture is set */
