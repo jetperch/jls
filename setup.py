@@ -64,7 +64,7 @@ elif 'armv7' in platform.machine():
     sources = ['src/backend_posix.c', 'src/crc32c_sw.c']
     libraries = ['pthread', 'm']
     extra_compile_args = []
-elif platform.processor() == 'aarch64' or platform.machine() == 'arm64':
+elif platform.processor() == 'aarch64' or platform.machine() in ['arm64', 'aarch64']:
     sources = ['src/backend_posix.c', 'src/crc32c_arm_neon.c']
     libraries = ['pthread', 'm']
     extra_compile_args = ['-march=armv8-a+crc+simd']

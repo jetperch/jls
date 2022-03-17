@@ -4,6 +4,13 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.4.2
+
+2022 Mar 17
+
+* Fixed pyjls build for Raspberry Pi OS 64-bit.
+
+
 ## 0.4.1
 
 2022 Mar 7
