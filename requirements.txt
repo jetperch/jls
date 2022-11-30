@@ -12,8 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# For the file format specification, see
+# https://pip.pypa.io/en/latest/reference/requirements-file-format/#requirements-file-format
+
 check-manifest>=0.37
-Cython>=0.29.3
-numpy>=1.20; sys_platform == 'win32'
-numpy>=1.16; sys_platform != 'win32'
+Cython>=0.29.3                          # C native build
+myst-parser                             # documentation
+numpy>=1.23; sys_platform == 'win32'
+numpy>=1.20; sys_platform != 'win32'
+pywin32; platform_system=='Windows'
+sphinx                                  # documentation
 wheel

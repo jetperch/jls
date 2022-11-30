@@ -4,6 +4,15 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.4.3
+
+2022 Nov 30
+
+* Changed windows dependency from deprecated pypiwin32 to pywin32.
+* Bumped numpy dependencies.
+* Added build system requirements for pip.
+
+
 ## 0.4.2
 
 2022 Mar 17
