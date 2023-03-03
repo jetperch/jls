@@ -9,6 +9,7 @@ This file contains the list of changes made to the JLS project.
 2023 Mar 3
 
 * Added support for data_type strings (not just enum integers).
+* Modified python reader bindings to release GIL.
 
 
 ## 0.4.3

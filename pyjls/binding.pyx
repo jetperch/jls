@@ -116,10 +116,13 @@ _data_type_as_str = {}
 
 
 def _populate_data_type():
-    for key, value in _data_type_as_enum.items():
+    for key, value in list(_data_type_as_enum.items()):
         _data_type_as_enum[value] = value
         _data_type_as_str[value] = key
         _data_type_as_str[key] = key
+
+
+_populate_data_type()
 
 
 class AnnotationType:
@@ -464,6 +467,9 @@ cdef class Reader:
         cdef uint32_t data_type
         cdef uint32_t entry_size_bits
         cdef uint32_t u8_length
+        cdef uint16_t signal_id_u16 = signal_id
+        cdef int64_t start_sample_id_i64 = start_sample_id
+        cdef int64_t length_i64 = length
 
         data_type = self._signals[signal_id].data_type
         entry_size_bits = (data_type >> 8) & 0xff
@@ -479,7 +485,8 @@ cdef class Reader:
         data_u8 = np.empty(u8_length, dtype=np.uint8)
         data = data_u8.view(dtype=np_type)
         u8 = data_u8
-        rc = c_jls.jls_rd_fsr(self._rd, signal_id, start_sample_id, &u8[0], length)
+        with nogil:
+            rc = c_jls.jls_rd_fsr(self._rd, signal_id_u16, start_sample_id_i64, &u8[0], length_i64)
         if rc:
             raise RuntimeError(f'fsr failed {rc}')
         return data
@@ -496,9 +503,16 @@ cdef class Reader:
 
         cdef int32_t rc
         cdef np.float64_t [:, :] c_data
+        cdef uint16_t signal_id_u16 = signal_id
+        cdef int64_t start_sample_id_i64 = start_sample_id
+        cdef int64_t increment_i64 = increment
+        cdef int64_t length_i64 = length
+
         data = np.empty((length, c_jls.JLS_SUMMARY_FSR_COUNT), dtype=np.float64)
         c_data = data
-        rc = c_jls.jls_rd_fsr_statistics(self._rd, signal_id, start_sample_id, increment, &c_data[0, 0], length)
+        with nogil:
+            rc = c_jls.jls_rd_fsr_statistics(self._rd, signal_id_u16, start_sample_id_i64,
+                                             increment_i64, &c_data[0, 0], length_i64)
         if rc:
             raise RuntimeError(f'fsr_statistics failed {rc}')
         return data
@@ -523,7 +537,7 @@ cdef class Reader:
         cdef int32_t rc
         rc = c_jls.jls_rd_user_data(self._rd, _user_data_cbk_fn, <void *> cbk_fn)
         if rc:
-            raise RuntimeError(f'annotations failed {rc}')
+            raise RuntimeError(f'user_data failed {rc}')
 
     def utc(self, signal_id, sample_id, cbk_fn):
         """Read the sample_id / utc pairs from a FSR signal.
