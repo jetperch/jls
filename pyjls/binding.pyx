@@ -93,6 +93,35 @@ _data_type_map = {
 }
 
 
+_data_type_as_enum = {
+    'u1': DataType.U1,
+    'u4': DataType.U4,
+    'u8': DataType.U8,
+    'u16': DataType.U16,
+    'u32': DataType.U32,
+    'u64': DataType.U64,
+
+    'i4': DataType.I4,
+    'i8': DataType.I8,
+    'i16': DataType.I16,
+    'i32': DataType.I32,
+    'i64': DataType.I64,
+
+    'f32': DataType.F32,
+    'f64': DataType.F64,
+}
+
+
+_data_type_as_str = {}
+
+
+def _populate_data_type():
+    for key, value in _data_type_as_enum.items():
+        _data_type_as_enum[value] = value
+        _data_type_as_str[value] = key
+        _data_type_as_str[key] = key
+
+
 class AnnotationType:
     USER = c_jls.JLS_ANNOTATION_TYPE_USER
     TEXT = c_jls.JLS_ANNOTATION_TYPE_TEXT
@@ -254,10 +283,14 @@ cdef class Writer:
         cdef int32_t rc
         cdef c_jls.jls_signal_def_s * s
         s = &self._signals[signal_id]
+        if data_type is None:
+            data_type = DataType.F32
+        elif isinstance(data_type, str):
+            data_type = _data_type_as_enum[data_type]
         s.signal_id = signal_id
         s.source_id = source_id
         s.signal_type = 0 if signal_type is None else int(signal_type)
-        s.data_type = DataType.F32 if data_type is None else data_type
+        s.data_type = data_type
         s.sample_rate = 0 if sample_rate is None else int(sample_rate)
         s.samples_per_data = 100000 if samples_per_data is None else int(samples_per_data)
         s.sample_decimate_factor = 100 if sample_decimate_factor is None else int(sample_decimate_factor)

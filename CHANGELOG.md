@@ -4,6 +4,13 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.4.4
+
+2023 Mar 3
+
+* Added support for data_type strings (not just enum integers).
+
+
 ## 0.4.3
 
 2022 Nov 30
