@@ -12,12 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .binding import DataType, AnnotationType, SignalType, Writer, Reader, SummaryFSR
+from .binding import DataType, AnnotationType, SignalType, Writer, Reader, SummaryFSR, \
+    data_type_as_enum, data_type_as_str, \
+    utc_to_jls, jls_to_utc
 from .structs import SourceDef, SignalDef
 from .version import *
 
 __all__ = ['Writer', 'Reader', 'DataType', 'AnnotationType',
            'SignalType', 'SourceDef', 'SignalDef', 'SummaryFSR',
+           'data_type_as_enum', 'data_type_as_str',
+           'utc_to_jls', 'jls_to_utc',
            '__version__', '__title__', '__description__', '__url__',
            '__author__', '__author_email__', '__license__',
            '__copyright__']

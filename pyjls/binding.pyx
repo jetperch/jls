@@ -35,7 +35,8 @@ from .structs import SourceDef, SignalDef
 
 
 __all__ = ['DataType', 'AnnotationType', 'SignalType', 'Writer', 'Reader',
-           'SourceDef', 'SignalDef', 'SummaryFSR', 'jls_inject_log']
+           'SourceDef', 'SignalDef', 'SummaryFSR', 'jls_inject_log',
+           'data_type_as_enum', 'data_type_as_str']
 
 
 _log_c_name = 'pyjls.c'
@@ -125,6 +126,14 @@ def _populate_data_type():
 _populate_data_type()
 
 
+def data_type_as_enum(data_type):
+    return _data_type_as_enum[data_type]
+
+
+def data_type_as_str(data_type):
+    return _data_type_as_str[data_type]
+
+
 class AnnotationType:
     USER = c_jls.JLS_ANNOTATION_TYPE_USER
     TEXT = c_jls.JLS_ANNOTATION_TYPE_TEXT
@@ -173,13 +182,14 @@ class SummaryFSR:
     COUNT = c_jls.JLS_SUMMARY_FSR_COUNT
 
 
-cdef void _log_cbk(const char * msg):
-    m = msg.decode('utf-8').strip()
-    level, location, s = m.split(' ', 2)
-    lvl = _log_level_map.get(level, logging.DEBUG)
-    filename, line, _ = location.split(':')
-    record = logging.LogRecord(_log_c_name, lvl, filename, int(line), s, None, None)
-    _log_c.handle(record)
+cdef void _log_cbk(const char * msg) nogil:
+    with gil:
+        m = msg.decode('utf-8').strip()
+        level, location, s = m.split(' ', 2)
+        lvl = _log_level_map.get(level, logging.DEBUG)
+        filename, line, _ = location.split(':')
+        record = logging.LogRecord(_log_c_name, lvl, filename, int(line), s, None, None)
+        _log_c.handle(record)
 
 
 c_jls.jls_log_register(_log_cbk)
@@ -220,14 +230,22 @@ cdef _storage_unpack(uint8_t storage_type, const uint8_t * data, uint32_t data_s
         return json.loads(str[:data_size - 1].decode('utf-8'))
 
 
-def _utc_to_jls(utc):
+def utc_to_jls(utc):
     """Convert from python UTC timestamp to jls timestamp."""
     return int((utc - _UTC_OFFSET) * (2**30))
 
 
-def _jls_to_utc(timestamp):
+def jls_to_utc(timestamp):
     """Convert from jls timestamp to python UTC timestamp."""
     return (timestamp / (2**30)) + _UTC_OFFSET
+
+
+def _handle_rc(name, rc):
+    if rc == 0:
+        return
+    rc_name = c_jls.jls_error_code_name(rc).decode('utf-8')
+    rc_descr = c_jls.jls_error_code_description(rc).decode('utf-8')
+    raise RuntimeError(f'{name} {rc_name}[{rc}]: {rc_descr}')
 
 
 cdef class Writer:
@@ -238,8 +256,7 @@ cdef class Writer:
         cdef int32_t rc
         self._signals[0].signal_type = c_jls.JLS_SIGNAL_TYPE_VSR
         rc = c_jls.jls_twr_open(&self._wr, path.encode('utf-8'))
-        if rc:
-            raise RuntimeError(f'open failed {rc}')
+        _handle_rc('open', rc)
 
     def __enter__(self):
         return self
@@ -268,8 +285,7 @@ cdef class Writer:
         s.version = version_b
         s.serial_number = serial_number_b
         rc = c_jls.jls_twr_source_def(self._wr, &s)
-        if rc:
-            raise RuntimeError(f'source_def failed {rc}')
+        _handle_rc('source_def', rc)
 
     def source_def_from_struct(self, s: SourceDef):
         return self.source_def(s.source_id,
@@ -306,8 +322,7 @@ cdef class Writer:
         s.name = name_b
         s.units = units_b
         rc = c_jls.jls_twr_signal_def(self._wr, s)
-        if rc:
-            raise RuntimeError(f'signal_def failed {rc}')
+        _handle_rc('signal_def', rc)
 
     def signal_def_from_struct(self, s: SignalDef):
         return self.signal_def(s.signal_id,
@@ -328,8 +343,7 @@ cdef class Writer:
         cdef int32_t rc
         storage_type, payload, payload_length = _storage_pack(data)
         rc = c_jls.jls_twr_user_data(self._wr, chunk_meta, storage_type, payload, payload_length)
-        if rc:
-            raise RuntimeError(f'user_data failed {rc}')
+        _handle_rc('user_data', rc)
 
     def fsr_f32(self, signal_id, sample_id, data):
         return self.fsr(signal_id, sample_id, data)
@@ -354,8 +368,7 @@ cdef class Writer:
         elif entry_size_bits == 1:
             length *= 8
         rc = c_jls.jls_twr_fsr(self._wr, signal_id, sample_id, &u8[0], length)
-        if rc:
-            raise RuntimeError(f'fsr failed {rc}')
+        _handle_rc('fsr', rc)
 
     def annotation(self, signal_id, timestamp, y, annotation_type, group_id, data):
         cdef int32_t rc
@@ -364,19 +377,14 @@ cdef class Writer:
         storage_type, payload, payload_length = _storage_pack(data)
         if y is None or not np.isfinite(y):
             y = NAN
-        if self._signals[signal_id].signal_type == c_jls.JLS_SIGNAL_TYPE_VSR:
-            timestamp = _utc_to_jls(timestamp)
         rc = c_jls.jls_twr_annotation(self._wr, signal_id, timestamp, y, annotation_type,
             group_id, storage_type, payload, payload_length)
-        if rc:
-            raise RuntimeError(f'annotation failed {rc}')
+        _handle_rc('annotation', rc)
 
-    def utc(self, signal_id, sample_id, utc):
+    def utc(self, signal_id, sample_id, utc_i64):
         cdef int32_t rc
-        utc = _utc_to_jls(utc)
-        rc = c_jls.jls_twr_utc(self._wr, signal_id, sample_id, utc)
-        if rc:
-            raise RuntimeError(f'utc failed {rc}')
+        rc = c_jls.jls_twr_utc(self._wr, signal_id, sample_id, utc_i64)
+        _handle_rc('utc', rc)
 
 
 cdef class AnnotationCallback:
@@ -402,12 +410,10 @@ cdef class Reader:
         self._sources: Mapping[int, SourceDef] = {}
         self._signals: Mapping[int, SignalDef] = {}
         rc = c_jls.jls_rd_open(&self._rd, path.encode('utf-8'))
-        if rc:
-            raise RuntimeError(f'open failed {rc}')
+        _handle_rc('open', rc)
 
         rc = c_jls.jls_rd_sources(self._rd, &sources, &count)
-        if rc:
-            raise RuntimeError(f'read sources failed {rc}')
+        _handle_rc('rd_sources', rc)
         for i in range(count):
             source_def = SourceDef(
                 source_id=sources[i].source_id,
@@ -419,8 +425,7 @@ cdef class Reader:
             self._sources[sources[i].source_id] = source_def
 
         rc = c_jls.jls_rd_signals(self._rd, &signals, &count)
-        if rc:
-            raise RuntimeError(f'read signals failed {rc}')
+        _handle_rc('rd_signals', rc)
         for i in range(count):
             signal_id = signals[i].signal_id
             signal_def = SignalDef(
@@ -439,8 +444,7 @@ cdef class Reader:
                 units=signals[i].units.decode('utf-8'))
             if signal_def.signal_type == c_jls.JLS_SIGNAL_TYPE_FSR:
                 rc = c_jls.jls_rd_fsr_length(self._rd, signal_id, &samples)
-                if rc:
-                    raise RuntimeError(f'fsr signal length failed {rc}')
+                _handle_rc('rd_fsr_length', rc)
                 signal_def.length = samples
             self._signals[signal_id] = signal_def
 
@@ -487,8 +491,7 @@ cdef class Reader:
         u8 = data_u8
         with nogil:
             rc = c_jls.jls_rd_fsr(self._rd, signal_id_u16, start_sample_id_i64, &u8[0], length_i64)
-        if rc:
-            raise RuntimeError(f'fsr failed {rc}')
+        _handle_rc('rd_fsr', rc)
         return data
 
     def fsr_statistics(self, signal_id, start_sample_id, increment, length):
@@ -513,8 +516,7 @@ cdef class Reader:
         with nogil:
             rc = c_jls.jls_rd_fsr_statistics(self._rd, signal_id_u16, start_sample_id_i64,
                                              increment_i64, &c_data[0, 0], length_i64)
-        if rc:
-            raise RuntimeError(f'fsr_statistics failed {rc}')
+        _handle_rc('rd_fsr_statistics', rc)
         return data
 
     def annotations(self, signal_id, timestamp, cbk_fn):
@@ -530,14 +532,12 @@ cdef class Reader:
         is_fsr = self._signals[signal_id].signal_type == c_jls.JLS_SIGNAL_TYPE_FSR
         user_data = AnnotationCallback(is_fsr, cbk_fn)
         rc = c_jls.jls_rd_annotations(self._rd, signal_id, timestamp, _annotation_cbk_fn, <void *> user_data)
-        if rc:
-            raise RuntimeError(f'annotations failed {rc}')
+        _handle_rc('rd_annotations', rc)
 
     def user_data(self, cbk_fn):
         cdef int32_t rc
         rc = c_jls.jls_rd_user_data(self._rd, _user_data_cbk_fn, <void *> cbk_fn)
-        if rc:
-            raise RuntimeError(f'user_data failed {rc}')
+        _handle_rc('rd_user_data', rc)
 
     def utc(self, signal_id, sample_id, cbk_fn):
         """Read the sample_id / utc pairs from a FSR signal.
@@ -552,8 +552,7 @@ cdef class Reader:
         """
         cdef int32_t rc
         rc = c_jls.jls_rd_utc(self._rd, signal_id, sample_id, _utc_cbk_fn, <void *> cbk_fn)
-        if rc:
-            raise RuntimeError(f'utc failed {rc}')
+        _handle_rc('rd_utc', rc)
 
 
 cdef int32_t _annotation_cbk_fn(void * user_data, const c_jls.jls_annotation_s * annotation):
@@ -562,7 +561,7 @@ cdef int32_t _annotation_cbk_fn(void * user_data, const c_jls.jls_annotation_s *
     y = annotation[0].y
     timestamp = annotation[0].timestamp
     if not obj.is_fsr:
-        timestamp = _jls_to_utc(annotation[0].timestamp)
+        timestamp = annotation[0].timestamp
     if not isfinite(y):
         y = None
     try:
@@ -587,6 +586,6 @@ cdef int32_t _utc_cbk_fn(void * user_data, const c_jls.jls_utc_summary_entry_s *
     entries = np.empty((size, 2), dtype=np.int64)
     for idx in range(size):
         entries[idx, 0] = utc[idx].sample_id
-        entries[idx, 1] = _jls_to_utc(utc[idx].timestamp)
+        entries[idx, 1] = utc[idx].timestamp
     rc = cbk_fn(entries)
     return 1 if bool(rc) else 0

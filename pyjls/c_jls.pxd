@@ -15,6 +15,11 @@
 from libc.stdint cimport uint8_t, uint16_t, uint32_t, uint64_t, int32_t, int64_t
 
 
+cdef extern from "jls/ec.h":
+    const char * jls_error_code_name(int ec)
+    const char * jls_error_code_description(int ec)
+
+
 cdef extern from "jls/format.h":
 
     enum jls_signal_type_e:

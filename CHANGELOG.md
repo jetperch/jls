@@ -4,12 +4,17 @@
 This file contains the list of changes made to the JLS project.
 
 
-## 0.4.4
+## 0.5.0
 
-2023 Mar 3
+2023 Mar 4
 
 * Added support for data_type strings (not just enum integers).
 * Modified python reader bindings to release GIL.
+* Migrated to time64 representation for all API calls.
+  Use utc_to_jls and jls_to_utc to convert as needed to/from  
+  python timestamps.  
+* Added data_type_as_enum and data_type_as_str conversion functions.
+* Improved exception messages.
 
 
 ## 0.4.3
