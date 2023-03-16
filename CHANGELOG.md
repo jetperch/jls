@@ -4,6 +4,13 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.5.1
+
+2023 Mar 16
+
+* Added zero length check to jls_wr_fsr_data.
+
+
 ## 0.5.0
 
 2023 Mar 9

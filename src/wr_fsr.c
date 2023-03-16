@@ -500,6 +500,10 @@ int32_t jls_wr_fsr_data(struct jls_wr_fsr_s * self, int64_t sample_id, const voi
     uint8_t * dst_u8;
     uint8_t sample_size_bits = jls_datatype_parse_size(self->def.data_type);
 
+    if (0 == data_length) {
+        return 0;
+    }
+
     // only support byte-aligned writes for now - enforce
     switch (sample_size_bits) {
         case 1:
