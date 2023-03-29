@@ -62,7 +62,7 @@ JLS_CPP_GUARD_START
  *      #include "log.h"
  */
 #ifndef JLS_LOG_LEVEL
-#define JLS_LOG_LEVEL JLS_LOG_LEVEL_INFO
+#define JLS_LOG_LEVEL JLS_LOG_LEVEL_WARNING
 #endif
 
 /**
