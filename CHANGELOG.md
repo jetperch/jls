@@ -6,7 +6,7 @@ This file contains the list of changes made to the JLS project.
 
 ## 0.5.2
 
-2023 Mar 29 [in progress]
+2023 Mar 30
 
 * Reduced default log level to WARNING.
 
