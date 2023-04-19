@@ -4,6 +4,13 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.5.3
+
+2023 Apr 19
+
+* Fixed build warning for jls_log_unregister() declaration.
+
+
 ## 0.5.2
 
 2023 Mar 30

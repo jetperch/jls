@@ -140,7 +140,7 @@ JLS_API void jls_log_register(jls_log_cbk handler);
  *
  * This is equivalent to calling jls_log_initialize(0).
  */
-JLS_API void jls_log_unregister();
+JLS_API void jls_log_unregister(void);
 
 /**
  * @def JLS_LOG_PRINTF

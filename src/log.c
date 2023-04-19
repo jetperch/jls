@@ -59,6 +59,6 @@ JLS_API void jls_log_register(jls_log_cbk handler) {
     }
 }
 
-JLS_API void jls_log_unregister() {
+JLS_API void jls_log_unregister(void) {
     jls_log_register(NULL);
 }
