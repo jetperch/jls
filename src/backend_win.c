@@ -258,7 +258,7 @@ void jls_bkt_sleep_ms(uint32_t duration_ms) {
 }
 
 
-int64_t jls_now() {
+int64_t jls_now(void) {
     // Contains a 64-bit value representing the number of 100-nanosecond intervals since January 1, 1601 (UTC).
     // python
     // import dateutil.parser
@@ -272,7 +272,7 @@ int64_t jls_now() {
     return JLS_COUNTER_TO_TIME(t, frequency);
 }
 
-struct jls_time_counter_s jls_time_counter() {
+struct jls_time_counter_s jls_time_counter(void) {
     struct jls_time_counter_s counter;
     static int first = 1;
     static uint64_t offset = 0;     // in 34Q30 time

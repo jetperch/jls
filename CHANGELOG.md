@@ -8,7 +8,7 @@ This file contains the list of changes made to the JLS project.
 
 2023 Apr 19
 
-* Fixed build warning for jls_log_unregister() declaration.
+* Fixed build warnings for fn() declarations.
 
 
 ## 0.5.2

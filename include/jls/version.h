@@ -85,14 +85,14 @@ JLS_CPP_GUARD_START
  * 
  * @return The JLS version string.
  */
-JLS_API const char * jls_version_str();
+JLS_API const char * jls_version_str(void);
 
 /**
  * @brief Get the JLS version u32.
  * 
  * @return The JLS version u32 value.
  */
-JLS_API uint32_t jls_version_u32();
+JLS_API uint32_t jls_version_u32(void);
 
 JLS_CPP_GUARD_END
 

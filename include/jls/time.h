@@ -347,7 +347,7 @@ static inline int64_t JLS_TIME_ABS(int64_t t) {
  *      epoch = dateutil.parser.parse('2018-01-01T00:00:00Z').timestamp()
  *      datetime.datetime.fromtimestamp((my_time >> 30) + epoch)
  */
-JLS_API int64_t jls_now();
+JLS_API int64_t jls_now(void);
 
 /**
  * @brief The platform counter structure.
@@ -377,7 +377,7 @@ struct jls_time_counter_s {
  * The JLS authors recommend this counter starts at 0 when the
  * system powers up.
  */
-JLS_API struct jls_time_counter_s jls_time_counter();
+JLS_API struct jls_time_counter_s jls_time_counter(void);
 
 /**
  * @brief Get the monotonic platform time as a 34Q30 fixed point number.
@@ -387,7 +387,7 @@ JLS_API struct jls_time_counter_s jls_time_counter();
  *      UTC or wall-clock calendar time.  This time has both
  *      offset and scale errors relative to UTC.
  */
-static inline int64_t jls_time_rel() {
+static inline int64_t jls_time_rel(void) {
     struct jls_time_counter_s counter = jls_time_counter();
     return JLS_COUNTER_TO_TIME(counter.value, counter.frequency);
 }

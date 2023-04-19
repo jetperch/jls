@@ -281,7 +281,7 @@ void jls_bkt_sleep_ms(uint32_t duration_ms) {
     } while (rv && errno == EINTR);
 }
 
-int64_t jls_now() {
+int64_t jls_now(void) {
     int64_t t;
     struct timespec ts;
     if (clock_gettime(CLOCK_REALTIME, &ts)) {
@@ -292,7 +292,7 @@ int64_t jls_now() {
     return t;
 }
 
-struct jls_time_counter_s jls_time_counter() {
+struct jls_time_counter_s jls_time_counter(void) {
     struct jls_time_counter_s counter;
     struct timespec ts;
     if (clock_gettime(CLOCK_MONOTONIC, &ts)) {

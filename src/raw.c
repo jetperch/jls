@@ -490,10 +490,10 @@ const char * jls_tag_to_name(uint8_t tag) {
     }
 }
 
-const char * jls_version_str() {
+const char * jls_version_str(void) {
     return JLS_VERSION_STR;
 }
 
-uint32_t jls_version_u32() {
+uint32_t jls_version_u32(void) {
     return JLS_VERSION_U32;
 }
