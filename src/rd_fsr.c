@@ -97,7 +97,7 @@ int32_t jls_rd_fsr_add(struct jls_rd_fsr_s * self, int64_t sample_id, int64_t ti
         if (sample_id == self->sample_id[self->entries_length - 1]) {
             --self->entries_length;  // overwrite
         } else if (sample_id <= self->sample_id[self->entries_length - 1]) {
-            JLS_LOGE("UTC add is not monotonically increasing: idx=%z, %" PRIi64,
+            JLS_LOGE("UTC add is not monotonically increasing: idx=%zu, %" PRIi64,
                      self->entries_length, sample_id);
             return JLS_ERROR_PARAMETER_INVALID;  // ignore
         }
