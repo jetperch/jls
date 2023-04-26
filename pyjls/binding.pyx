@@ -557,12 +557,26 @@ cdef class Reader:
         _handle_rc('rd_utc', rc)
 
     def sample_id_to_timestamp(self, signal_id, sample_id):
+        """Convert sample_id to UTC timestamp for FSR signals.
+
+        :param signal_id: The signal id.
+        :param sample_id: The sample_id to convert.
+        :return: The JLS timestamp corresponding to sample_id.
+        :raise RuntimeError: on error.
+        """
         cdef int64_t utc_timestamp
         rc = c_jls.jls_rd_sample_id_to_timestamp(self._rd, signal_id, sample_id, &utc_timestamp)
         _handle_rc('sample_id_to_timestamp', rc)
         return utc_timestamp
 
     def timestamp_to_sample_id(self, signal_id, utc_timestamp):
+        """Convert UTC timestamp to sample_id for FSR signals.
+
+        :param signal_id: The signal id.
+        :param utc_timestamp: The UTC timestamp to convert.
+        :return: The sample_id corresponding to utc_timestamp.
+        :raise RuntimeError: on error.
+        """
         cdef int64_t sample_id
         rc = c_jls.jls_rd_timestamp_to_sample_id(self._rd, signal_id, utc_timestamp, &sample_id)
         _handle_rc('timestamp_to_sample_id', rc)
