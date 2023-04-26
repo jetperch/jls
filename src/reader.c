@@ -484,6 +484,31 @@ static int32_t scan_signals(struct jls_rd_s * self) {
     return 0;
 }
 
+static int32_t scan_fsr_sample_id(struct jls_rd_s * self) {
+    JLS_LOGD1("scan_fsr_sample_id");
+    for (uint32_t signal_id = 1; signal_id < JLS_SIGNAL_COUNT; ++signal_id) {
+        if ((self->signal_def[signal_id].signal_id != signal_id)
+                || (self->signal_def[signal_id].signal_type != JLS_SIGNAL_TYPE_FSR)) {
+            continue;
+        }
+        struct signal_s * s = &self->signals[signal_id];
+        int64_t offset = s->track_head_data[JLS_TRACK_TYPE_FSR][0];
+        if (offset == 0) {
+            continue;  // no data
+        }
+        ROE(jls_raw_chunk_seek(self->raw, offset));
+        ROE(rd(self));
+        if (self->chunk_cur.hdr.tag != JLS_TAG_TRACK_FSR_DATA) {
+            JLS_LOGW("scan_fsr_sample_id tag mismatch: %d", (int) self->chunk_cur.hdr.tag);
+            continue;
+        }
+
+        struct jls_fsr_data_s * r = (struct jls_fsr_data_s *) self->payload.start;
+        self->signal_def[signal_id].sample_id_offset = r->header.timestamp;
+    }
+    return 0;
+}
+
 static int32_t scan(struct jls_rd_s * self) {
     int32_t rc = 0;
     uint8_t found = 0;
@@ -530,6 +555,7 @@ static int32_t scan(struct jls_rd_s * self) {
     JLS_LOGD1("found initial tags");
     ROE(scan_sources(self));
     ROE(scan_signals(self));
+    ROE(scan_fsr_sample_id(self));
     return 0;
 }
 
@@ -646,6 +672,7 @@ int32_t jls_rd_signal(struct jls_rd_s * self, uint16_t signal_id, struct jls_sig
 
 static int32_t ts_seek(struct jls_rd_s * self, uint16_t signal_id, uint8_t level,
                        enum jls_track_type_e track_type, int64_t timestamp) {
+    // timestamp in JLS units with possible non-zero offset
     if (!is_signal_defined(self, signal_id)) {
         return JLS_ERROR_NOT_FOUND;
     }
@@ -697,7 +724,7 @@ static int32_t ts_seek(struct jls_rd_s * self, uint16_t signal_id, uint8_t level
             if (idx >= (int32_t) r->header.entry_count) {
                 idx = ((int32_t) r->header.entry_count) - 1;
                 break;
-            } else if (r->entries[idx].timestamp > timestamp) {
+            } else if (r->entries[idx].timestamp> timestamp) {
                 --idx;
                 break;
             } else if (r->entries[idx].timestamp == timestamp) {
@@ -715,6 +742,7 @@ static int32_t ts_seek(struct jls_rd_s * self, uint16_t signal_id, uint8_t level
 }
 
 static int32_t fsr_seek(struct jls_rd_s * self, uint16_t signal_id, uint8_t level, int64_t sample_id) {
+    // timestamp in JLS units with possible non-zero offset
     if (!is_signal_defined(self, signal_id)) {
         return JLS_ERROR_NOT_FOUND;
     }
@@ -738,7 +766,7 @@ static int32_t fsr_seek(struct jls_rd_s * self, uint16_t signal_id, uint8_t leve
     }
 
     for (int lvl = initial_level; lvl > level; --lvl) {
-        JLS_LOGD3("signal %d, level %d, index=%" PRIi64, (int) signal_id, (int) lvl, offset);
+        JLS_LOGD3("signal %d, level %d, offset=%lld" PRIi64, (int) signal_id, lvl, offset);
 
         // compute the step size in samples between each index entry.
         int64_t step_size = signal_def->samples_per_data;  // each data chunk
@@ -766,8 +794,9 @@ static int32_t fsr_seek(struct jls_rd_s * self, uint16_t signal_id, uint8_t leve
         }
 
         int64_t idx = (sample_id - chunk_timestamp) / step_size;
-        if (idx >= chunk_entries) {
+        if ((idx < 0) || (idx >= chunk_entries)) {
             JLS_LOGE("invalid index: %" PRIi64 " >= %" PRIi64, idx, chunk_entries);
+            return JLS_ERROR_IO;
         }
         offset = r->offsets[idx];
     }
@@ -825,13 +854,15 @@ int32_t jls_rd_fsr_length(struct jls_rd_s * self, uint16_t signal_id, int64_t * 
     ROE(jls_raw_chunk_seek(self->raw, offset));
     ROE(rd(self));
     r = (struct jls_fsr_index_s *) self->payload.start;
-    self->signal_length[signal_id] = r->header.timestamp + r->header.entry_count;
+    self->signal_length[signal_id] = r->header.timestamp + r->header.entry_count
+            - self->signal_def[signal_id].sample_id_offset;
     *samples = self->signal_length[signal_id];
     return 0;
 }
 
 int32_t jls_rd_fsr(struct jls_rd_s * self, uint16_t signal_id, int64_t start_sample_id,
                    void * data, int64_t data_length) {
+    // start_sample_id is API zero-based
     const int64_t data_length_orig = data_length;
     int32_t rv = 0;
     uint8_t * data_u8 = (uint8_t *) data;
@@ -847,6 +878,7 @@ int32_t jls_rd_fsr(struct jls_rd_s * self, uint16_t signal_id, int64_t start_sam
     }
 
     struct jls_signal_def_s * signal_def = &self->signal_def[signal_id];
+    const int64_t sample_id_offset = self->signal_def[signal_id].sample_id_offset;
     int64_t samples = 0;
     uint8_t entry_size_bits = jls_datatype_parse_size(signal_def->data_type);
 
@@ -882,6 +914,7 @@ int32_t jls_rd_fsr(struct jls_rd_s * self, uint16_t signal_id, int64_t start_sam
     }
 
     //JLS_LOGD3("jls_rd_fsr_f32(%d, %" PRIi64 ")", (int) signal_id, start_sample_id);
+    start_sample_id += sample_id_offset;  // file sample_id
     ROE(fsr_seek(self, signal_id, 0, start_sample_id));
     self->chunk_cur.hdr.item_next = jls_raw_chunk_tell(self->raw);
     while (data_length > 0) {
@@ -997,6 +1030,7 @@ static int32_t rd_stats_chunk(struct jls_rd_s * self, uint16_t signal_id, uint8_
 static int32_t fsr_statistics(struct jls_rd_s * self, uint16_t signal_id,
                               int64_t start_sample_id, int64_t increment, uint8_t level,
                               double * data, int64_t data_length) {
+    // start_sample_id in JLS units with possible non-zero offset
     JLS_LOGD2("fsr_f32_statistics(signal_id=%d, start_id=%" PRIi64 ", incr=%" PRIi64 ", level=%d, len=%" PRIi64 ")",
               (int) signal_id, start_sample_id, increment, (int) level, data_length);
     bool is_f32;
@@ -1006,6 +1040,8 @@ static int32_t fsr_statistics(struct jls_rd_s * self, uint16_t signal_id,
         step_size *= signal_def->summary_decimate_factor;
     }
     double f64_tmp4[JLS_SUMMARY_FSR_COUNT];
+    const int64_t sample_id_offset = self->signal_def[signal_id].sample_id_offset;
+
     ROE(fsr_seek(self, signal_id, level, start_sample_id)); // returns the index
     ROE(jls_raw_chunk_next(self->raw));  // statistics
     int64_t pos = jls_raw_chunk_tell(self->raw);
@@ -1035,8 +1071,9 @@ static int32_t fsr_statistics(struct jls_rd_s * self, uint16_t signal_id,
 
     if (entry_sample_id != start_sample_id) {
         int64_t incr = entry_sample_id - start_sample_id;
-        // invalidates stats, need to reload
-        ROE(jls_rd_fsr_statistics(self, signal_id, start_sample_id, incr, f64_tmp4, 1));
+        // invalidates stats, need to reload, providing API sample_id
+        ROE(jls_rd_fsr_statistics(self, signal_id, start_sample_id - sample_id_offset,
+                                  incr, f64_tmp4, 1));
         ROE(jls_raw_chunk_seek(self->raw, pos));
         ROE(rd_stats_chunk(self, signal_id, level));
         f64_to_stats(&stats_accum, f64_tmp4, incr);
@@ -1077,7 +1114,8 @@ static int32_t fsr_statistics(struct jls_rd_s * self, uint16_t signal_id,
 
         if (incr_remaining <= step_size) {
             if (data_length == 1) {
-                ROE(jls_rd_fsr_statistics(self, signal_id, start_sample_id, incr_remaining, f64_tmp4, 1));
+                ROE(jls_rd_fsr_statistics(self, signal_id, start_sample_id - sample_id_offset,
+                                          incr_remaining, f64_tmp4, 1));
                 f64_to_stats(&stats_next, f64_tmp4, incr_remaining);
             } else if (is_f32) {
                 f32_to_stats(&stats_next, f32_summary->data[src_offset], incr_remaining);
@@ -1118,6 +1156,7 @@ static int32_t fsr_statistics(struct jls_rd_s * self, uint16_t signal_id,
 int32_t jls_rd_fsr_statistics(struct jls_rd_s * self, uint16_t signal_id,
                               int64_t start_sample_id, int64_t increment,
                               double * data, int64_t data_length) {
+    // API zero-based start_sample_id
     if (!is_signal_defined_type(self, signal_id, JLS_SIGNAL_TYPE_FSR)) {
         JLS_LOGW("signal_id %d invalid", (int) signal_id);
         return JLS_ERROR_PARAMETER_INVALID;
@@ -1134,11 +1173,12 @@ int32_t jls_rd_fsr_statistics(struct jls_rd_s * self, uint16_t signal_id,
 
     int64_t samples = 0;
     ROE(jls_rd_fsr_length(self, signal_id, &samples));
-    if ((start_sample_id + increment * data_length) > samples) {
-        JLS_LOGW("invalid length: %" PRIi64 " > %" PRIi64,
-                 start_sample_id + increment * data_length, samples);
+    int64_t end_sample_id = start_sample_id + increment * data_length;
+    if (end_sample_id > samples) {
+        JLS_LOGW("invalid length: %" PRIi64 " > %" PRIi64, end_sample_id, samples);
         return JLS_ERROR_PARAMETER_INVALID;
     }
+    const int64_t sample_id_offset = self->signal_def[signal_id].sample_id_offset;
 
     struct jls_signal_def_s * signal_def = &self->signal_def[signal_id];
     uint8_t level = 0;
@@ -1149,6 +1189,7 @@ int32_t jls_rd_fsr_statistics(struct jls_rd_s * self, uint16_t signal_id,
         ++level;
         sample_multiple_next *= signal_def->summary_decimate_factor;
     }
+    start_sample_id += sample_id_offset; // JLS file sample_id
 
     if (level) {  // use summaries
         return fsr_statistics(self, signal_id, start_sample_id, increment, level, data, data_length);
@@ -1255,6 +1296,9 @@ int32_t jls_rd_annotations(struct jls_rd_s * self, uint16_t signal_id, int64_t t
         return JLS_ERROR_NOT_FOUND;
     }
 
+    const int64_t sample_id_offset = self->signal_def[signal_id].sample_id_offset;
+    timestamp += sample_id_offset;
+
     int32_t rv = ts_seek(self, signal_id, 0, JLS_TRACK_TYPE_ANNOTATION, timestamp);
     if (rv == JLS_ERROR_NOT_FOUND) {
         return 0;  // no annotations, and that's just fine
@@ -1271,6 +1315,7 @@ int32_t jls_rd_annotations(struct jls_rd_s * self, uint16_t signal_id, int64_t t
             return JLS_ERROR_NOT_FOUND;
         }
         annotation = (struct jls_annotation_s *) self->payload.start;
+        annotation->timestamp -= sample_id_offset;
         if (cbk_fn(cbk_user_data, annotation)) {
             return 0;
         }
@@ -1322,6 +1367,8 @@ JLS_API int32_t jls_rd_utc(struct jls_rd_s * self, uint16_t signal_id, int64_t s
         return JLS_ERROR_NOT_FOUND;
     }
 
+    const int64_t sample_id_offset = self->signal_def[signal_id].sample_id_offset;
+    sample_id += sample_id_offset;
     int32_t rv = ts_seek(self, signal_id, 1, JLS_TRACK_TYPE_UTC, sample_id);
     if (rv == JLS_ERROR_NOT_FOUND) {
         return 0;  // no utc entries, and that's just fine
@@ -1350,6 +1397,9 @@ JLS_API int32_t jls_rd_utc(struct jls_rd_s * self, uint16_t signal_id, int64_t s
             // iterate
         }
         uint32_t size = utc->header.entry_count - idx;
+        for (uint32_t entry_idx = idx; entry_idx < utc->header.entry_count; ++entry_idx) {
+            utc->entries[entry_idx].sample_id -= sample_id_offset;
+        }
         if (size) {
             if (cbk_fn(cbk_user_data, utc->entries + idx, size)) {
                 return 0;

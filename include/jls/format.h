@@ -404,6 +404,7 @@ struct jls_signal_def_s {       // 0 reserved for VSR annotations
     uint32_t summary_decimate_factor;   // definite
     uint32_t annotation_decimate_factor;
     uint32_t utc_decimate_factor;
+    int64_t sample_id_offset;           // FSR read-only, dynamically loaded from first data chunk.
     // on disk: reserve 64 bytes as 0 for future use
     const char * name;                  // The signal name
     const char * units;                 // The units string, normally as SI with no scale prefix.

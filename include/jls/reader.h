@@ -103,7 +103,9 @@ JLS_API int32_t jls_rd_fsr_length(struct jls_rd_s * self, uint16_t signal_id, in
  * @brief Read fixed sample rate (FSR) data.
  *
  * @param self The reader instance.
- * @param signal_id The signal id.
+ * @param signal_id The signal id.  The first
+ *      recorded sample is always 0.  To get the first recorded sample_id,
+ *      see jls_signal_def_s.sample_id_offset.
  * @param start_sample_id The starting sample id to read.
  * @param[out] data The samples read.
  * @param data_length The number of samples to read.
@@ -120,7 +122,9 @@ JLS_API int32_t jls_rd_fsr(struct jls_rd_s * self, uint16_t signal_id, int64_t s
  * @brief Read fixed sample rate (FSR) float32 data.
  *
  * @param self The reader instance.
- * @param signal_id The signal id.
+ * @param signal_id The signal id.  The first
+ *      recorded sample is always 0.  To get the first recorded sample_id,
+ *      see jls_signal_def_s.sample_id_offset.
  * @param start_sample_id The starting sample id to read.
  * @param[out] data The samples read.
  * @param data_length The number of samples to read.  data is
@@ -135,7 +139,9 @@ JLS_API int32_t jls_rd_fsr_f32(struct jls_rd_s * self, uint16_t signal_id, int64
  *
  * @param self The reader instance.
  * @param signal_id The FSR signal.
- * @param start_sample_id The starting sample id to read.
+ * @param start_sample_id The starting sample id to read.  The first
+ *      recorded sample is always 0.  To get the first recorded sample_id,
+ *      see jls_signal_def_s.sample_id_offset.
  * @param increment The number of samples that form a single output summary.
  * @param[out] data The statistics information, in the shape of
  *      data[data_length][JLS_SUMMARY_FSR_COUNT].  The elements are

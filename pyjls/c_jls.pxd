@@ -59,6 +59,7 @@ cdef extern from "jls/format.h":
         uint32_t summary_decimate_factor
         uint32_t annotation_decimate_factor
         uint32_t utc_decimate_factor
+        int64_t sample_id_offset
         const char * name
         const char * units
 

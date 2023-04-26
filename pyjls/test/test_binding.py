@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from pyjls.binding import Writer, Reader, SummaryFSR, DataType, jls_inject_log
+from pyjls.binding import SECOND, Writer, Reader, SummaryFSR, DataType, jls_inject_log
 import io
 import logging
 from logging import StreamHandler
@@ -40,6 +40,7 @@ class TestBinding(unittest.TestCase):
 
     def _on_utc(self, entries):
         self._utc.append(entries)
+        return False
 
     @property
     def utc(self):
@@ -179,28 +180,36 @@ class TestBinding(unittest.TestCase):
             r.annotations(signal_id, expected[2][0], self._on_annotations)
         self.assertEqual(expected[2:], self.annotations)
 
-    def _utc_gen(self, signal_id):
-        signal_id = 3
+    def _utc_gen(self, signal_id, sample_id_offset=None):
+        sample_id_offset = 0 if sample_id_offset is None else int(sample_id_offset)
         data = []
         with Writer(self._path) as w:
             fs = 1000000
             w.source_def(source_id=1, name='name', vendor='vendor', model='model',
                          version='version', serial_number='serial_number')
             w.signal_def(signal_id=signal_id, source_id=1, sample_rate=fs, name='current', units='A')
-            w.fsr_f32(3, 0, np.array([1, 2, 3, 4], dtype=np.float32))
+            w.fsr_f32(3, sample_id_offset, np.array([1, 2, 3, 4], dtype=np.float32))
             for entry in range(100):
                 sample_id = entry * fs
-                timestamp = entry  # in seconds
+                timestamp = entry + 60 * 60 * 24 * 365  # in seconds
                 data.append([sample_id, timestamp])
-                w.utc(signal_id, entry * fs, entry)
+                w.utc(signal_id, sample_id + sample_id_offset, timestamp)
         return np.array(data, dtype=np.int64)
 
     def test_utc(self):
         signal_id = 3
-        expected = self._utc_gen(signal_id)
-        with Reader(self._path) as r:
-            r.utc(signal_id, 0, self._on_utc)
-        np.testing.assert_equal(expected, self.utc)
+        path_base, path_ext = os.path.splitext(self._path)
+        for idx in range(2):
+            self.subTest(idx)
+            self._path = f'{path_base}_{idx:04d}{path_ext}'
+            sample_id_offset = idx * 1_000_000
+            expected = self._utc_gen(signal_id, sample_id_offset=sample_id_offset)
+            with Reader(self._path) as r:
+                self.assertEqual(sample_id_offset, r.signals[signal_id].sample_id_offset)
+                r.utc(signal_id, 0, self._on_utc)
+            np.testing.assert_equal(expected, self.utc)
+            os.remove(self._path)
+            self._utc = []
 
     def test_utc_seek(self):
         signal_id = 3

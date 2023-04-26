@@ -43,6 +43,7 @@ _log_c_name = 'pyjls.c'
 _log_c = logging.getLogger(_log_c_name)
 # _UTC_OFFSET = dateutil.parser.parse('2018-01-01T00:00:00Z').timestamp()
 _UTC_OFFSET = 1514764800  # seconds
+SECOND = 1 << 30
 DEF _JLS_SIGNAL_COUNT = 256  # From jls/format.h
 
 
@@ -232,12 +233,12 @@ cdef _storage_unpack(uint8_t storage_type, const uint8_t * data, uint32_t data_s
 
 def utc_to_jls(utc):
     """Convert from python UTC timestamp to jls timestamp."""
-    return int((utc - _UTC_OFFSET) * (2**30))
+    return int((utc - _UTC_OFFSET) * SECOND)
 
 
 def jls_to_utc(timestamp):
     """Convert from jls timestamp to python UTC timestamp."""
-    return (timestamp / (2**30)) + _UTC_OFFSET
+    return (timestamp / SECOND) + _UTC_OFFSET
 
 
 def _handle_rc(name, rc):
@@ -440,6 +441,7 @@ cdef class Reader:
                 summary_decimate_factor=signals[i].summary_decimate_factor,
                 annotation_decimate_factor=signals[i].annotation_decimate_factor,
                 utc_decimate_factor=signals[i].utc_decimate_factor,
+                sample_id_offset=signals[i].sample_id_offset,
                 name=signals[i].name.decode('utf-8'),
                 units=signals[i].units.decode('utf-8'))
             if signal_def.signal_type == c_jls.JLS_SIGNAL_TYPE_FSR:

@@ -4,6 +4,13 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.6.0
+
+2023 Apr 26 [in progress]
+
+* Fixed JLS to handle non-zero sample_id for first FSR data sample.
+
+
 ## 0.5.3
 
 2023 Apr 19

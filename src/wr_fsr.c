@@ -51,8 +51,8 @@ struct jls_wr_fsr_s {
     uint32_t data_length;  // for data, in samples
     struct jls_fsr_data_s * data;  // for level 0
     double * data_f64;
-    struct level_s * level[JLS_SUMMARY_LEVEL_COUNT];  // level 0 unused
     int64_t sample_id_offset;
+    struct level_s * level[JLS_SUMMARY_LEVEL_COUNT];  // level 0 unused
 };
 
 static int32_t summaryN(struct jls_wr_fsr_s * self, uint8_t level, int64_t pos);
@@ -138,14 +138,14 @@ static int32_t summary_alloc(struct jls_wr_fsr_s * self, uint8_t level) {
     buffer += sizeof(struct level_s);
 
     b->index = (struct jls_fsr_index_s *) buffer;
-    b->index->header.timestamp = 0;
+    b->index->header.timestamp = self->sample_id_offset;
     b->index->header.entry_count = 0;
     b->index->header.entry_size_bits = sizeof(b->index->offsets[0]) * 8;
     b->index->header.rsv16 = 0;
     buffer += index_sz;
 
     b->summary = (struct jls_fsr_f32_summary_s *) buffer;  // actually jls_fsr_f32_summary_s or jls_fsr_f64_summary_s
-    b->summary->header.timestamp = 0;
+    b->summary->header.timestamp = self->sample_id_offset;
     b->summary->header.entry_count = 0;
     b->summary->header.entry_size_bits = (uint16_t) (JLS_SUMMARY_FSR_COUNT * dt_sz_bits);
     b->summary->header.rsv16 = 0;
@@ -523,9 +523,8 @@ int32_t jls_wr_fsr_data(struct jls_wr_fsr_s * self, int64_t sample_id, const voi
     if (!b) {
         ROE(sample_buffer_alloc(self));
         b = self->data;
-        self->sample_id_offset = sample_id;
+        self->sample_id_offset = sample_id;  // can be nonzero
     }
-    sample_id -= self->sample_id_offset;
 
     // todo check for & handle sample_id skips
     if (!b->header.entry_count) {

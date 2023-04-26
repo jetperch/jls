@@ -45,6 +45,7 @@ class SignalDef:
     summary_decimate_factor: int = 100
     annotation_decimate_factor: int = 100
     utc_decimate_factor: int = 100
+    sample_id_offset: int = 0
     name: str = None
     units: str = None
     length: int = 0
@@ -56,6 +57,7 @@ class SignalDef:
                           'samples_per_data', 'sample_decimate_factor',
                           'entries_per_summary', 'summary_decimate_factor',
                           'annotation_decimate_factor', 'utc_decimate_factor',
+                          'sample_id_offset',
                           'units', 'length']:
                 strs.append(f'    {field}: {getattr(self, field)}')
         return '\n'.join(strs)

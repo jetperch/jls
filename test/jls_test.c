@@ -369,13 +369,13 @@ int32_t on_utc(void * user_data, const struct jls_utc_summary_entry_s * utc, uin
     expect_value(on_utc, sample_id, sample_id_);    \
     expect_value(on_utc, timestamp, timestamp_);
 
-static void utc_gen(uint32_t count, int64_t timestamp_start, int64_t timestamp_end) {
+static void utc_gen(uint32_t count, int64_t sample_id_start, int64_t timestamp_start, int64_t timestamp_end) {
     struct jls_wr_s * wr = NULL;
     assert_int_equal(0, jls_wr_open(&wr, filename));
     assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_3));
     assert_int_equal(0, jls_wr_signal_def(wr, &SIGNAL_5));
     for (int64_t i = 0; i < count; ++i) {
-        int64_t sample_id = i * 10;
+        int64_t sample_id = sample_id_start + i * 10;
         int64_t timestamp = i * JLS_TIME_SECOND;
         assert_int_equal(0, jls_wr_utc(wr, 5, sample_id, timestamp));
         if ((timestamp >= timestamp_start) && (timestamp < timestamp_end)) {
@@ -395,25 +395,31 @@ static void utc_check(int64_t sample_id) {
 
 static void test_utc(void **state) {
     (void) state;
-    utc_gen(SIGNAL_5.utc_decimate_factor * 5 + 10, 0, 1000000 * JLS_TIME_SECOND);
+    utc_gen(SIGNAL_5.utc_decimate_factor * 5 + 10, 0, 0, 1000000 * JLS_TIME_SECOND);
     utc_check(0);
+}
+
+static void test_utc_sample_id_offset(void **state) {
+    (void) state;
+    utc_gen(SIGNAL_5.utc_decimate_factor * 5 + 10, 1000000, 0, 1000000 * JLS_TIME_SECOND);
+    utc_check(1000000);
 }
 
 static void test_utc_seek_first_block(void **state) {
     (void) state;
-    utc_gen(SIGNAL_5.utc_decimate_factor * 5 + 10, 50 * JLS_TIME_SECOND, 1000000 * JLS_TIME_SECOND);
+    utc_gen(SIGNAL_5.utc_decimate_factor * 5 + 10, 0, 50 * JLS_TIME_SECOND, 1000000 * JLS_TIME_SECOND);
     utc_check(500);
 }
 
 static void test_utc_seek_second_block_start(void **state) {
     (void) state;
-    utc_gen(SIGNAL_5.utc_decimate_factor * 5 + 10, 100 * JLS_TIME_SECOND, 1000000 * JLS_TIME_SECOND);
+    utc_gen(SIGNAL_5.utc_decimate_factor * 5 + 10, 0, 100 * JLS_TIME_SECOND, 1000000 * JLS_TIME_SECOND);
     utc_check(1000);
 }
 
 static void test_utc_seek_second_block_middle(void **state) {
     (void) state;
-    utc_gen(SIGNAL_5.utc_decimate_factor * 5 + 10, 150 * JLS_TIME_SECOND, 1000000 * JLS_TIME_SECOND);
+    utc_gen(SIGNAL_5.utc_decimate_factor * 5 + 10, 0, 150 * JLS_TIME_SECOND, 1000000 * JLS_TIME_SECOND);
     utc_check(1500);
 }
 
@@ -547,6 +553,52 @@ static void test_fsr_f32(void **state) {
     assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_fsr_f32(rd, 5, -5, data, 10));
     assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_fsr_f32(rd, 5, sample_count - 5, data, 10));
     assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_fsr_f32(rd, 5, sample_count + 5, data, 10));
+
+    jls_rd_close(rd);
+    free(signal);
+    remove(filename);
+}
+
+static void test_fsr_f32_sample_id_offset(void **state) {
+    (void) state;
+    struct jls_wr_s * wr = NULL;
+    const int64_t sample_count = WINDOW_SIZE * 1000;
+    float * signal = gen_triangle(1000, sample_count);
+    assert_non_null(signal);
+
+    assert_int_equal(0, jls_wr_open(&wr, filename));
+    assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_3));
+    assert_int_equal(0, jls_wr_signal_def(wr, &SIGNAL_5));
+    int64_t sample_id_offset = 100000000;
+
+    int64_t utc = JLS_TIME_YEAR;   // one year after start of epoch
+
+    for (int sample_id = 0; sample_id < sample_count; sample_id += WINDOW_SIZE) {
+        assert_int_equal(0, jls_wr_fsr_f32(wr, 5, sample_id_offset + sample_id, signal + sample_id, WINDOW_SIZE));
+        assert_int_equal(0, jls_wr_utc(wr, 5, sample_id_offset + sample_id, utc + JLS_COUNTER_TO_TIME(sample_id, SIGNAL_5.sample_rate)));
+    }
+    assert_int_equal(0, jls_wr_close(wr));
+
+    struct jls_rd_s * rd = NULL;
+    assert_int_equal(0, jls_rd_open(&rd, filename));
+    struct jls_signal_def_s * signals = NULL;
+    uint16_t count = 0;
+    assert_int_equal(0, jls_rd_signals(rd, &signals, &count));
+    assert_int_equal(2, count);
+    assert_int_equal(5, signals[1].signal_id);
+    int64_t samples = 0;
+    assert_int_equal(0, jls_rd_fsr_length(rd, 5, &samples));
+    assert_int_equal(sample_count, samples);
+
+    // get entire first data chunk.
+    float data[2000];
+    assert_int_equal(0, jls_rd_fsr_f32(rd, 5, 0, data, 1000));
+    assert_memory_equal(signal, data, 1000 * sizeof(float));
+
+    for (int sample_id = 0; sample_id < sample_count; sample_id += WINDOW_SIZE) {
+        expect_utc(sample_id, utc + JLS_COUNTER_TO_TIME(sample_id, SIGNAL_5.sample_rate));
+    }
+    assert_int_equal(0, jls_rd_utc(rd, 5, 0, on_utc, NULL));
 
     jls_rd_close(rd);
     free(signal);
@@ -837,6 +889,7 @@ int main(void) {
             cmocka_unit_test(test_hmarker),
             cmocka_unit_test(test_user_data),
             cmocka_unit_test(test_utc),
+            cmocka_unit_test(test_utc_sample_id_offset),
             cmocka_unit_test(test_utc_seek_first_block),
             cmocka_unit_test(test_utc_seek_second_block_start),
             cmocka_unit_test(test_utc_seek_second_block_middle),
@@ -846,6 +899,7 @@ int main(void) {
             cmocka_unit_test(test_wr_signal_duplicate),
 #endif
             cmocka_unit_test(test_fsr_f32),
+            cmocka_unit_test(test_fsr_f32_sample_id_offset),
             cmocka_unit_test(test_fsr_f32_statistics),
             cmocka_unit_test(test_fsr_f64),
 
