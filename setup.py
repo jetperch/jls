@@ -85,6 +85,7 @@ extensions = [
             'src/log.c',
             'src/msg_ring_buffer.c',
             'src/raw.c',
+            'src/rd_fsr.c',
             'src/reader.c',
             'src/statistics.c',
             'src/threaded_writer.c',

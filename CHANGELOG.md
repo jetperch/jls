@@ -6,9 +6,10 @@ This file contains the list of changes made to the JLS project.
 
 ## 0.6.0
 
-2023 Apr 26 [in progress]
+2023 Apr 26
 
 * Fixed JLS to handle non-zero sample_id for first FSR data sample.
+* Added pyjls.Reader.utc_to_sample_id and sample_id_to_utc.
 
 
 ## 0.5.3

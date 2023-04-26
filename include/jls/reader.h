@@ -246,6 +246,30 @@ typedef int32_t (*jls_rd_utc_cbk_fn)(void * user_data,
 JLS_API int32_t jls_rd_utc(struct jls_rd_s * self, uint16_t signal_id, int64_t sample_id,
                            jls_rd_utc_cbk_fn cbk_fn, void * cbk_user_data);
 
+/**
+ * @brief Convert from sample_id to timestamp for FSR signals.
+ *
+ * @param self The reader instance.
+ * @param signal_id The signal id.
+ * @param sample_id The sample id to convert.
+ * @param timestamp[out] The JLS timestamp for the sample_id.
+ * @return 0 or error code.
+ */
+JLS_API int32_t jls_rd_sample_id_to_timestamp(struct jls_rd_s * self, uint16_t signal_id,
+        int64_t sample_id, int64_t * timestamp);
+
+/**
+ * @brief Convert from timestamp to sample_id for FSR signals.
+ *
+ * @param self The reader instance.
+ * @param signal_id The signal id.
+ * @param timestamp The JLS timestamp to convert.
+ * @param sample_id[out] The sample_id for timestamp.
+ * @return 0 or error code.
+ */
+JLS_API int32_t jls_rd_timestamp_to_sample_id(struct jls_rd_s * self, uint16_t signal_id,
+        int64_t timestamp, int64_t * sample_id);
+
 JLS_CPP_GUARD_END
 
 /** @} */

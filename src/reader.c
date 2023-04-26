@@ -21,6 +21,7 @@
 #include "jls/ec.h"
 #include "jls/log.h"
 #include "jls/crc32c.h"
+#include "jls/rd_fsr.h"
 #include "jls/statistics.h"
 #include "jls/bit_shift.h"
 #include "jls/util.h"
@@ -108,6 +109,7 @@ struct signal_s {
     int64_t track_defs[JLS_TRACK_TYPE_COUNT];
     int64_t track_head_offsets[JLS_TRACK_TYPE_COUNT];
     int64_t track_head_data[JLS_TRACK_TYPE_COUNT][JLS_SUMMARY_LEVEL_COUNT];
+    struct jls_rd_fsr_s * rd_fsr;
 };
 
 struct jls_rd_s {
@@ -766,7 +768,7 @@ static int32_t fsr_seek(struct jls_rd_s * self, uint16_t signal_id, uint8_t leve
     }
 
     for (int lvl = initial_level; lvl > level; --lvl) {
-        JLS_LOGD3("signal %d, level %d, offset=%lld" PRIi64, (int) signal_id, lvl, offset);
+        JLS_LOGD3("signal %d, level %d, offset=%" PRIi64, (int) signal_id, lvl, offset);
 
         // compute the step size in samples between each index entry.
         int64_t step_size = signal_def->samples_per_data;  // each data chunk
@@ -1407,4 +1409,31 @@ JLS_API int32_t jls_rd_utc(struct jls_rd_s * self, uint16_t signal_id, int64_t s
         }
     }
     return 0;
+}
+
+static int32_t utc_load(struct jls_rd_s * self, uint16_t signal_id) {
+    if (!is_signal_defined_type(self, signal_id, JLS_SIGNAL_TYPE_FSR)) {
+        return JLS_ERROR_NOT_FOUND;
+    }
+    struct signal_s * signal = &self->signals[signal_id];
+    if (NULL != signal->rd_fsr) {
+        return 0;
+    }
+    signal->rd_fsr = jls_rd_fsr_alloc(self->signal_def[signal_id].sample_rate);
+    if (NULL == signal->rd_fsr) {
+        return JLS_ERROR_NOT_ENOUGH_MEMORY;
+    }
+    return jls_rd_utc(self, signal_id, 0, jls_rd_fsr_add_cbk, signal->rd_fsr);
+}
+
+int32_t jls_rd_sample_id_to_timestamp(struct jls_rd_s * self, uint16_t signal_id,
+                                      int64_t sample_id, int64_t * timestamp) {
+    ROE(utc_load(self, signal_id));
+    return jls_rd_fsr_sample_id_to_timestamp(self->signals[signal_id].rd_fsr, sample_id, timestamp);
+}
+
+int32_t jls_rd_timestamp_to_sample_id(struct jls_rd_s * self, uint16_t signal_id,
+                                              int64_t timestamp, int64_t * sample_id) {
+    ROE(utc_load(self, signal_id));
+    return jls_rd_fsr_timestamp_to_sample_id(self->signals[signal_id].rd_fsr, timestamp, sample_id);
 }

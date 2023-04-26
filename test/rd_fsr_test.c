@@ -18,6 +18,7 @@
 #include <stddef.h>
 #include <setjmp.h>
 #include <cmocka.h>
+#include "jls/ec.h"
 #include "jls/rd_fsr.h"
 #include "jls/time.h"
 
@@ -30,61 +31,65 @@
 
 static void test_empty(void **state) {
     (void) state;
+    int64_t v;
     struct jls_rd_fsr_s * s = jls_rd_fsr_alloc(1000.0);
-    assert_int_equal(0, jls_rd_fsr_sample_id_to_utc(s, 1000));
-    assert_int_equal(0, jls_rd_fsr_utc_to_sample_id(s, YEAR));
-    jls_rd_fsr_utc_free(s);
+    assert_int_equal(JLS_ERROR_UNAVAILABLE, jls_rd_fsr_sample_id_to_timestamp(s, 1000, &v));
+    assert_int_equal(JLS_ERROR_UNAVAILABLE, jls_rd_fsr_timestamp_to_sample_id(s, YEAR, &v));
+    jls_rd_fsr_free(s);
 }
 
 static void test_single(void **state) {
     (void) state;
+    int64_t v;
     struct jls_rd_fsr_s * s = jls_rd_fsr_alloc(1000.0);
     jls_rd_fsr_add(s, 1000, YEAR);
-    assert_int_equal(YEAR, jls_rd_fsr_sample_id_to_utc(s, 1000));
-    assert_int_equal(YEAR + SECOND, jls_rd_fsr_sample_id_to_utc(s, 2000));
+    assert_int_equal(0, jls_rd_fsr_sample_id_to_timestamp(s, 1000, &v)); assert_int_equal(YEAR, v);
+    assert_int_equal(0, jls_rd_fsr_sample_id_to_timestamp(s, 2000, &v)); assert_int_equal(YEAR + SECOND, v);
 
-    assert_int_equal(1000, jls_rd_fsr_utc_to_sample_id(s, YEAR));
-    assert_int_equal(2000, jls_rd_fsr_utc_to_sample_id(s, YEAR + SECOND));
+    assert_int_equal(0, jls_rd_fsr_timestamp_to_sample_id(s, YEAR, &v)); assert_int_equal(1000, v);
+    assert_int_equal(0, jls_rd_fsr_timestamp_to_sample_id(s, YEAR + SECOND, &v)); assert_int_equal(2000, v);
 
-    jls_rd_fsr_utc_free(s);
+    jls_rd_fsr_free(s);
 }
 
 static void test_interp2(void **state) {
+    (void) state;
+    int64_t v;
     struct jls_rd_fsr_s * s = jls_rd_fsr_alloc(20.0);  // inaccurate
     jls_rd_fsr_add(s, 1000, YEAR);
     jls_rd_fsr_add(s, 2000, YEAR + SECOND);
 
-    assert_int_equal(YEAR, jls_rd_fsr_sample_id_to_utc(s, 1000));           // exact 0
-    assert_int_equal(YEAR + SECOND, jls_rd_fsr_sample_id_to_utc(s, 2000));  // exact 1
-    assert_int_equal(YEAR + SECOND/2, jls_rd_fsr_sample_id_to_utc(s, 1500));  // interp
-    assert_int_equal(YEAR - SECOND/2, jls_rd_fsr_sample_id_to_utc(s, 500));  // below range
-    assert_int_equal(YEAR + 3*SECOND/2, jls_rd_fsr_sample_id_to_utc(s, 2500));  // above range
+    assert_int_equal(0, jls_rd_fsr_sample_id_to_timestamp(s, 1000, &v)); assert_int_equal(YEAR, v);          // exact 0
+    assert_int_equal(0, jls_rd_fsr_sample_id_to_timestamp(s, 2000, &v)); assert_int_equal(YEAR + SECOND, v);  // exact 1
+    assert_int_equal(0, jls_rd_fsr_sample_id_to_timestamp(s, 1500, &v)); assert_int_equal(YEAR + SECOND/2, v);  // interp
+    assert_int_equal(0, jls_rd_fsr_sample_id_to_timestamp(s, 500, &v)); assert_int_equal(YEAR - SECOND/2, v);  // below range
+    assert_int_equal(0, jls_rd_fsr_sample_id_to_timestamp(s, 2500, &v)); assert_int_equal(YEAR + 3*SECOND/2, v);  // above range
 
-    assert_int_equal(1000, jls_rd_fsr_utc_to_sample_id(s, YEAR));
-    assert_int_equal(2000, jls_rd_fsr_utc_to_sample_id(s, YEAR + SECOND));
-    assert_int_equal(1500, jls_rd_fsr_utc_to_sample_id(s, YEAR + SECOND / 2));
-    assert_int_equal(500, jls_rd_fsr_utc_to_sample_id(s, YEAR - SECOND / 2));  // below range
-    assert_int_equal(2500, jls_rd_fsr_utc_to_sample_id(s, YEAR + 3 * SECOND / 2));  // above range
+    assert_int_equal(0, jls_rd_fsr_timestamp_to_sample_id(s, YEAR, &v)); assert_int_equal(1000, v);
+    assert_int_equal(0, jls_rd_fsr_timestamp_to_sample_id(s, YEAR + SECOND, &v)); assert_int_equal(2000, v);
+    assert_int_equal(0, jls_rd_fsr_timestamp_to_sample_id(s, YEAR + SECOND / 2, &v)); assert_int_equal(1500, v);
+    assert_int_equal(0, jls_rd_fsr_timestamp_to_sample_id(s, YEAR - SECOND / 2, &v)); assert_int_equal(500, v);  // below range
+    assert_int_equal(0, jls_rd_fsr_timestamp_to_sample_id(s, YEAR + 3 * SECOND / 2, &v)); assert_int_equal(2500, v);  // above range
 }
 
 static void test_interpN(void **state) {
+    (void) state;
+    int64_t v;
     struct jls_rd_fsr_s *s = jls_rd_fsr_alloc(20.0);  // inaccurate
     jls_rd_fsr_add(s, 1000, YEAR);
     jls_rd_fsr_add(s, 2000, YEAR + SECOND);  // 1000 samples/second
     jls_rd_fsr_add(s, 4000, YEAR + 2 * SECOND);  // 2000 samples/second
     jls_rd_fsr_add(s, 4100, YEAR + 3 * SECOND);  // 100 samples/second
 
-    assert_int_equal(YEAR + 0 * SECOND, jls_rd_fsr_sample_id_to_utc(s, 1000));  // exact 0
-    assert_int_equal(YEAR + 1 * SECOND, jls_rd_fsr_sample_id_to_utc(s, 2000));  // exact 1
-    assert_int_equal(YEAR + 2 * SECOND, jls_rd_fsr_sample_id_to_utc(s, 4000));  // exact 2
-    assert_int_equal(YEAR + 3 * SECOND, jls_rd_fsr_sample_id_to_utc(s, 4100));  // exact 3
-    assert_int_equal(YEAR + SECOND / 2, jls_rd_fsr_sample_id_to_utc(s, 1500));  // interp
-    assert_int_equal(YEAR + 3 * SECOND / 2, jls_rd_fsr_sample_id_to_utc(s, 3000));  // interp
-    assert_int_equal(YEAR + 5 * SECOND / 2, jls_rd_fsr_sample_id_to_utc(s, 4050));  // interp
-    assert_int_equal(YEAR - SECOND / 2, jls_rd_fsr_sample_id_to_utc(s, 500));  // below range
-    assert_int_equal(YEAR + 7 * SECOND / 2, jls_rd_fsr_sample_id_to_utc(s, 4150));  // below range
-
-
+    assert_int_equal(0, jls_rd_fsr_sample_id_to_timestamp(s, 1000, &v)); assert_int_equal(YEAR + 0 * SECOND, v);  // exact 0
+    assert_int_equal(0, jls_rd_fsr_sample_id_to_timestamp(s, 2000, &v)); assert_int_equal(YEAR + 1 * SECOND, v);  // exact 1
+    assert_int_equal(0, jls_rd_fsr_sample_id_to_timestamp(s, 4000, &v)); assert_int_equal(YEAR + 2 * SECOND, v);  // exact 2
+    assert_int_equal(0, jls_rd_fsr_sample_id_to_timestamp(s, 4100, &v)); assert_int_equal(YEAR + 3 * SECOND, v);  // exact 3
+    assert_int_equal(0, jls_rd_fsr_sample_id_to_timestamp(s, 1500, &v)); assert_int_equal(YEAR + SECOND / 2, v);  // interp
+    assert_int_equal(0, jls_rd_fsr_sample_id_to_timestamp(s, 3000, &v)); assert_int_equal(YEAR + 3 * SECOND / 2, v);  // interp
+    assert_int_equal(0, jls_rd_fsr_sample_id_to_timestamp(s, 4050, &v)); assert_int_equal(YEAR + 5 * SECOND / 2, v);  // interp
+    assert_int_equal(0, jls_rd_fsr_sample_id_to_timestamp(s, 500, &v)); assert_int_equal(YEAR - SECOND / 2, v);  // below range
+    assert_int_equal(0, jls_rd_fsr_sample_id_to_timestamp(s, 4150, &v)); assert_int_equal(YEAR + 7 * SECOND / 2, v);  // below range
 }
 
 int main(void) {

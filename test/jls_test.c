@@ -571,7 +571,7 @@ static void test_fsr_f32_sample_id_offset(void **state) {
     assert_int_equal(0, jls_wr_signal_def(wr, &SIGNAL_5));
     int64_t sample_id_offset = 100000000;
 
-    int64_t utc = JLS_TIME_YEAR;   // one year after start of epoch
+    const int64_t utc = JLS_TIME_YEAR;   // one year after start of epoch
 
     for (int sample_id = 0; sample_id < sample_count; sample_id += WINDOW_SIZE) {
         assert_int_equal(0, jls_wr_fsr_f32(wr, 5, sample_id_offset + sample_id, signal + sample_id, WINDOW_SIZE));
@@ -599,6 +599,19 @@ static void test_fsr_f32_sample_id_offset(void **state) {
         expect_utc(sample_id, utc + JLS_COUNTER_TO_TIME(sample_id, SIGNAL_5.sample_rate));
     }
     assert_int_equal(0, jls_rd_utc(rd, 5, 0, on_utc, NULL));
+
+    // check sample_id -> timestamp mapping
+    int64_t v = 0;
+    assert_int_equal(0, jls_rd_sample_id_to_timestamp(rd, 5, 0, &v));
+    assert_int_equal(utc, v);
+    assert_int_equal(0, jls_rd_sample_id_to_timestamp(rd, 5, 100000, &v));
+    assert_int_equal(utc + JLS_TIME_SECOND, v);
+
+    // check timestamp -> sample_id mapping
+    assert_int_equal(0, jls_rd_timestamp_to_sample_id(rd, 5, utc, &v));
+    assert_int_equal(0, v);
+    assert_int_equal(0, jls_rd_timestamp_to_sample_id(rd, 5, utc + JLS_TIME_SECOND, &v));
+    assert_int_equal(100000, v);
 
     jls_rd_close(rd);
     free(signal);

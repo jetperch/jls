@@ -21,6 +21,7 @@ set(SOURCES
         log.c
         msg_ring_buffer.c
         raw.c
+        rd_fsr.c
         reader.c
         statistics.c
         threaded_writer.c

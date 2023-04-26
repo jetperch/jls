@@ -207,6 +207,8 @@ class TestBinding(unittest.TestCase):
             with Reader(self._path) as r:
                 self.assertEqual(sample_id_offset, r.signals[signal_id].sample_id_offset)
                 r.utc(signal_id, 0, self._on_utc)
+                self.assertEqual(60 * 60 * 24 * 365, r.sample_id_to_timestamp(signal_id, 0))
+                self.assertEqual(0, r.timestamp_to_sample_id(signal_id, 60 * 60 * 24 * 365))
             np.testing.assert_equal(expected, self.utc)
             os.remove(self._path)
             self._utc = []

@@ -140,3 +140,7 @@ cdef extern from "jls/reader.h":
     ctypedef int32_t (*jls_rd_utc_cbk_fn)(void * user_data, const jls_utc_summary_entry_s * utc, uint32_t size)
     int32_t jls_rd_utc(jls_rd_s * self, uint16_t signal_id, int64_t sample_id,
                        jls_rd_utc_cbk_fn cbk_fn, void * cbk_user_data)
+    int32_t jls_rd_sample_id_to_timestamp(jls_rd_s * self, uint16_t signal_id,
+                                          int64_t sample_id, int64_t * timestamp);
+    int32_t jls_rd_timestamp_to_sample_id(jls_rd_s * self, uint16_t signal_id,
+                                          int64_t timestamp, int64_t * sample_id);
