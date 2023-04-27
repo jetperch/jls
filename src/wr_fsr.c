@@ -635,18 +635,18 @@ int32_t jls_wr_fsr_data(struct jls_wr_fsr_s * self, int64_t sample_id, const voi
     } else {
         JLS_LOGW("fsr skip: in=%" PRIi64 " expect=%" PRIi64,
                  sample_id, sample_id_next);
-        int64_t skip = sample_id - sample_id_next;
-        int64_t buf_sz = 0;
+        size_t skip = (size_t) (sample_id - sample_id_next);
+        size_t buf_sz = 0;
         if (self->def.data_type == JLS_DATATYPE_F32) {
             float * f32 = (float *) self->buffer_u64;
             buf_sz = sizeof(self->buffer_u64) / sizeof(float);
-            for (int64_t idx = 0; idx < buf_sz; ++idx) {
+            for (size_t idx = 0; idx < buf_sz; ++idx) {
                 f32[idx] = NAN;
             }
         } else if (self->def.data_type == JLS_DATATYPE_F64) {
             double * f64 = (double *) self->buffer_u64;
             buf_sz = sizeof(self->buffer_u64) / sizeof(double);
-            for (int64_t idx = 0; idx < sizeof(self->buffer_u64) / sizeof(double); ++idx) {
+            for (size_t idx = 0; idx < sizeof(self->buffer_u64) / sizeof(double); ++idx) {
                 f64[idx] = NAN;
             }
         } else {
