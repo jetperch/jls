@@ -85,6 +85,16 @@ enum message_e {
     MSG_FSR,            // hdr.fsr_f32, data
     MSG_ANNOTATION,     // hdr.annotation, data
     MSG_UTC,            // hdr.utc, data
+    MSG_ITEM_COUNT,
+};
+
+const char * message_str[] = {
+        "close",
+        "flush",
+        "user_data",
+        "fsr",
+        "annotation",
+        "utc",
 };
 
 int32_t jls_twr_run(struct jls_twr_s * self) {
@@ -152,7 +162,10 @@ int32_t jls_twr_run(struct jls_twr_s * self) {
             jls_bkt_process_unlock(self->bk);
 
             if (rc) {
-                JLS_LOGW("thread msg %d returned %d", (int) hdr.msg_type, (int) rc);
+                JLS_LOGW("thread msg %d:%s returned %d:%s",
+                         (int) hdr.msg_type,
+                         (hdr.msg_type < MSG_ITEM_COUNT) ? message_str[hdr.msg_type] : "unknown",
+                         (int) rc, jls_error_code_name(rc));
             }
 
             while (!self->quit && jls_bkt_msg_lock(self->bk)) {

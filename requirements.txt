@@ -18,8 +18,7 @@
 check-manifest>=0.37
 Cython>=0.29.3                          # C native build
 myst-parser                             # documentation
-numpy>=1.23; sys_platform == 'win32'
-numpy>=1.20; sys_platform != 'win32'
+numpy>=1.23
 pywin32; platform_system=='Windows'
 sphinx                                  # documentation
 wheel

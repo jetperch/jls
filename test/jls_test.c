@@ -105,6 +105,22 @@ const struct jls_signal_def_s SIGNAL_8 = {
         .units = "A",
 };
 
+const struct jls_signal_def_s SIGNAL_9_U1 = {
+        .signal_id = 9,
+        .source_id = 3,
+        .signal_type = JLS_SIGNAL_TYPE_FSR,
+        .data_type = JLS_DATATYPE_U1,
+        .sample_rate = 100000,
+        .samples_per_data = 1000,
+        .sample_decimate_factor = 100,
+        .entries_per_summary = 200,
+        .summary_decimate_factor = 100,
+        .annotation_decimate_factor = 100,
+        .utc_decimate_factor = 100,
+        .name = "signal 9",
+        .units = "",
+};
+
 #if !SKIP_BASIC
 static void test_source(void **state) {
     (void) state;
@@ -853,9 +869,78 @@ static void test_fsr_statistics_u1(void **state) {
 
     assert_int_equal(0, jls_rd_fsr_statistics(rd, signal_7.signal_id, 0, 1024, f32, 1024));
     assert_float_equal(0.75f, f32[JLS_SUMMARY_FSR_MEAN], 1e-15);
-    assert_float_equal(0.433224f, f32[JLS_SUMMARY_FSR_STD], 1e-6);
+    assert_float_equal(0.433013f, f32[JLS_SUMMARY_FSR_STD], 1e-6);
     assert_float_equal(0.0f, f32[JLS_SUMMARY_FSR_MIN], 1e-15);
     assert_float_equal(1.0f, f32[JLS_SUMMARY_FSR_MAX], 1e-15);
+
+    jls_rd_close(rd);
+    remove(filename);
+}
+
+static void test_fsr_f32_sample_skip(void **state) {
+    (void) state;
+    struct jls_wr_s * wr = NULL;
+    float * signal = gen_triangle(1000, 3000);
+    assert_non_null(signal);
+
+    assert_int_equal(0, jls_wr_open(&wr, filename));
+    assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_3));
+    assert_int_equal(0, jls_wr_signal_def(wr, &SIGNAL_5));
+    assert_int_equal(0, jls_wr_fsr_f32(wr, 5, 0, &signal[0], 1000));
+    assert_int_equal(0, jls_wr_fsr_f32(wr, 5, 2000, &signal[2000], 1000));
+    assert_int_equal(0, jls_wr_close(wr));
+
+    struct jls_rd_s * rd = NULL;
+    assert_int_equal(0, jls_rd_open(&rd, filename));
+    int64_t samples = 0;
+    assert_int_equal(0, jls_rd_fsr_length(rd, 5, &samples));
+    assert_int_equal(3000, samples);
+
+    // get entire first data chunk.
+    float data[3000];
+    assert_int_equal(0, jls_rd_fsr_f32(rd, 5, 0, data, 3000));
+    assert_memory_equal(signal, data, 1000 * sizeof(float));
+    for (int idx = 1000; idx < 2000; ++idx) {
+        assert_true(isnan(data[idx]));
+    }
+    assert_memory_equal(signal + 2000, data + 2000, 1000 * sizeof(float));
+
+    jls_rd_close(rd);
+    free(signal);
+    remove(filename);
+}
+
+static void test_fsr_u1_sample_skip(void **state) {
+    (void) state;
+    struct jls_wr_s * wr = NULL;
+
+    assert_int_equal(0, jls_wr_open(&wr, filename));
+    assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_3));
+    assert_int_equal(0, jls_wr_signal_def(wr, &SIGNAL_9_U1));
+    uint8_t data_ones[125];
+    uint8_t data_zeros[125];
+    memset(data_ones, 0xff, sizeof(data_ones));
+    memset(data_zeros, 0, sizeof(data_zeros));
+    assert_int_equal(0, jls_wr_fsr(wr, 9, 0, data_ones, 3));
+    assert_int_equal(0, jls_wr_fsr(wr, 9, 3, data_ones, 2));
+    assert_int_equal(0, jls_wr_fsr(wr, 9, 5, data_ones, 5));
+    assert_int_equal(0, jls_wr_fsr(wr, 9, 10, data_ones, 10));
+    assert_int_equal(0, jls_wr_fsr(wr, 9, 20, data_ones, 980));
+    assert_int_equal(0, jls_wr_fsr(wr, 9, 2000, data_ones, 1000));
+    assert_int_equal(0, jls_wr_close(wr));
+
+    struct jls_rd_s * rd = NULL;
+    assert_int_equal(0, jls_rd_open(&rd, filename));
+    int64_t samples = 0;
+    assert_int_equal(0, jls_rd_fsr_length(rd, 9, &samples));
+    assert_int_equal(3000, samples);
+
+    // get entire first data chunk.
+    uint8_t data[125 * 3];
+    assert_int_equal(0, jls_rd_fsr(rd, 9, 0, data, 3000));
+    assert_memory_equal(data_ones, data, 125);
+    assert_memory_equal(data_zeros, data + 125, 125);
+    assert_memory_equal(data_ones, data + 250, 125);
 
     jls_rd_close(rd);
     remove(filename);
@@ -918,6 +1003,9 @@ int main(void) {
 
             cmocka_unit_test(test_fsr_samples_int_uint),
             cmocka_unit_test(test_fsr_statistics_u1),
+
+            cmocka_unit_test(test_fsr_f32_sample_skip),
+            cmocka_unit_test(test_fsr_u1_sample_skip),
 
 #if !SKIP_REALWORLD
             cmocka_unit_test(test_fsr_f32_statistics_real),

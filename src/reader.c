@@ -872,22 +872,26 @@ int32_t jls_rd_fsr(struct jls_rd_s * self, uint16_t signal_id, int64_t start_sam
         JLS_LOGW("signal_id %d invalid", (int) signal_id);
         return JLS_ERROR_PARAMETER_INVALID;
     }
+    int64_t samples = 0;
+    ROE(jls_rd_fsr_length(self, signal_id, &samples));
+    struct jls_signal_def_s * signal_def = &self->signal_def[signal_id];
     if (data_length <= 0) {
         return 0;
     } else if (start_sample_id < 0) {
-        JLS_LOGW("start_sample_id invalid: %" PRIi64, start_sample_id);
+        JLS_LOGW("rd_fsr %d %s: start_sample_id invalid %" PRIi64 " length=%" PRIi64,
+                 (int) signal_id, signal_def->name,
+                 start_sample_id, samples);
         return JLS_ERROR_PARAMETER_INVALID;
     }
 
-    struct jls_signal_def_s * signal_def = &self->signal_def[signal_id];
     const int64_t sample_id_offset = self->signal_def[signal_id].sample_id_offset;
-    int64_t samples = 0;
     uint8_t entry_size_bits = jls_datatype_parse_size(signal_def->data_type);
 
-    ROE(jls_rd_fsr_length(self, signal_id, &samples));
     if ((start_sample_id + data_length) > samples) {
-        JLS_LOGW("length invalid: %" PRIi64 " > %" PRIi64,
-                 start_sample_id + data_length, samples);
+        JLS_LOGW("rd_fsr %d %s: start=%" PRIi64 " length=%" PRIi64 " > %" PRIi64 " by %" PRIi64,
+                 (int) signal_id, signal_def->name,
+                 start_sample_id, data_length, samples,
+                 start_sample_id + data_length - samples);
         return JLS_ERROR_PARAMETER_INVALID;
     }
 
