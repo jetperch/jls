@@ -639,7 +639,8 @@ int32_t jls_wr_fsr_data(struct jls_wr_fsr_s * self, int64_t sample_id, const voi
         size_t buf_sz = 0;
         if (self->def.data_type == JLS_DATATYPE_F32) {
             float * f32 = (float *) self->buffer_u64;
-            buf_sz = sizeof(self->buffer_u64) / sizeof(float);
+            buf_sz = sizeof(self->buffer_u64);
+            buf_sz /= sizeof(float);
             for (size_t idx = 0; idx < buf_sz; ++idx) {
                 f32[idx] = NAN;
             }
