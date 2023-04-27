@@ -8,7 +8,7 @@ This file contains the list of changes made to the JLS project.
 
 2023 Apr 27
 
-* Added FSR support for missing and duplicate date.
+* Added FSR support for missing and duplicate data.
 * Added FSR support for unaligned u1 and u4 data.
 * Improved log messages.
 
