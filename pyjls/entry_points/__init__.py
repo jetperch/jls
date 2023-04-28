@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from . import annotate, info
+from . import annotate, export, info
 
-__all__ = [annotate, info]
+__all__ = [annotate, export, info]
 """This list of available command modules.  Each module must contain a 
 parser_config(subparser) function.  The function must return the callable(args)
 that will be executed for the command."""
