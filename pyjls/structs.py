@@ -51,7 +51,10 @@ class SignalDef:
     length: int = 0
 
     def info(self, verbose=None) -> str:
-        strs = [f'{self.signal_id}: {self.name}']
+        hdr = f'{self.signal_id}: {self.name}'
+        if self.signal_type == 0:
+            hdr += f' ({self.length} samples at {self.sample_rate} Hz)'
+        strs = [hdr]
         if verbose:
             for field in ['source_id', 'signal_type', 'data_type', 'sample_rate',
                           'samples_per_data', 'sample_decimate_factor',

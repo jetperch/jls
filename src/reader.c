@@ -1427,7 +1427,9 @@ static int32_t utc_load(struct jls_rd_s * self, uint16_t signal_id) {
     if (NULL == signal->rd_fsr) {
         return JLS_ERROR_NOT_ENOUGH_MEMORY;
     }
-    return jls_rd_utc(self, signal_id, 0, jls_rd_fsr_add_cbk, signal->rd_fsr);
+    int64_t sample_rate = self->signal_def[signal_id].sample_rate;
+    int64_t sample_start = -3600 * sample_rate;  // within the last hour
+    return jls_rd_utc(self, signal_id, sample_start, jls_rd_fsr_add_cbk, signal->rd_fsr);
 }
 
 int32_t jls_rd_sample_id_to_timestamp(struct jls_rd_s * self, uint16_t signal_id,

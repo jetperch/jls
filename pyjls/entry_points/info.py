@@ -24,6 +24,9 @@ def parser_config(p):
     p.add_argument('--verbose', '-v',
                    action='store_true',
                    help='Display verbose information.')
+    p.add_argument('--utc',
+                   action='store_true',
+                   help='Display the UTC data for each channel.')
     p.add_argument('filename',
                    help='JLS filename')
     return on_cmd
@@ -47,6 +50,12 @@ def on_cmd(args):
         for signal in r.signals.values():
             s = signal.info(verbose=args.verbose)
             print(textwrap.indent(s, "    "))
+            if args.utc:
+                def on_utc(entries):
+                    for sample_id, timestamp in entries:
+                        print(f'       {sample_id}, {timestamp}')
+                r.utc(signal.signal_id, -signal.sample_rate, on_utc)
+
         print('User Data:')
         r.user_data(_user_data_cbk)
 

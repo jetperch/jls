@@ -4,6 +4,14 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.6.2
+
+2023 Apr 28
+
+* Improved UTC read processing.
+* Added "--utc" option to info entry point.
+
+
 ## 0.6.1
 
 2023 Apr 27
