@@ -389,6 +389,7 @@ static void summary_entry_add(struct jls_wr_fsr_s * self, uint8_t level,
             uint32_t offset = sample_idx * JLS_SUMMARY_FSR_COUNT;                           \
             v = src_data[offset + JLS_SUMMARY_FSR_MEAN];                                    \
             if (isfinite(v)) {                                                              \
+                ++count;                                                                    \
                 v_mean += v;                                                                \
                 if (src_data[offset + JLS_SUMMARY_FSR_MIN] < v_min) {                       \
                     v_min = src_data[offset + JLS_SUMMARY_FSR_MIN];                         \
@@ -633,8 +634,9 @@ int32_t jls_wr_fsr_data(struct jls_wr_fsr_s * self, int64_t sample_id, const voi
             }
         }
     } else {
-        JLS_LOGW("fsr skip: in=%" PRIi64 " expect=%" PRIi64,
-                 sample_id, sample_id_next);
+        JLS_LOGW("fsr skip: in=%" PRIi64 " expect=%" PRIi64 ", skipped=%" PRIi64,
+                 sample_id, sample_id_next,
+                 sample_id - sample_id_next);
         size_t skip = (size_t) (sample_id - sample_id_next);
         size_t buf_sz = 0;
         if (self->def.data_type == JLS_DATATYPE_F32) {

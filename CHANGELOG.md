@@ -10,6 +10,7 @@ This file contains the list of changes made to the JLS project.
 
 * Improved UTC read processing.
 * Added "--utc" option to info entry point.
+* Fixed incorrect NaNs in summary on write.
 
 
 ## 0.6.1
