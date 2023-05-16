@@ -93,7 +93,7 @@ enum jls_error_code_e {
  * @param[in] ec The error code (jls_error_code_e).
  * @return The short string name for the error code.
  */
-const char * jls_error_code_name(int ec);
+JLS_API const char * jls_error_code_name(int ec);
 
 /**
  * @brief Convert an error code into its description.
@@ -101,7 +101,7 @@ const char * jls_error_code_name(int ec);
  * @param[in] ec The error code (jls_error_code_e).
  * @return The user-meaningful description of the error.
  */
-const char * jls_error_code_description(int ec);
+JLS_API const char * jls_error_code_description(int ec);
 
 JLS_CPP_GUARD_END
 

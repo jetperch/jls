@@ -4,6 +4,14 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.6.3
+
+2023 May 16
+
+* Added support for building a shared library.
+  Initialize build subdir with "cmake -DBUILD_SHARED_LIBS=ON .."
+
+
 ## 0.6.2
 
 2023 Apr 28

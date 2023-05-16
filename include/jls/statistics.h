@@ -56,7 +56,7 @@ struct jls_statistics_s {
  *
  * @param s The statistics instance.
  */
-void jls_statistics_reset(struct jls_statistics_s * s);
+JLS_API void jls_statistics_reset(struct jls_statistics_s * s);
 
 /**
  * @brief Mark the statistics as invalid.
@@ -64,7 +64,7 @@ void jls_statistics_reset(struct jls_statistics_s * s);
  * @param s The statistics instance which will have all statistics marked
  *      as NaN.
  */
-void jls_statistics_invalid(struct jls_statistics_s * s);
+JLS_API void jls_statistics_invalid(struct jls_statistics_s * s);
 
 /**
  * @brief Compute the statistics over an array.
@@ -76,7 +76,7 @@ void jls_statistics_invalid(struct jls_statistics_s * s);
  * Use the "traditional" two pass method.  Compute mean in first pass,
  * then variance in second pass.
  */
-void jls_statistics_compute_f32(struct jls_statistics_s * s, const float * x, uint64_t length);
+JLS_API void jls_statistics_compute_f32(struct jls_statistics_s * s, const float * x, uint64_t length);
 
 /**
  * @brief Compute the statistics over an array.
@@ -85,7 +85,7 @@ void jls_statistics_compute_f32(struct jls_statistics_s * s, const float * x, ui
  * @param x The value array.
  * @param length The number of elements in x.
  */
-void jls_statistics_compute_f64(struct jls_statistics_s * s, const double * x, uint64_t length);
+JLS_API void jls_statistics_compute_f64(struct jls_statistics_s * s, const double * x, uint64_t length);
 
 /**
  * @brief Add a new sample into the statistics.
@@ -93,7 +93,7 @@ void jls_statistics_compute_f64(struct jls_statistics_s * s, const double * x, u
  * @param s The statistics instance.
  * @param x The new value.
  */
-void jls_statistics_add(struct jls_statistics_s * s, double x);
+JLS_API void jls_statistics_add(struct jls_statistics_s * s, double x);
 
 /**
  * @brief Get the sample variance.
@@ -106,7 +106,7 @@ void jls_statistics_add(struct jls_statistics_s * s, double x);
  * "Standard" population variance uses k as the denominator which tends to
  * underestimate true variance.
  */
-double jls_statistics_var(struct jls_statistics_s * s);
+JLS_API double jls_statistics_var(struct jls_statistics_s * s);
 
 /**
  * @brief Copy one statistics instance to another.
@@ -114,7 +114,7 @@ double jls_statistics_var(struct jls_statistics_s * s);
  * @param tgt The target statistics instance.
  * @param src The source statistics instance.
  */
-void jls_statistics_copy(struct jls_statistics_s * tgt, struct jls_statistics_s const * src);
+JLS_API void jls_statistics_copy(struct jls_statistics_s * tgt, struct jls_statistics_s const * src);
 
 /**
  * @brief Compute the combined statistics over two statistics instances.
@@ -123,9 +123,9 @@ void jls_statistics_copy(struct jls_statistics_s * tgt, struct jls_statistics_s 
  * @param a The first statistics instance to combine.
  * @param b The first statistics instance to combine.
  */
-void jls_statistics_combine(struct jls_statistics_s * tgt,
-                            struct jls_statistics_s const * a,
-                            struct jls_statistics_s const * b);
+JLS_API void jls_statistics_combine(struct jls_statistics_s * tgt,
+                                    struct jls_statistics_s const * a,
+                                    struct jls_statistics_s const * b);
 
 JLS_CPP_GUARD_END
 

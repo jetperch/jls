@@ -58,12 +58,12 @@
 
 /**
  * @brief All functions that are available from the library are marked with
- *      JLS_API.  This platform-specific definition allows DLLs to ber
+ *      JLS_API.  This platform-specific definition allows DLLs to be
  *      created properly on Windows.
  */
-#if defined(JLS_EXPORT)
+#if defined(WIN32) && defined(JLS_EXPORT)
 #define JLS_API __declspec(dllexport)
-#elif defined(JLS_IMPORT)
+#elif defined(WIN32) && defined(JLS_IMPORT)
 #define JLS_API __declspec(dllimport)
 #else
 #define JLS_API

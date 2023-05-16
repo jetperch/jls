@@ -57,7 +57,7 @@ uint32_t jls_crc32c_hdr(const struct jls_chunk_header_s * hdr);
  * @param length The number of total_bytes in data.
  * @return The computed CRC-32C.
  */
-uint32_t jls_crc32c(uint8_t const *data, uint32_t length);
+JLS_API uint32_t jls_crc32c(uint8_t const *data, uint32_t length);
 
 JLS_CPP_GUARD_END
 

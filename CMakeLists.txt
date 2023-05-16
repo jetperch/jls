@@ -15,7 +15,7 @@
 cmake_minimum_required (VERSION 3.1)
 set(PARENT_PROJECT_DIR ${PROJECT_SOURCE_DIR})
 project(JLS
-        VERSION 0.6.2
+        VERSION 0.6.3
         LANGUAGES C)
 SET(PROJECT_PREFIX JLS)
 SET(VERSION_STRING "${PROJECT_VERSION}")
@@ -30,6 +30,7 @@ endif()
 option(JLS_DOCS "Use Doxygen to create the HTML based Host API documentation" OFF)
 option(JLS_UNIT_TEST "Build the JLS unit tests" ON)
 option(JLS_EXAMPLES "Build the JLS examples" ON)
+option(BUILD_SHARED_LIBS "Build using shared libraries" OFF)
 
 function (SET_FILENAME _filename)
     get_filename_component(b ${_filename} NAME)

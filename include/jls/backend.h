@@ -74,8 +74,8 @@ void jls_bkt_msg_signal(struct jls_bkt_s * self);
 void jls_bkt_sleep_ms(uint32_t duration_ms);
 
 
-int64_t jls_now(void);
-struct jls_time_counter_s jls_time_counter(void);
+JLS_API int64_t jls_now(void);
+JLS_API struct jls_time_counter_s jls_time_counter(void);
 
 /** @} */
 

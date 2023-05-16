@@ -39,6 +39,9 @@ elseif ((CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64") OR (CMAKE_SYSTEM_PROCESSOR S
 elseif (WIN32)
     set(SOURCES ${SOURCES} backend_win.c crc32c_intel_sse4.c)
     set(JLS_LIBS jls PARENT_SCOPE)
+    if (BUILD_SHARED_LIBS)
+        add_definitions(-DJLS_EXPORT=1)
+    endif()
 elseif (APPLE)
     set(SOURCES ${SOURCES} backend_posix.c crc32c_intel_sse4.c)
     set(JLS_LIBS jls m pthread PARENT_SCOPE)
@@ -53,6 +56,7 @@ foreach(f IN LISTS SOURCES)
     SET_FILENAME("${f}")
 endforeach()
 
+
 add_library(jls_objlib OBJECT ${SOURCES})
-add_library(jls STATIC $<TARGET_OBJECTS:jls_objlib>)
+add_library(jls $<TARGET_OBJECTS:jls_objlib>)
 add_dependencies(jls jls_objlib)
