@@ -25,6 +25,7 @@
 #include "jls/writer.h"
 #include <stdlib.h>
 #include <string.h>
+#include <inttypes.h>
 
 
 #define MRB_BUFFER_SIZE (64 * 1024 * 1024)
@@ -128,8 +129,8 @@ int32_t jls_twr_run(struct jls_twr_s * self) {
             }
             counter_start = jls_time_counter();
             if (((counter_start.value - counter_prev.value) / counter_start.frequency) >= 1) {
-                JLS_LOGD2("twr %lu msgs (%lu of %lu bytes)", self->mrb.count,
-                          jls_mrb_used_bytes(&self->mrb), self->mrb.buf_size);
+                JLS_LOGD2("twr %" PRIu32 " msgs (%" PRIu32 " of %" PRIu32 " bytes)",
+                          self->mrb.count, jls_mrb_used_bytes(&self->mrb), self->mrb.buf_size);
                 counter_prev = counter_start;
             }
             payload = msg + sizeof(hdr);
@@ -171,7 +172,7 @@ int32_t jls_twr_run(struct jls_twr_s * self) {
             counter_end = jls_time_counter();
             duration_ms = (1000 * (counter_end.value - counter_start.value)) / counter_end.frequency;
             if (duration_ms > 250) {
-                JLS_LOGW("thread msg %d:%s took %llu ms",
+                JLS_LOGW("thread msg %d:%s took %" PRIu64 " ms",
                          (int) hdr.msg_type,
                          (hdr.msg_type < MSG_ITEM_COUNT) ? message_str[hdr.msg_type] : "unknown",
                          duration_ms);
