@@ -178,7 +178,7 @@ struct jls_bkt_s * jls_bkt_initialize(struct jls_twr_s * wr) {
         wr->bk = NULL;
         return NULL;
     }
-    if (!SetThreadPriority(self->thread, THREAD_PRIORITY_BELOW_NORMAL)) {
+    if (!SetThreadPriority(self->thread, THREAD_PRIORITY_ABOVE_NORMAL)) {
         JLS_LOGW("Could not reduce thread priority: %d", (int) GetLastError());
     }
     return self;

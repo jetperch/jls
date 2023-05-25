@@ -99,30 +99,30 @@ cdef extern from "jls/time.h":
 
 cdef extern from "jls/threaded_writer.h":
     struct jls_twr_s
-    int32_t jls_twr_open(jls_twr_s ** instance, const char * path)
-    int32_t jls_twr_close(jls_twr_s * self)
-    int32_t jls_twr_flush(jls_twr_s * self)
+    int32_t jls_twr_open(jls_twr_s ** instance, const char * path) nogil
+    int32_t jls_twr_close(jls_twr_s * self) nogil
+    int32_t jls_twr_flush(jls_twr_s * self) nogil
     int32_t jls_twr_source_def(jls_twr_s * self, const jls_source_def_s * source)
     int32_t jls_twr_signal_def(jls_twr_s * self, const jls_signal_def_s * signal)
     int32_t jls_twr_user_data(jls_twr_s * self, uint16_t chunk_meta,
-            jls_storage_type_e storage_type, const uint8_t * data, uint32_t data_size)
+            jls_storage_type_e storage_type, const uint8_t * data, uint32_t data_size) nogil
     int32_t jls_twr_fsr(jls_twr_s * self, uint16_t signal_id,
-            int64_t sample_id, const void * data, uint32_t data_length)
+            int64_t sample_id, const void * data, uint32_t data_length) nogil
     int32_t jls_twr_annotation(jls_twr_s * self, uint16_t signal_id,
             int64_t timestamp,
             float y,
             jls_annotation_type_e annotation_type,
             uint8_t group_id,
             jls_storage_type_e storage_type, 
-            const uint8_t * data, uint32_t data_size)
+            const uint8_t * data, uint32_t data_size) nogil
     int32_t jls_twr_utc(jls_twr_s * self, uint16_t signal_id, 
-                        int64_t sample_id, int64_t utc)
+                        int64_t sample_id, int64_t utc) nogil
 
 
 cdef extern from "jls/reader.h":
     struct jls_rd_s
     int32_t jls_rd_open(jls_rd_s ** instance, const char * path)
-    void jls_rd_close(jls_rd_s * self)
+    void jls_rd_close(jls_rd_s * self) nogil
     int32_t jls_rd_sources(jls_rd_s * self, jls_source_def_s ** sources, uint16_t * count)
     int32_t jls_rd_signals(jls_rd_s * self, jls_signal_def_s ** signals, uint16_t * count)
     int32_t jls_rd_signal(jls_rd_s * self, uint16_t signal_id, jls_signal_def_s * signal)
@@ -132,15 +132,15 @@ cdef extern from "jls/reader.h":
         int64_t start_sample_id, int64_t increment, double * data, int64_t data_length) nogil
     ctypedef int32_t (*jls_rd_annotation_cbk_fn)(void * user_data, const jls_annotation_s * annotation)
     int32_t jls_rd_annotations(jls_rd_s * self, uint16_t signal_id,
-        int64_t timestamp, jls_rd_annotation_cbk_fn cbk_fn, void * cbk_user_data)
+        int64_t timestamp, jls_rd_annotation_cbk_fn cbk_fn, void * cbk_user_data) nogil
     ctypedef int32_t (*jls_rd_user_data_cbk_fn)(void * user_data,
         uint16_t chunk_meta, jls_storage_type_e storage_type,
         uint8_t * data, uint32_t data_size)
-    int32_t jls_rd_user_data(jls_rd_s * self, jls_rd_user_data_cbk_fn cbk_fn, void * cbk_user_data)
+    int32_t jls_rd_user_data(jls_rd_s * self, jls_rd_user_data_cbk_fn cbk_fn, void * cbk_user_data) nogil
     ctypedef int32_t (*jls_rd_utc_cbk_fn)(void * user_data, const jls_utc_summary_entry_s * utc, uint32_t size)
     int32_t jls_rd_utc(jls_rd_s * self, uint16_t signal_id, int64_t sample_id,
-                       jls_rd_utc_cbk_fn cbk_fn, void * cbk_user_data)
+                       jls_rd_utc_cbk_fn cbk_fn, void * cbk_user_data) nogil
     int32_t jls_rd_sample_id_to_timestamp(jls_rd_s * self, uint16_t signal_id,
-                                          int64_t sample_id, int64_t * timestamp);
+                                          int64_t sample_id, int64_t * timestamp)
     int32_t jls_rd_timestamp_to_sample_id(jls_rd_s * self, uint16_t signal_id,
-                                          int64_t timestamp, int64_t * sample_id);
+                                          int64_t timestamp, int64_t * sample_id)

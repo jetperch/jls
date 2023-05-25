@@ -207,18 +207,20 @@ def jls_inject_log(level, filename, line, msg):
 def _encode_str(s):
     if s is None:
         s = ''
-    return s.encode('utf-8')
+    return s.encode('utf-8') + b'\x00'
 
 
 def _storage_pack(data):
-    if isinstance(data, str):
+    if data is None:
+        return c_jls.JLS_STORAGE_TYPE_BINARY, b'', 0
+    elif isinstance(data, str):
         s = _encode_str(data)
-        return c_jls.JLS_STORAGE_TYPE_STRING, s, len(s) + 1
+        return c_jls.JLS_STORAGE_TYPE_STRING, s, len(s)
     elif isinstance(data, bytes):
         return c_jls.JLS_STORAGE_TYPE_BINARY, data, len(data)
     else:
         s = _encode_str(json.dumps(data))
-        return c_jls.JLS_STORAGE_TYPE_JSON, s, len(s) + 1
+        return c_jls.JLS_STORAGE_TYPE_JSON, s, len(s)
 
 
 cdef _storage_unpack(uint8_t storage_type, const uint8_t * data, uint32_t data_size):
@@ -254,9 +256,14 @@ cdef class Writer:
     cdef c_jls.jls_signal_def_s _signals[_JLS_SIGNAL_COUNT]
 
     def __init__(self, path: str):
+        cdef c_jls.jls_twr_s ** wr_ptr = &self._wr
         cdef int32_t rc
+        cdef const uint8_t[:] path_u8
+        path_bytes = path.encode('utf-8')
+        path_u8 = path_bytes
         self._signals[0].signal_type = c_jls.JLS_SIGNAL_TYPE_VSR
-        rc = c_jls.jls_twr_open(&self._wr, path.encode('utf-8'))
+        with nogil:
+            rc = c_jls.jls_twr_open(wr_ptr, <char *> &path_u8[0])
         _handle_rc('open', rc)
 
     def __enter__(self):
@@ -266,10 +273,14 @@ cdef class Writer:
         self.close()
 
     def close(self):
-        c_jls.jls_twr_close(self._wr)
+        cdef c_jls.jls_twr_s * wr = self._wr
+        with nogil:
+            c_jls.jls_twr_close(wr)
 
     def flush(self):
-        c_jls.jls_twr_flush(self._wr)
+        cdef c_jls.jls_twr_s * wr = self._wr
+        with nogil:
+            c_jls.jls_twr_flush(wr)
 
     def source_def(self, source_id, name=None, vendor=None, model=None, version=None, serial_number=None):
         cdef int32_t rc
@@ -342,14 +353,28 @@ cdef class Writer:
 
     def user_data(self, chunk_meta, data):
         cdef int32_t rc
-        storage_type, payload, payload_length = _storage_pack(data)
-        rc = c_jls.jls_twr_user_data(self._wr, chunk_meta, storage_type, payload, payload_length)
+        cdef uint16_t chunk_meta_u16 = chunk_meta
+        cdef c_jls.jls_storage_type_e storage_type
+        cdef const uint8_t[:] payload_u8
+        cdef const uint8_t * payload_u8_ptr = NULL
+        cdef uint32_t payload_length
+        cdef c_jls.jls_twr_s * wr = self._wr
+        storage_type, payload_bytes, payload_length = _storage_pack(data)
+        payload_u8 = payload_bytes
+        if 0 != payload_length:
+            payload_u8_ptr = &payload_u8[0]
+        with nogil:
+            rc = c_jls.jls_twr_user_data(wr, chunk_meta_u16, storage_type, payload_u8_ptr, payload_length)
+
         _handle_rc('user_data', rc)
 
     def fsr_f32(self, signal_id, sample_id, data):
         return self.fsr(signal_id, sample_id, data)
 
     def fsr(self, signal_id, sample_id, data):
+        cdef c_jls.jls_twr_s * wr = self._wr
+        cdef uint16_t signal_id_u16 = signal_id
+        cdef int64_t sample_id_i64 = sample_id
         cdef int32_t rc
         cdef np.uint8_t [::1] u8
         cdef uint32_t data_type
@@ -368,23 +393,47 @@ cdef class Writer:
             length *= 2
         elif entry_size_bits == 1:
             length *= 8
-        rc = c_jls.jls_twr_fsr(self._wr, signal_id, sample_id, &u8[0], length)
+        with nogil:
+            rc = c_jls.jls_twr_fsr(wr, signal_id_u16, sample_id_i64, &u8[0], length)
         _handle_rc('fsr', rc)
 
     def annotation(self, signal_id, timestamp, y, annotation_type, group_id, data):
+        cdef c_jls.jls_twr_s * wr = self._wr
+        cdef uint16_t signal_id_u16 = signal_id
+        cdef int64_t timestamp_i64 = timestamp
+        cdef uint8_t group_id_u8 = group_id
+        cdef float y_f32
+        cdef c_jls.jls_annotation_type_e annotation_type_e
+        cdef c_jls.jls_storage_type_e storage_type
+        cdef const uint8_t[:] payload_u8
+        cdef uint32_t payload_length
         cdef int32_t rc
+
+        if y is None:
+            y_f32 = NAN
+        else:
+            y_f32 = y
         if isinstance(annotation_type, str):
             annotation_type = _annotation_map[annotation_type.lower()]
+        annotation_type_e = annotation_type
         storage_type, payload, payload_length = _storage_pack(data)
+        payload_u8 = payload
         if y is None or not np.isfinite(y):
             y = NAN
-        rc = c_jls.jls_twr_annotation(self._wr, signal_id, timestamp, y, annotation_type,
-            group_id, storage_type, payload, payload_length)
+        with nogil:
+            rc = c_jls.jls_twr_annotation(wr, signal_id_u16, timestamp_i64, y_f32,
+                annotation_type_e,
+                group_id_u8, storage_type, &payload_u8[0], payload_length)
         _handle_rc('annotation', rc)
 
     def utc(self, signal_id, sample_id, utc_i64):
+        cdef c_jls.jls_twr_s * wr = self._wr
+        cdef uint16_t signal_id_u16 = signal_id
+        cdef int64_t sample_id_i64 = sample_id
+        cdef int64_t utc_i64c = utc_i64
         cdef int32_t rc
-        rc = c_jls.jls_twr_utc(self._wr, signal_id, sample_id, utc_i64)
+        with nogil:
+            rc = c_jls.jls_twr_utc(wr, signal_id_u16, sample_id_i64, utc_i64c)
         _handle_rc('utc', rc)
 
 

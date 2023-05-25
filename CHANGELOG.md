@@ -4,6 +4,19 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.6.4
+
+2023 May 26 [in progress]
+
+* Improved threaded writer.
+  * Removed jls_wr_flush during close due to UI performance problems.
+  * Release the GIL on some python Writer operations.
+  * Reduced buffer size from 100,000,000 B to 64 MB. 
+  * Save string null termination byte for annotations and user_data.
+  * Increased thread priority on Windows.
+  * Do not quit until all messages are processed.
+
+
 ## 0.6.3
 
 2023 May 16

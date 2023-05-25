@@ -27,7 +27,7 @@
 #include <string.h>
 
 
-#define MRB_BUFFER_SIZE (100000000)
+#define MRB_BUFFER_SIZE (64 * 1024 * 1024)
 
 
 struct jls_twr_s {
@@ -98,31 +98,39 @@ const char * message_str[] = {
 };
 
 int32_t jls_twr_run(struct jls_twr_s * self) {
-    uint32_t msg_size;
-    uint8_t * msg;
+    uint32_t msg_size = 0;
+    uint8_t * msg = NULL;
     struct msg_header_s hdr;
     uint8_t * payload;
     int32_t rc = 0;
+    struct jls_time_counter_s counter_start = jls_time_counter();
+    struct jls_time_counter_s counter_end;
+    struct jls_time_counter_s counter_prev = counter_start;
+    uint64_t duration_ms;
 
-    if (!self->bk) {
-        JLS_LOGE("backend null on entry");
-    }
-
+    JLS_LOGI("run start");
     while (!self->quit) {
-        if (!self->bk) {
-            JLS_LOGE("backend null");
-            jls_bkt_sleep_ms(500);
+        if (NULL == self->bk) {
+            JLS_LOGE("backend null, quit");  // should never happen
+            self->quit = true;
             continue;
         }
         jls_bkt_msg_wait(self->bk);
-        if (jls_bkt_msg_lock(self->bk)) {
-            continue;
-        }
-        while (!self->quit) {
+        while (1) {
+            jls_bkt_msg_lock(self->bk);
+            if (NULL != msg) {
+                jls_mrb_pop(&self->mrb, &msg_size);
+            }
             msg = jls_mrb_peek(&self->mrb, &msg_size);
             jls_bkt_msg_unlock(self->bk);
             if (!msg) {
                 break;
+            }
+            counter_start = jls_time_counter();
+            if (((counter_start.value - counter_prev.value) / counter_start.frequency) >= 1) {
+                JLS_LOGD2("twr %lu msgs (%lu of %lu bytes)", self->mrb.count,
+                          jls_mrb_used_bytes(&self->mrb), self->mrb.buf_size);
+                counter_prev = counter_start;
             }
             payload = msg + sizeof(hdr);
             uint32_t payload_sz = msg_size - sizeof(hdr);
@@ -160,6 +168,14 @@ int32_t jls_twr_run(struct jls_twr_s * self) {
                     break;
             }
             jls_bkt_process_unlock(self->bk);
+            counter_end = jls_time_counter();
+            duration_ms = (1000 * (counter_end.value - counter_start.value)) / counter_end.frequency;
+            if (duration_ms > 250) {
+                JLS_LOGW("thread msg %d:%s took %llu ms",
+                         (int) hdr.msg_type,
+                         (hdr.msg_type < MSG_ITEM_COUNT) ? message_str[hdr.msg_type] : "unknown",
+                         duration_ms);
+            }
 
             if (rc) {
                 JLS_LOGW("thread msg %d:%s returned %d:%s",
@@ -167,14 +183,9 @@ int32_t jls_twr_run(struct jls_twr_s * self) {
                          (hdr.msg_type < MSG_ITEM_COUNT) ? message_str[hdr.msg_type] : "unknown",
                          (int) rc, jls_error_code_name(rc));
             }
-
-            while (!self->quit && jls_bkt_msg_lock(self->bk)) {
-                // retry
-            }
-            jls_mrb_pop(&self->mrb, &msg_size);
-            // stay locked
         }
     }
+    JLS_LOGI("run done");
     return 0;
 }
 
@@ -184,7 +195,7 @@ int32_t jls_twr_open(struct jls_twr_s ** instance, const char * path) {
     ROE(jls_wr_open(&wr, path));
 
     self = malloc(sizeof(struct jls_twr_s) + MRB_BUFFER_SIZE);
-    if (!self) {
+    if (NULL == self) {
         JLS_LOGE("jls_twr_open malloc failed");
         jls_wr_close(wr);
         return JLS_ERROR_NOT_ENOUGH_MEMORY;
@@ -251,13 +262,17 @@ int32_t jls_twr_flush(struct jls_twr_s * self) {
 int32_t jls_twr_close(struct jls_twr_s * self) {
     int rc = 0;
     if (self) {
+        JLS_LOGI("jls_twr_close start");
         struct msg_header_s hdr = { .msg_type = MSG_CLOSE };
-        jls_twr_flush(self);
         msg_send(self, &hdr, NULL, 0);
         jls_bkt_finalize(self->bk);
+        JLS_LOGI("jls_bkt_finalize done");
+        // jls_wr_flush(self->wr);  // takes too long & blocks UI
+        // JLS_LOGI("jls_wr_flush done");
         rc = jls_wr_close(self->wr);
         self->wr = NULL;
         free(self);
+        JLS_LOGI("jls_wr_close done");
     }
     return rc;
 }

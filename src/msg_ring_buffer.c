@@ -39,6 +39,14 @@ void jls_mrb_clear(struct jls_mrb_s * self) {
     memset(self->buf, 0, self->buf_size);
 }
 
+uint32_t jls_mrb_used_bytes(struct jls_mrb_s * self) {
+    if (self->head > self->tail) {
+        return self->head - self->tail;
+    } else {
+        return (self-> head + self->buf_size) - self->tail;
+    }
+}
+
 static inline uint8_t * add_sz(uint8_t * p, uint32_t sz) {
     p[0] = sz & 0xff;
     p[1] = (sz >> 8) & 0xff;

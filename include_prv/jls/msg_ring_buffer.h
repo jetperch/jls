@@ -43,7 +43,7 @@ extern "C" {
 struct jls_mrb_s {
     volatile uint32_t head;
     volatile uint32_t tail;
-    volatile uint32_t count;
+    volatile uint32_t count;    ///< number of messages
     uint8_t * buf;
     uint32_t buf_size;  // Size of buf in bytes
 };
@@ -63,6 +63,14 @@ void jls_mrb_init(struct jls_mrb_s * self, uint8_t * buffer, uint32_t buffer_siz
  * @param self The ring buffer instance.
  */
 void jls_mrb_clear(struct jls_mrb_s * self);
+
+/**
+ * @brief Get the amount of buffer used, in bytes.
+ * @param self The ring buffer instance.
+ * @return The number of bytes used.
+ * @see self->count for the number of messages.
+ */
+uint32_t jls_mrb_used_bytes(struct jls_mrb_s * self);
 
 /**
  * @brief Allocate a message on the ring buffer.
