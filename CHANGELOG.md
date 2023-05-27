@@ -6,7 +6,7 @@ This file contains the list of changes made to the JLS project.
 
 ## 0.6.4
 
-2023 May 26 [in progress]
+2023 May 27 [in progress]
 
 * Improved threaded writer.
   * Removed jls_wr_flush during close due to UI performance problems.
@@ -15,6 +15,7 @@ This file contains the list of changes made to the JLS project.
   * Save string null termination byte for annotations and user_data.
   * Increased thread priority on Windows.
   * Do not quit until all messages are processed.
+* Added jls executable to examples. 
 
 
 ## 0.6.3

@@ -599,6 +599,7 @@ int32_t jls_rd_open(struct jls_rd_s ** instance, const char * path) {
 
     int64_t end_pos = jls_raw_chunk_tell_end(self->raw);
     if (!end_pos) {
+        JLS_LOGW("not properly closed");
         // Not properly closed.  Indices & summary may be incomplete.
         // for most applications, will want to launch file reconstruction tool
         return JLS_ERROR_MESSAGE_INTEGRITY;
@@ -797,7 +798,9 @@ static int32_t fsr_seek(struct jls_rd_s * self, uint16_t signal_id, uint8_t leve
 
         int64_t idx = (sample_id - chunk_timestamp) / step_size;
         if ((idx < 0) || (idx >= chunk_entries)) {
-            JLS_LOGE("invalid index: %" PRIi64 " >= %" PRIi64, idx, chunk_entries);
+            JLS_LOGE("invalid index signal %d, level %d, offset=%" PRIi64 ": %" PRIi64 " >= %" PRIi64,
+                     (int) signal_id, lvl, offset,
+                     idx, chunk_entries);
             return JLS_ERROR_IO;
         }
         offset = r->offsets[idx];

@@ -28,3 +28,12 @@ endfunction (ADD_EXAMPLE)
 
 ADD_EXAMPLE(performance)
 ADD_EXAMPLE(jls_read)
+
+add_executable(jls_exe
+        ${objects}
+        jls/info.c
+        jls.c
+)
+add_dependencies(jls_exe ${dependencies})
+target_link_libraries(jls_exe ${JLS_LIBS})
+set_target_properties(jls_exe PROPERTIES OUTPUT_NAME jls)

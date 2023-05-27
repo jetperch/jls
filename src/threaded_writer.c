@@ -261,7 +261,6 @@ int32_t jls_twr_flush(struct jls_twr_s * self) {
 }
 
 int32_t jls_twr_close(struct jls_twr_s * self) {
-    int rc = 0;
     if (self) {
         JLS_LOGI("jls_twr_close start");
         struct msg_header_s hdr = { .msg_type = MSG_CLOSE };
@@ -270,12 +269,12 @@ int32_t jls_twr_close(struct jls_twr_s * self) {
         JLS_LOGI("jls_bkt_finalize done");
         // jls_wr_flush(self->wr);  // takes too long & blocks UI
         // JLS_LOGI("jls_wr_flush done");
-        rc = jls_wr_close(self->wr);
+        jls_wr_close(self->wr);
         self->wr = NULL;
         free(self);
         JLS_LOGI("jls_wr_close done");
     }
-    return rc;
+    return 0;
 }
 
 int32_t jls_twr_source_def(struct jls_twr_s * self, const struct jls_source_def_s * source) {

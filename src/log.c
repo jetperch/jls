@@ -62,3 +62,23 @@ JLS_API void jls_log_register(jls_log_cbk handler) {
 JLS_API void jls_log_unregister(void) {
     jls_log_register(NULL);
 }
+
+JLS_API const char * jls_log_level_to_str(int8_t level) {
+    if (level < 0) {
+        return "OFF";
+    }
+    if (level >= JLS_LOG_LEVEL_ALL) {
+        return jls_log_level_str[JLS_LOG_LEVEL_ALL];
+    }
+    return jls_log_level_str[level];
+}
+
+JLS_API char jls_log_level_to_char(int8_t level) {
+    if (level < 0) {
+        return '*';
+    }
+    if (level >= JLS_LOG_LEVEL_ALL) {
+        return jls_log_level_char[JLS_LOG_LEVEL_ALL];
+    }
+    return jls_log_level_char[level];
+}

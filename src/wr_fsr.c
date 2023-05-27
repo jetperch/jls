@@ -341,15 +341,22 @@ int32_t jls_wr_fsr_open(struct jls_wr_fsr_s ** instance, struct jls_wr_s * wr, c
 }
 
 int32_t jls_wr_fsr_close(struct jls_wr_fsr_s * self) {
+    int32_t rc;
     if (self) {
         if (self->data) {
-            wr_data(self);  // write remaining sample data
+            rc = wr_data(self);  // write remaining sample data
+            if (rc) {
+                JLS_LOGE("wr_data returned %" PRIi32, rc);
+            }
             JLS_LOGD1("%d sample_buffer free %p", (int) self->def.signal_id, (void *) self->data);
             sample_buffer_free(self);
         }
 
         for (size_t i = 1; i < JLS_SUMMARY_LEVEL_COUNT; ++i) {
-            summary_close(self, (uint8_t) i);
+            rc = summary_close(self, (uint8_t) i);
+            if (rc) {
+                JLS_LOGE("summary_close(%d) returned %" PRIi32, (int) i, rc);
+            }
         }
         free(self);
     }
