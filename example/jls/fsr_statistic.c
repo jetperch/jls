@@ -19,18 +19,16 @@
 #include "cstr.h"
 #include <stdlib.h>
 #include <stdio.h>
-#include <string.h>
 #include <inttypes.h>
 
 
 static int usage(void) {
-    printf("usage: jls fsr_statistic <jls_path> <signal_id> <start> <increment> <count> [--out <outpath>]\n"
+    printf("usage: jls fsr_statistic <jls_path> <signal_id> <start> <increment> <count>\n"
            "  jls_path        The path to the JLS input file.\n"
            "  signal_id       The signal_id to extract.\n"
            "  start           The starting sample id to read.\n"
            "  increment       The number of samples that form a single output summary.\n"
            "  count           The number of statistics points to populate.\n"
-           "  --out           The option path to a CSV file to output the data.\n"
            "\n");
     return 1;
 }
@@ -42,7 +40,6 @@ int on_fsr_statistics(struct app_s * self, int argc, char * argv[]) {
     int64_t start = 0;
     int64_t increment = 0;
     int64_t count = 0;
-    char * out_path = NULL;
     int pos_arg = 0;
     (void) self;
 
@@ -82,11 +79,6 @@ int on_fsr_statistics(struct app_s * self, int argc, char * argv[]) {
             }
             ARG_CONSUME();
             ++pos_arg;
-        } else if ((0 == strcmp(argv[0], "--out")) || (0 == strcmp(argv[0], "-o"))) {
-            ARG_CONSUME();
-            ARG_REQUIRE();
-            out_path = argv[0];
-            ARG_CONSUME();
         } else {
             return usage();
         }
@@ -111,7 +103,5 @@ int on_fsr_statistics(struct app_s * self, int argc, char * argv[]) {
         }
     }
     jls_rd_close(rd);
-
-
     return 0;
 }

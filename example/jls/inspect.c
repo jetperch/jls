@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include "jls.h"
 #include "jls/raw.h"
 #include "cstr.h"
 #include "jls_util_prv.h"
