@@ -303,7 +303,7 @@ static int32_t wr_summary(struct jls_wr_fsr_s * self, uint8_t level) {
 
     // compute new timestamp for that level
     int64_t skip = dst->summary_entries * self->def.sample_decimate_factor;
-    if (level > 1) {
+    for (uint8_t lvl = 2; lvl <= level; ++lvl) {
         skip *= self->def.summary_decimate_factor;
     }
     dst->index->header.timestamp += skip;
