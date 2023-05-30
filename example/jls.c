@@ -99,12 +99,6 @@ int on_version(struct app_s * self, int argc, char * argv[]) {
     return 0;
 }
 
-
-struct log_level_convert_s {
-    const char * str;
-    int8_t level;
-};
-
 int main(int argc, char * argv[]) {
     struct app_s * self = &app_;
     memset(self, 0, sizeof(*self));
@@ -120,6 +114,7 @@ int main(int argc, char * argv[]) {
 
     char * command_str = argv[0];
     ARG_CONSUME();
+    jls_log_register(on_log_recv);
 
     rc = 9999;
     const struct command_s * cmd = COMMANDS;
