@@ -37,6 +37,7 @@ int on_info(struct app_s * self, int argc, char * argv[]) {
     int chunks = 0;
     char * path = NULL;
     int pos_arg = 0;
+    (void) self;
 
     while (argc) {
         if (argv[0][0] != '-') {
