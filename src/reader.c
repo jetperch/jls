@@ -769,8 +769,6 @@ static int32_t fsr_seek(struct jls_rd_s * self, uint16_t signal_id, uint8_t leve
     }
 
     for (int lvl = initial_level; lvl > level; --lvl) {
-        JLS_LOGD3("signal %d, level %d, offset=%" PRIi64, (int) signal_id, lvl, offset);
-
         // compute the step size in samples between each index entry.
         int64_t step_size = signal_def->samples_per_data;  // each data chunk
         if (lvl > 1) {
@@ -780,6 +778,8 @@ static int32_t fsr_seek(struct jls_rd_s * self, uint16_t signal_id, uint8_t leve
         for (int k = 3; k <= lvl; ++k) {
             step_size *= signal_def->summary_decimate_factor;
         }
+        JLS_LOGD3("signal %d, level %d, offset=%" PRIi64 ", step_size=%" PRIi64,
+                 (int) signal_id, lvl, offset, step_size);
         ROE(jls_raw_chunk_seek(self->raw, offset));
         ROE(rd(self));
         if (self->chunk_cur.hdr.tag != JLS_TAG_TRACK_FSR_INDEX) {
@@ -789,6 +789,7 @@ static int32_t fsr_seek(struct jls_rd_s * self, uint16_t signal_id, uint8_t leve
         struct jls_fsr_index_s * r = (struct jls_fsr_index_s *) self->payload.start;
         int64_t chunk_timestamp = r->header.timestamp;
         int64_t chunk_entries = r->header.entry_count;
+        JLS_LOGD3("timestamp=%" PRIi64 ", entries=%" PRIi64, chunk_timestamp, chunk_entries);
         uint8_t * p_end = (uint8_t *) &r->offsets[r->header.entry_count];
 
         if ((size_t) (p_end - self->payload.start) > self->payload.length) {
@@ -798,9 +799,10 @@ static int32_t fsr_seek(struct jls_rd_s * self, uint16_t signal_id, uint8_t leve
 
         int64_t idx = (sample_id - chunk_timestamp) / step_size;
         if ((idx < 0) || (idx >= chunk_entries)) {
-            JLS_LOGE("invalid index signal %d, level %d, offset=%" PRIi64 ": %" PRIi64 " >= %" PRIi64,
-                     (int) signal_id, lvl, offset,
-                     idx, chunk_entries);
+            JLS_LOGE("invalid index signal %d, level %d, sample_id=%"
+                     PRIi64 " offset=%" PRIi64 ": %" PRIi64 " >= %" PRIi64,
+                     (int) signal_id, lvl, sample_id,
+                     offset, idx, chunk_entries);
             return JLS_ERROR_IO;
         }
         offset = r->offsets[idx];
@@ -1136,17 +1138,18 @@ static int32_t fsr_statistics(struct jls_rd_s * self, uint16_t signal_id,
             data += JLS_SUMMARY_FSR_COUNT;
             --data_length;
             int64_t incr = step_size - incr_remaining;
-            if (incr) {
-                if (is_f32) {
-                    f32_to_stats(&stats_accum, f32_summary->data[src_offset], incr);
-                } else {
-                    f64_to_stats(&stats_accum, f64_summary->data[src_offset], incr);
-                }
-                incr_remaining = increment - incr;
-            } else {
+            if (incr < 0) {
+                JLS_LOGE("internal error");
+                incr = 0;
                 jls_statistics_reset(&stats_accum);
-                incr_remaining = increment;
+            } else if (incr == 0) {
+                jls_statistics_reset(&stats_accum);
+            } else if (is_f32) {
+                f32_to_stats(&stats_accum, f32_summary->data[src_offset], incr);
+            } else {
+                f64_to_stats(&stats_accum, f64_summary->data[src_offset], incr);
             }
+            incr_remaining = increment - incr;
         } else {
             if (is_f32) {
                 f32_to_stats(&stats_next, f32_summary->data[src_offset], step_size);
