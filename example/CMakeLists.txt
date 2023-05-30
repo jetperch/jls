@@ -31,7 +31,10 @@ ADD_EXAMPLE(jls_read)
 
 add_executable(jls_exe
         ${objects}
+        jls/cstr.c
+        jls/fsr_statistic.c
         jls/info.c
+        jls/inspect.c
         jls.c
 )
 add_dependencies(jls_exe ${dependencies})

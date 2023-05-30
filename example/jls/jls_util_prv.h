@@ -52,6 +52,7 @@ extern volatile int32_t quit_;
 typedef int (*command_fn)(struct app_s * self, int argc, char * argv[]);
 
 int on_help(struct app_s * self, int argc, char * argv[]);
-int on_dev(struct app_s * self, int argc, char * argv[]);
+int on_fsr_statistics(struct app_s * self, int argc, char * argv[]);
 int on_info(struct app_s * self, int argc, char * argv[]);
+int on_inspect(struct app_s * self, int argc, char * argv[]);
 int on_version(struct app_s * self, int argc, char * argv[]);

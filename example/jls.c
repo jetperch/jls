@@ -61,12 +61,14 @@ static void on_log_recv(const char * msg) {
     gmtime_r(&time_s, &tm_utc);  // posix https://en.cppreference.com/w/c/chrono/gmtime
 #endif
     strftime(time_str, sizeof(time_str), "%FT%T", &tm_utc);
-    printf("%s.%06dZ %s\n", time_str, time_us, msg);
+    printf("%s.%06dZ %s", time_str, time_us, msg);
 }
 
 const struct command_s COMMANDS[] = {
 //        {"dev",  on_dev,  "Developer tools"},
+        {"fsr_statistics", on_fsr_statistics, "Extract FSR statistics for a signal"},
         {"info", on_info, "Display JLS file information"},
+        {"inspect", on_inspect, "Inspect JLS files"},
         {"version", on_version, "Display version and platform information"},
         {"help", on_help, "Display help"},
         {NULL, NULL, NULL}

@@ -134,9 +134,20 @@ int on_info(struct app_s * self, int argc, char * argv[]) {
         while (1) {
             rc = jls_raw_rd_header(raw, &hdr);
             if (0 == rc) {
-                if (hdr.tag != JLS_TAG_TRACK_FSR_DATA) {
-                    printf("  %s %" PRId32 "\n", jls_tag_to_name(hdr.tag), hdr.payload_length);
-                }
+                uint64_t raw_offset = (uint64_t) jls_raw_chunk_tell(raw);
+                printf("  %08" PRIx32 "_%08" PRIx32
+                       " %08" PRIx32 "_%08" PRIx32
+                       " %08" PRIx32 "_%08" PRIx32
+                       " %08" PRIx32
+                       " %s"
+                       " %d.%d\n",
+                       (uint32_t) (raw_offset >> 32), (uint32_t) (raw_offset & 0xffffffff),
+                       (uint32_t) (hdr.item_prev >> 32), (uint32_t) (hdr.item_prev & 0xffffffff),
+                       (uint32_t) (hdr.item_next >> 32), (uint32_t) (hdr.item_next & 0xffffffff),
+                       hdr.payload_length,
+                       jls_tag_to_name(hdr.tag),
+                       (int) (hdr.chunk_meta & 0x0ff), (int) ((hdr.chunk_meta >> 12) & 0x0f)
+                       );
                 ++chunk_count;
             } else if (rc == JLS_ERROR_EMPTY) {
                 break;
