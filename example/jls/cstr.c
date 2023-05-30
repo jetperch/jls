@@ -15,28 +15,16 @@
  */
 
 #include "cstr.h"
-#include <string.h>
 
 
 #define FLOAT_EXP_MAX (38)
 
-
-static char _toupper(char c) {
-    if ((c >= 'a') && c <= 'z') {
-        c = c - 'a' + 'A';
-    }
-    return c;
-}
 
 static int _isspace(char c) {
     if ((c == ' ') || ((c >= 9) && (c <= 13))) {
         return 1;
     }
     return 0;
-}
-
-static inline int _isdigit(char c) {
-    return ((c >= '0') && (c <= '9'));
 }
 
 int jls_cstr_to_u16(const char * src, uint16_t * value) {
