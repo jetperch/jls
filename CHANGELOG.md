@@ -4,9 +4,9 @@
 This file contains the list of changes made to the JLS project.
 
 
-## 0.6.4
+## 0.7.0
 
-2023 May 31 [in progress]
+2023 May 31
 
 * Fixed incorrect write timestamp stride in FSR index/summary entries.
   Any recording over 5.77 hours was incorrect. 
