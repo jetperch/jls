@@ -11,6 +11,7 @@ This file contains the list of changes made to the JLS project.
 * Added Reader.signal_lookup.
 * Improved documentation.
 * Improved python "export" subcommand to specify "--signal" by name.
+* Added python subcommand "plot".
 
 
 ## 0.7.0
