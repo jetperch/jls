@@ -105,7 +105,6 @@ JLS_API int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signa
 JLS_API int32_t jls_wr_user_data(struct jls_wr_s * self, uint16_t chunk_meta,
         enum jls_storage_type_e storage_type, const uint8_t * data, uint32_t data_size);
 
-
 /**
  * @brief Write fixed-rate sample data to a signal.
  *

@@ -112,12 +112,12 @@ class CustomBuildDocs(distutils.cmd.Command):
         pass
 
     def run(self):
-        # sphinx-build -b html docs build\docs_html
+        # sphinx-build -b html doc build\doc_html
         # defer import so not all setups require sphinx
         from sphinx.application import Sphinx
         from sphinx.util.console import nocolor, color_terminal
         nocolor()
-        source_dir = os.path.join(MYPATH, 'docs')
+        source_dir = os.path.join(MYPATH, 'doc', 'sphinx')
         target_dir = os.path.join(MYPATH, 'build', 'docs_html')
         doctree_dir = os.path.join(target_dir, '.doctree')
         app = Sphinx(source_dir, source_dir, target_dir, doctree_dir, 'html')
@@ -176,10 +176,10 @@ setuptools.setup(
 
     keywords='JLS,Joulescope',
 
-    packages=setuptools.find_packages(exclude=['native', 'docs', 'test', 'dist', 'build']),
+    packages=setuptools.find_packages(exclude=['native', 'doc', 'test', 'dist', 'build']),
     ext_modules=extensions,
     cmdclass={
-        'docs': CustomBuildDocs,
+        'doc': CustomBuildDocs,
     },
     include_dirs=[],
     

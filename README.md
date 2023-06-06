@@ -35,16 +35,6 @@ simultaneous, one-dimensional signals. This repository contains:
 * The implementation in C
 * Language bindings for Python
 
-> **⚠ CAUTION ⚠**  
-> We are actively developing this library.  Some features are not 
-> yet implemented.
-
-
-## License
-
-This project is Copyright © 2017-2022 Jetperch LLC and licensed under the 
-permissive [Apache 2.0](LICENSE).
-
 
 ## Features
 
@@ -93,8 +83,9 @@ permissive [Apache 2.0](LICENSE).
 Items marked with 🔜 are under development and coming soon.
 Items marked with ⏳ are planned for future release.
 
-As of March 2022, the JLS v2 file structure is well-defined and stable.
-However, the compression storage formats are not yet defined.
+As of June 2023, the JLS v2 file structure is well-defined and stable.
+However, the compression storage formats are not yet defined and
+corrupted file recovery is not yet implemented.
 
 
 ## Why JLS?
@@ -107,7 +98,7 @@ The [Saleae binary export file format v2](https://support.saleae.com/faq/technic
 is also not suitable since it buffers stores single, contiguous blocks.
 [Sigrok v2](https://sigrok.org/wiki/File_format:Sigrok/v2) is similar.
 The [Sigrok v3](https://sigrok.org/wiki/File_format:Sigrok/v3) format
-(under development as of Feb 2022) is better in that it stores sequences of
+(under development as of June 2023) is better in that it stores sequences of
 "packets" containing data blocks, but it still will does not allow for
 fast seek or summaries.
 
@@ -120,7 +111,7 @@ used by MPEG4 and many others:
   * [ISO/IEC 14496-14:2020 Specification](https://www.iso.org/standard/79110.html)
   * [Overview](https://mpeg.chiariglione.org/standards/mpeg-4/iso-base-media-file-format)
 
-However, the standard does not included the ability to store the signal summaries
+However, the standard does not include the ability to store the signal summaries
 and our specific signal types.  While we could add these features, these formats
 are already complicated, greatly reducing the advantage of repurposing them.
 
@@ -129,13 +120,12 @@ are already complicated, greatly reducing the advantage of repurposing them.
 
 This file format is based upon JLS v1 designed for
 [pyjoulescope](https://github.com/jetperch/pyjoulescope) and used by the
-[Joulescope](https://www.joulescope.com/) test instrument.  We are leveraging
+[Joulescope](https://www.joulescope.com/) test instrument.  We leveraged
 the lessons learned from v1 to make v2 better, faster, and more extensible.
 
 The JLS v1 format has been great for the Joulescope ecosystem and has
 accomplished the objective of long data captures (days) with fast
-sampling rates (MHz).  However, it now has a long list of issues that are difficult
-to address without a significant restructuring.  The issues include:
+sampling rates (MHz).  However, it now has a long list of issues including:
 
 - Inflexible storage format (always current, voltage, power, current range, GPI0, GPI1).
 - Unable to store from multiple sources.
@@ -150,8 +140,8 @@ to address without a significant restructuring.  The issues include:
 - Unable to correlate sample times with UTC:
   [55](https://github.com/jetperch/pyjoulescope_ui/issues/55).
 
-The JLS v2 file format will address all of these issues, dramatically 
-improve performance, and add new capabilities, such as signal compression.
+The JLS v2 file format addressed all of these issues, dramatically 
+improved performance, and added new capabilities, such as signal compression.
 
 
 ## How?
@@ -261,12 +251,13 @@ TRACK_SUMMARY(1.FSR, lvl=1)
 TRACK_INDEX(1.FSR, lvl=1)
 TRACK_SUMMARY(1.FSR, lvl=2)
 USER_DATA           // just because
+END
 eof
 ```
 
 Note that TRACK_HEAD(1.FSR) points to the first TRACK_INDEX(1.FSR, lvl=0) and
 TRACK_INDEX(1.FSR, lvl=1). 
-Each TRACK_DATA( is in a doubly-linked list with its next and previous
+Each TRACK_DATA(1.FSR) is in a doubly-linked list with its next and previous
 neighbors.  Each TRACK_INDEX(1.FSR, lvl=0) is likewise in a separate doubly-linked
 list, and the payload of each TRACK_INDEX points to the summarized TRACK_DATA
 instances.  TRACK_INDEX(1.FSR, lvl=1) points to each TRACK_INDEX(1.FSR, lvl=0) instance.
@@ -283,3 +274,9 @@ the INDEX chunks at the same level.
   many of the same motivations.
 * Tag-length-value: [Wikipedia](https://en.wikipedia.org/wiki/Type-length-value).
 * Doubly linked list: [Wikipedia](https://en.wikipedia.org/wiki/Doubly_linked_list).
+
+
+## License
+
+This project is Copyright © 2017-2023 Jetperch LLC and licensed under the
+permissive [Apache 2.0 License](./LICENSE).

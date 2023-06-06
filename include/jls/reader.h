@@ -252,7 +252,7 @@ JLS_API int32_t jls_rd_utc(struct jls_rd_s * self, uint16_t signal_id, int64_t s
  * @param self The reader instance.
  * @param signal_id The signal id.
  * @param sample_id The sample id to convert.
- * @param timestamp[out] The JLS timestamp for the sample_id.
+ * @param[out] timestamp The JLS timestamp for the sample_id.
  * @return 0 or error code.
  */
 JLS_API int32_t jls_rd_sample_id_to_timestamp(struct jls_rd_s * self, uint16_t signal_id,
@@ -264,7 +264,7 @@ JLS_API int32_t jls_rd_sample_id_to_timestamp(struct jls_rd_s * self, uint16_t s
  * @param self The reader instance.
  * @param signal_id The signal id.
  * @param timestamp The JLS timestamp to convert.
- * @param sample_id[out] The sample_id for timestamp.
+ * @param[out] sample_id The sample_id for timestamp.
  * @return 0 or error code.
  */
 JLS_API int32_t jls_rd_timestamp_to_sample_id(struct jls_rd_s * self, uint16_t signal_id,

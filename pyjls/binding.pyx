@@ -269,14 +269,14 @@ def _handle_rc(name, rc):
 
 
 cdef class Writer:
+    """Create a new JLS writer.
+
+    :param path: The output JLS file path.
+    """
     cdef c_jls.jls_twr_s * _wr
     cdef c_jls.jls_signal_def_s _signals[_JLS_SIGNAL_COUNT]
 
     def __init__(self, path: str):
-        """Create a new JLS writer.
-
-        :param path: The output JLS file path.
-        """
         cdef c_jls.jls_twr_s ** wr_ptr = &self._wr
         cdef int32_t rc
         cdef const uint8_t[:] path_u8
@@ -508,16 +508,15 @@ cdef class AnnotationCallback:
 
 
 cdef class Reader:
+    """Open a JLS v2 file for reading.
+
+    :param path: The path to the JLS file.
+    """
     cdef c_jls.jls_rd_s * _rd
     cdef object _sources
     cdef object _signals
 
     def __init__(self, path: str):
-        """Open a JLS v2 file for reading.
-
-        :param path: The path to the JLS file.
-        """
-
         cdef int32_t rc
         cdef c_jls.jls_source_def_s * sources
         cdef c_jls.jls_signal_def_s * signals
@@ -607,9 +606,12 @@ cdef class Reader:
         :param start_sample_id: The starting sample id to read.
         :param length: The number of samples to read.
         :return: The data, which varies depending upon the FSR data type.
+
             u1 and u4 data will be packed in little endian order.
+
             For u1, unpack with:
                 np.unpackbits(y, bitorder='little')[:len(x)]
+
             For u4, unpack with
                 d = np.empty(len(y) * 2, dtype=np.uint8)
                 d[0::2] = np.bitwise_and(y, 0x0f)
@@ -651,7 +653,7 @@ cdef class Reader:
         :param start_sample_id: The starting sample id to read.
         :param increment: The number of samples represented per return value.
         :param length: The number of return values to generate.
-        :return The 2-D array[summary][stat] of np.float32 where the stat column is defined by SummaryFSR.
+        :return: The 2-D array[summary][stat] of np.float32 where the stat column is defined by SummaryFSR.
         """
 
         cdef int32_t rc

@@ -30,4 +30,14 @@
 #include "jls/time.h"
 #include "jls/version.h"
 
+/**
+ * @defgroup jls_format File format
+ *
+ * @brief JLS file format.
+ *
+ * @{
+ */
+
+/** @} */
+
 #endif  /* JLS_INC_H__ */

@@ -34,39 +34,143 @@
  *
  * @brief JLS threaded writer.
  *
- * This module wraps writer. 
+ * This module wraps writer.  For normal operation while recording signals,
+ * prefer this threaded writer over writer.
  * 
  * @{
  */
 
 JLS_CPP_GUARD_START
 
-// opaque object
+/// Opaque JLS threaded writer object.
 struct jls_twr_s;
 
-
+/**
+ * @brief Open a JLS file for writing.
+ *
+ * @param[out] instance The JLS writer instance.
+ * @param path The JLS file path.
+ * @return 0 or error code.
+ *
+ * Call jls_twr_close() when done.
+ */
 JLS_API int32_t jls_twr_open(struct jls_twr_s ** instance, const char * path);
+
+/**
+ * @brief Close a JLS file.
+ *
+ * @param self The JLS writer instance from jls_twr_open().
+ * @return 0 or error code.
+ */
 JLS_API int32_t jls_twr_close(struct jls_twr_s * self);
+
+/**
+ * @brief Flush a JLS file to disk.
+ *
+ * @param self The JLS writer instance from jls_twr_open().
+ * @return 0 or error code.
+ */
 JLS_API int32_t jls_twr_flush(struct jls_twr_s * self);
+
+/**
+ * @brief Define a new source.
+ *
+ * @param self The JLS writer instance.
+ * @param source The source definition.
+ * @return 0 or error code.
+ *
+ * This JLS file format supports multiple sources, which are usually different
+ * instruments.  Each source can provide multiple signals.
+ */
 JLS_API int32_t jls_twr_source_def(struct jls_twr_s * self, const struct jls_source_def_s * source);
+
+/**
+ * @brief Define a new signal.
+ *
+ * @param self The JLS writer instance.
+ * @param signal The signal definition.
+ * @return 0 or error code.
+ */
 JLS_API int32_t jls_twr_signal_def(struct jls_twr_s * self, const struct jls_signal_def_s * signal);
+
+/**
+ * @brief Add arbitrary user data.
+ *
+ * @param self The writer instance.
+ * @param chunk_meta The arbitrary data.  Bits 15:12 are reserved, but
+ *      bits 11:0 may be assigned by the application.
+ * @param storage_type The storage type for data.
+ * @param data The user data to store.
+ * @param data_size The size of data for JLS_STORAGE_TYPE_BINARY.  Ignored
+ *      for all other storage types.
+ * @return 0 or error code.
+ */
 JLS_API int32_t jls_twr_user_data(struct jls_twr_s * self, uint16_t chunk_meta,
         enum jls_storage_type_e storage_type, const uint8_t * data, uint32_t data_size);
+
+/**
+ * @brief Write fixed-rate sample data to a signal.
+ *
+ * @param self The JLS writer instance.
+ * @param signal_id The signal id.
+ * @param sample_id The sample id for data[0].
+ * @param data The sample data array.  Data must be packed with no spacing
+ *      between samples.  u1 stores 8 samples per byte, and u4 stores 2 samples
+ *      per byte.
+ * @param data_length The length of data in samples.
+ * @return 0 or error code
+ */
 JLS_API int32_t jls_twr_fsr(struct jls_twr_s * self, uint16_t signal_id,
                             int64_t sample_id, const void * data, uint32_t data_length);
+
+/**
+ * @brief Write sample data to a float32 FSR signal.
+ *
+ * @param self The JLS writer instance.
+ * @param signal_id The signal id.
+ * @param sample_id The sample id for data[0].
+ * @param data The sample data array.
+ * @param data_length The length of data in floats (bytes / 4).
+ * @return 0 or error code
+ */
 JLS_API int32_t jls_twr_fsr_f32(struct jls_twr_s * self, uint16_t signal_id,
         int64_t sample_id, const float * data, uint32_t data_length);
+
+/**
+ * @brief Add an annotation to a signal.
+ *
+ * @param self The writer instance.
+ * @param signal_id The signal id.
+ * @param timestamp The x-axis timestamp in sample_id for FSR and UTC for VSR.
+ * @param y The y-axis value or NAN to automatically position.
+ * @param annotation_type The annotation type.
+ * @param group_id The optional group identifier.  If unused, set to 0.
+ * @param storage_type The storage type.
+ * @param data The data for the annotation.
+ * @param data_size The length of data for JLS_STORAGE_TYPE_BINARY storage_type.
+ *      Set to 0 for all other storage types.
+ * @return 0 or error code.
+ */
 JLS_API int32_t jls_twr_annotation(struct jls_twr_s * self, uint16_t signal_id, int64_t timestamp,
         float y,
         enum jls_annotation_type_e annotation_type,
         uint8_t group_id,
         enum jls_storage_type_e storage_type,
         const uint8_t * data, uint32_t data_size);
+
+/**
+ * @brief Add a mapping from sample_id to UTC timestamp for an FSR signal.
+ *
+ * @param self The writer instance.
+ * @param signal_id The signal id.
+ * @param sample_id The sample_id for FSR.
+ * @param utc The UTC timestamp.
+ * @return 0 or error code.
+ */
 JLS_API int32_t jls_twr_utc(struct jls_twr_s * self, uint16_t signal_id, int64_t sample_id, int64_t utc);
 
 // todo jls_twr_vsr_f32
 //JLS_API int32_t jls_twr_vsr_f32(struct jls_twr_s * self, uint16_t ts_id, int64_t timestamp, uint32_t data, uint32_t size);
-
 
 JLS_CPP_GUARD_END
 

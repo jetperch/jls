@@ -19,13 +19,12 @@ from dataclasses import dataclass
 class SourceDef:
     """Define a source.
 
-    Attributes:
-        source_id       The source identifier.
-        name            The source name string.
-        vendor          The vendor string.
-        model           The model string.
-        version         The version string.
-        serial_number   The serial number string.
+    :ivar source_id: The source identifier.
+    :ivar name: The source name string.
+    :ivar vendor: The vendor string.
+    :ivar model: The model string.
+    :ivar version: The version string.
+    :ivar serial_number: The serial number string.
     """
     source_id: int
     name: str = None
@@ -46,24 +45,23 @@ class SourceDef:
 class SignalDef:
     """Define a signal.
 
-    Attributes:
-        signal_id                   The source identifier.
-                                    0 reserved for global annotations, must be unique per instance.
-        source_id                   The source identifier.
-                                    Must match a SourceDef entry.
-        signal_type                 The pyjls.SignalType for this signal.
-        data_type                   The pyjls.DataType for this signal.
-        sample_rate                 The sample rate per second (Hz).  0 for VSR.
-        samples_per_data            The number of samples per data chunk.  (write suggestion)
-        sample_decimate_factor      The number of samples per summary level 1 entry.
-        entries_per_summary         The number of entries per summary chunk.  (write suggestion)
-        summary_decimate_factor     The number of summaries per summary, level >= 2.
-        annotation_decimate_factor  The annotation decimate factor for summaries.
-        utc_decimate_factor         The UTC decimate factor for summaries.
-        sample_id_offset            The sample id offset for the first sample.  (FSR only)
-        name                        The signal name string.
-        units                       The signal units string.
-        length                      The length in samples.
+    :ivar signal_id: The source identifier.
+        0 reserved for global annotations, must be unique per instance.
+    :ivar source_id: The source identifier.
+        Must match a SourceDef entry.
+    :ivar signal_type: The pyjls.SignalType for this signal.
+    :ivar data_type: The pyjls.DataType for this signal.
+    :ivar sample_rate: The sample rate per second (Hz).  0 for VSR.
+    :ivar samples_per_data: The number of samples per data chunk.  (write suggestion)
+    :ivar sample_decimate_factor: The number of samples per summary level 1 entry.
+    :ivar entries_per_summary: The number of entries per summary chunk.  (write suggestion)
+    :ivar summary_decimate_factor: The number of summaries per summary, level >= 2.
+    :ivar annotation_decimate_factor: The annotation decimate factor for summaries.
+    :ivar utc_decimate_factor: The UTC decimate factor for summaries.
+    :ivar sample_id_offset: The sample id offset for the first sample.  (FSR only)
+    :ivar name: The signal name string.
+    :ivar units: The signal units string.
+    :ivar length: The length in samples.
     """
     signal_id: int
     source_id: int
