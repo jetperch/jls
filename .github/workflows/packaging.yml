@@ -31,7 +31,7 @@ jobs:
     strategy:
       matrix:
         python: ["3.9", "3.10", "3.11"]
-        os: ["ubuntu-latest", "windows-2019", "macos-13", "macos-12"]
+        os: ["ubuntu-latest", "windows-latest", "macos-13", "macos-12"]
 
     steps:
       - name: Checkout repo
@@ -42,15 +42,20 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
 
+      - name: Display versions
+        run: |
+          cmake --version
+          python -VV
+
       - name: Build on Windows
-        if: ${{ startsWith(matrix.os, 'windows') }}
+        if: ${{ startsWith(matrix.os, 'windows-') }}
         run: |
           cmake -S . -B cmake_build -G "Visual Studio 17 2022" -DCMAKE_CONFIGURATION_TYPES=Release
           cmake --build cmake_build --config Release --target ALL_BUILD
           cmake --build cmake_build --config Release --target RUN_TESTS
 
       - name: Build on POSIX
-        if: ${{ !startsWith(matrix.os, 'windows') }}
+        if: ${{ !startsWith(matrix.os, 'windows-') }}
         run: |
           cmake -S . -B cmake_build -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release
           cmake --build cmake_build
