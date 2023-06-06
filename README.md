@@ -265,6 +265,15 @@ As more data is added, the TRACK_INDEX(1.FSR, lvl=1) will also get added to
 the INDEX chunks at the same level.
 
 
+## Resources
+
+* [source code](https://github.com/jetperch/jls)
+* [documentation](https://jls.readthedocs.io/en/latest/)
+* [pypi](https://pypi.org/project/pyjls/)
+* [Joulescope](https://www.joulescope.com/) (Joulescope web store)
+* [forum](https://forum.joulescope.com/)
+
+
 ## References
 
 * JLS v1: 
