@@ -15,6 +15,7 @@
 from pyjls import Reader, SignalType
 import logging
 import numpy as np
+import os.path
 
 
 log = logging.getLogger(__name__)
@@ -25,9 +26,9 @@ def parser_config(p):
     """Export JLS data."""
     p.add_argument('infile',
                    help='JLS input filename')
-    p.add_argument('--signal_id',
-                   type=int,
-                   help='The signal id to export.')
+    p.add_argument('--signal', '--signal_id',
+                   default=1,
+                   help='The signal name or id to export.')
     p.add_argument('--start',
                    type=int,
                    help='The starting timestamp (inclusive).')
@@ -35,17 +36,22 @@ def parser_config(p):
                    type=int,
                    help='The number of samples to export.')
     p.add_argument('outfile',
-                   help='The output filename')
+                   help='The output filename.  Supported extensions are bin, csv')
     return on_cmd
 
 
 def on_cmd(args):
+    _, outfile_extension = os.path.splitext(args.outfile)
+    if args.outfile.endswith('.csv'):
+        outfile_sep = '\n'
+    elif args.outfile.endswith('.bin'):
+        outfile_sep = ''
+    else:
+        print(f'Unsupported outfile extension: {outfile_extension}')
+        return 1
+
     with Reader(args.infile) as r:
-        if args.signal_id is None:
-            signal_id = list(r.signals.keys())[1]
-        else:
-            signal_id = int(args.signal_id)
-        signal = r.signals[signal_id]
+        signal = r.signal_lookup(args.signal)
         if signal.signal_type != SignalType.FSR:
             print('Signal is not FSR')
             return 1
@@ -63,9 +69,9 @@ def on_cmd(args):
         with open(args.outfile, 'wb') as f:
             while length > 0:
                 k = _BLOCK_SIZE if length > _BLOCK_SIZE else length
-                data = r.fsr(signal_id, start, k)
+                data = r.fsr(signal.signal_id, start, k)
                 nan_count += np.count_nonzero(np.isnan(data))
-                data.tofile(f)
+                data.tofile(f, sep=outfile_sep)
                 start += k
                 length -= k
         print(f'nan count = {nan_count}')
