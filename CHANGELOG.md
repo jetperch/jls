@@ -4,6 +4,14 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.7.1
+
+2023 Jun 6
+
+* Added Reader.signal_lookup.
+* Improved documentation.
+
+
 ## 0.7.0
 
 2023 May 31

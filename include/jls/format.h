@@ -378,13 +378,18 @@ static inline uint8_t jls_datatype_parse_q(uint32_t dt) {
  */
 struct jls_source_def_s {
     // store unique source_id in chunk_meta
-    uint16_t source_id;          // 0 reserved for global annotations, must be unique per instance
+    /**
+     * @brief The source identifier.
+     *
+     * 0 reserved for global annotations, must be unique per instance
+     */
+    uint16_t source_id;
     // on disk: reserve 64 bytes as 0 for future use
-    const char * name;
-    const char * vendor;
-    const char * model;
-    const char * version;
-    const char * serial_number;
+    const char * name;          ///< The source name string.
+    const char * vendor;        ///< The vendor name string.
+    const char * model;         ///< The model string.
+    const char * version;       ///< The version string.
+    const char * serial_number; ///< The serial number string.
 };
 
 /**
@@ -392,22 +397,27 @@ struct jls_source_def_s {
  */
 struct jls_signal_def_s {       // 0 reserved for VSR annotations
     // store unique signal_id in chunk_meta
-    uint16_t signal_id;                 // 0 to JLS_SIGNAL_COUNT - 1, must be unique per instance
-    uint16_t source_id;                 // must match a source_def
-    uint8_t signal_type;                // jls_signal_type_e
-    uint16_t rsv16_0;                   // JLS_DATATYPE_*
-    uint32_t data_type;                 //
-    uint32_t sample_rate;               // 0 for VSR
-    uint32_t samples_per_data;          // suggestion, will be rounded
-    uint32_t sample_decimate_factor;    // definite
-    uint32_t entries_per_summary;       // suggestion, will be rounded
-    uint32_t summary_decimate_factor;   // definite
-    uint32_t annotation_decimate_factor;
-    uint32_t utc_decimate_factor;
-    int64_t sample_id_offset;           // FSR read-only, dynamically loaded from first data chunk.
+    /**
+     * @brief The signal identifier.
+     *
+     * 0 to JLS_SIGNAL_COUNT - 1, must be unique per instance
+     */
+    uint16_t signal_id;
+    uint16_t source_id;                 ///< The source identifier, must match a source_def.
+    uint8_t signal_type;                ///< The jls_signal_type_e signal type.
+    uint16_t rsv16_0;                   //
+    uint32_t data_type;                 ///< The JLS_DATATYPE_* data type for this signal.
+    uint32_t sample_rate;               ///< TThe sample rate per second (Hz).  0 for VSR.
+    uint32_t samples_per_data;          ///< The number of samples per data chunk.  (write suggestion)
+    uint32_t sample_decimate_factor;    ///< The number of samples per summary level 1 entry.
+    uint32_t entries_per_summary;       ///< The number of entries per summary chunk.  (write suggestion)
+    uint32_t summary_decimate_factor;   ///< The number of summaries per summary, level >= 2.
+    uint32_t annotation_decimate_factor;  ///< The annotation decimate factor for summaries.
+    uint32_t utc_decimate_factor;       ///< The UTC decimate factor for summaries.
+    int64_t sample_id_offset;           ///< The sample id offset for the first sample.  (FSR only)
     // on disk: reserve 64 bytes as 0 for future use
-    const char * name;                  // The signal name
-    const char * units;                 // The units string, normally as SI with no scale prefix.
+    const char * name;                  ///< The signal name
+    const char * units;                 ///< The units string, normally as SI with no scale prefix.
 };
 
 //  struct jls_track_def_s  // empty, only need chunk_meta for now

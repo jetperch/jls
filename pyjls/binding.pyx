@@ -59,6 +59,12 @@ class _DataTypeBase:
 
 
 class DataType:
+    """The signal data type enumeration.
+
+    unsigned integers: U1, U4, U8, U16, U32, U64
+    signed integer: I4, I8, I16, I32, I64
+    floating point: F32, F64
+    """
     U1 = _data_type_def(_DataTypeBase.UINT, 1, 0)
     U4 = _data_type_def(_DataTypeBase.UINT, 4, 0)
     U8 = _data_type_def(_DataTypeBase.UINT, 8, 0)
@@ -136,6 +142,7 @@ def data_type_as_str(data_type):
 
 
 class AnnotationType:
+    """The annotation type enumeration."""
     USER = c_jls.JLS_ANNOTATION_TYPE_USER
     TEXT = c_jls.JLS_ANNOTATION_TYPE_TEXT
     VMARKER = c_jls.JLS_ANNOTATION_TYPE_VERTICAL_MARKER
@@ -171,11 +178,13 @@ _log_level_map = {
 
 
 class SignalType:
+    """The signal type enumeration."""
     FSR = c_jls.JLS_SIGNAL_TYPE_FSR
     VSR = c_jls.JLS_SIGNAL_TYPE_VSR
 
 
 class SummaryFSR:
+    """The FSR column enumeration."""
     MEAN = c_jls.JLS_SUMMARY_FSR_MEAN
     STD = c_jls.JLS_SUMMARY_FSR_STD
     MIN = c_jls.JLS_SUMMARY_FSR_MIN
@@ -239,7 +248,15 @@ def utc_to_jls(utc):
 
 
 def jls_to_utc(timestamp):
-    """Convert from jls timestamp to python UTC timestamp."""
+    """Convert from jls timestamp to python UTC timestamp.
+
+    :param timestamp: The JLS timestamp.
+    :return: The python UTC timestamp.
+
+    Note that python timestamps usually have lower resolution than
+    the JLS timestamps.  When full resolution is required,
+    use relative JLS timestamp offsets to maintain precision.
+    """
     return (timestamp / SECOND) + _UTC_OFFSET
 
 
@@ -256,6 +273,10 @@ cdef class Writer:
     cdef c_jls.jls_signal_def_s _signals[_JLS_SIGNAL_COUNT]
 
     def __init__(self, path: str):
+        """Create a new JLS writer.
+
+        :param path: The output JLS file path.
+        """
         cdef c_jls.jls_twr_s ** wr_ptr = &self._wr
         cdef int32_t rc
         cdef const uint8_t[:] path_u8
@@ -273,16 +294,19 @@ cdef class Writer:
         self.close()
 
     def close(self):
+        """Close the JLS file and release all resources."""
         cdef c_jls.jls_twr_s * wr = self._wr
         with nogil:
             c_jls.jls_twr_close(wr)
 
     def flush(self):
+        """Flush any pending data to the JLS file."""
         cdef c_jls.jls_twr_s * wr = self._wr
         with nogil:
             c_jls.jls_twr_flush(wr)
 
     def source_def(self, source_id, name=None, vendor=None, model=None, version=None, serial_number=None):
+        """Define a source."""
         cdef int32_t rc
         cdef c_jls.jls_source_def_s s
         name_b = _encode_str(name)
@@ -300,6 +324,7 @@ cdef class Writer:
         _handle_rc('source_def', rc)
 
     def source_def_from_struct(self, s: SourceDef):
+        """Define a source."""
         return self.source_def(s.source_id,
                                name=s.name,
                                vendor=s.vendor,
@@ -311,6 +336,7 @@ cdef class Writer:
                    samples_per_data=None, sample_decimate_factor=None, entries_per_summary=None,
                    summary_decimate_factor=None, annotation_decimate_factor=None, utc_decimate_factor=None,
                    name=None, units=None):
+        """Define a signal."""
         cdef int32_t rc
         cdef c_jls.jls_signal_def_s * s
         s = &self._signals[signal_id]
@@ -337,6 +363,7 @@ cdef class Writer:
         _handle_rc('signal_def', rc)
 
     def signal_def_from_struct(self, s: SignalDef):
+        """Define a signal."""
         return self.signal_def(s.signal_id,
                                s.source_id,
                                signal_type=s.signal_type,
@@ -352,6 +379,12 @@ cdef class Writer:
                                units=s.units)
 
     def user_data(self, chunk_meta, data):
+        """Add user data to the file.
+
+        :param chunk_meta: The arbitrary u16 metadata value.
+        :param data: The bytes to store.
+        :raise: On error.
+        """
         cdef int32_t rc
         cdef uint16_t chunk_meta_u16 = chunk_meta
         cdef c_jls.jls_storage_type_e storage_type
@@ -369,9 +402,22 @@ cdef class Writer:
         _handle_rc('user_data', rc)
 
     def fsr_f32(self, signal_id, sample_id, data):
+        """Add 32-bit floating-point FSR data to a signal.
+
+        :param signal_id: The signal id for the data.
+        :param sample_id: The sample id for the first sample in data.
+        :param data: The 32-bit floating point data to add.
+        """
         return self.fsr(signal_id, sample_id, data)
 
     def fsr(self, signal_id, sample_id, data):
+        """Add FSR data to a signal.
+
+        :param signal_id: The signal id for the data.
+        :param sample_id: The sample id for the first sample in data.
+        :param data: The data to add.
+        :raise: On error.
+        """
         cdef c_jls.jls_twr_s * wr = self._wr
         cdef uint16_t signal_id_u16 = signal_id
         cdef int64_t sample_id_i64 = sample_id
@@ -398,6 +444,15 @@ cdef class Writer:
         _handle_rc('fsr', rc)
 
     def annotation(self, signal_id, timestamp, y, annotation_type, group_id, data):
+        """Add an annotation to a signal.
+
+        :param signal_id: The signal id.
+        :param timestamp: The x-axis timestamp in sample_id for FSR and UTC for VSR.
+        :param y: The y-axis value or NAN to automatically position.
+        :param annotation_type: The annotation type.
+        :param data: The data for the annotation.
+        :raise: On error.
+        """
         cdef c_jls.jls_twr_s * wr = self._wr
         cdef uint16_t signal_id_u16 = signal_id
         cdef int64_t timestamp_i64 = timestamp
@@ -427,6 +482,12 @@ cdef class Writer:
         _handle_rc('annotation', rc)
 
     def utc(self, signal_id, sample_id, utc_i64):
+        """Add a mapping from sample_id to UTC timestamp for an FSR signal.
+        :param signal_id: The signal id.
+        :param sample_id: The sample_id for FSR.
+        :param utc: The UTC timestamp.
+        :raise: On error.
+        """
         cdef c_jls.jls_twr_s * wr = self._wr
         cdef uint16_t signal_id_u16 = signal_id
         cdef int64_t sample_id_i64 = sample_id
@@ -452,6 +513,11 @@ cdef class Reader:
     cdef object _signals
 
     def __init__(self, path: str):
+        """Open a JLS v2 file for reading.
+
+        :param path: The path to the JLS file.
+        """
+
         cdef int32_t rc
         cdef c_jls.jls_source_def_s * sources
         cdef c_jls.jls_signal_def_s * signals
@@ -506,17 +572,50 @@ cdef class Reader:
         self.close()
 
     def close(self):
+        """Close the JLS file and free all resources."""
         c_jls.jls_rd_close(self._rd)
 
     @property
     def sources(self) -> Mapping[int, SourceDef]:
+        """Return the dict mapping source_id to SourceDef."""
         return self._sources
 
     @property
     def signals(self) -> Mapping[int, SignalDef]:
+        """Return the dict mapping signal_id to SignalDef."""
         return self._signals
 
+    def signal_lookup(self, spec) -> SignalDef:
+        """Look up a signal.
+
+        :param spec: The signal id or name.
+        :return: The signal definition:
+        :raise ValueError: If not found.
+        """
+        try:
+            return self._signals[int(spec)]
+        except ValueError:
+            for s in self._signals.values():
+                if s.name == spec:
+                    return s
+        raise ValueError(f'signal_lookup failed for {spec}')
+
     def fsr(self, signal_id, start_sample_id, length):
+        """Read the FSR data.
+
+        :param signal_id: The signal id.
+        :param start_sample_id: The starting sample id to read.
+        :param length: The number of samples to read.
+        :return: The data, which varies depending upon the FSR data type.
+            u1 and u4 data will be packed in little endian order.
+            For u1, unpack with:
+                np.unpackbits(y, bitorder='little')[:len(x)]
+            For u4, unpack with
+                d = np.empty(len(y) * 2, dtype=np.uint8)
+                d[0::2] = np.bitwise_and(y, 0x0f)
+                d[1::2] = np.bitwise_and(np.right_shift(y, 4), 0x0f)
+        """
+
         cdef int32_t rc
         cdef np.uint8_t [::1] u8
         cdef uint32_t data_type
@@ -586,6 +685,12 @@ cdef class Reader:
         _handle_rc('rd_annotations', rc)
 
     def user_data(self, cbk_fn):
+        """Get the user data.
+
+        :param cbk_fn: The callable(chunk_meta_u16, data) called for each
+            user_data entry.  Return True to stop iterating over subsequent
+            user data entries or False to continue iterating.
+        """
         cdef int32_t rc
         rc = c_jls.jls_rd_user_data(self._rd, _user_data_cbk_fn, <void *> cbk_fn)
         _handle_rc('rd_user_data', rc)
