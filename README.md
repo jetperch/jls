@@ -14,15 +14,7 @@
 # limitations under the License.
 -->
 
-main:
-[![Windows amd64](https://github.com/jetperch/jls/actions/workflows/windows_amd64.yml/badge.svg?branch=main)](https://github.com/jetperch/jls/actions/workflows/windows_amd64.yml)
-[![macOS amd64](https://github.com/jetperch/jls/actions/workflows/macos_amd64.yml/badge.svg?branch=main)](https://github.com/jetperch/jls/actions/workflows/macos_amd64.yml)
-[![Ubuntu Linux amd64](https://github.com/jetperch/jls/actions/workflows/linux_amd64.yml/badge.svg?branch=main)](https://github.com/jetperch/jls/actions/workflows/linux_amd64.yml)
-
-develop:
-[![Windows amd64](https://github.com/jetperch/jls/actions/workflows/windows_amd64.yml/badge.svg?branch=develop)](https://github.com/jetperch/jls/actions/workflows/windows_amd64.yml)
-[![macOS amd64](https://github.com/jetperch/jls/actions/workflows/macos_amd64.yml/badge.svg?branch=develop)](https://github.com/jetperch/jls/actions/workflows/macos_amd64.yml)
-[![Ubuntu Linux amd64](https://github.com/jetperch/jls/actions/workflows/linux_amd64.yml/badge.svg?branch=develop)](https://github.com/jetperch/jls/actions/workflows/linux_amd64.yml)
+[![main](https://github.com/jetperch/jls/actions/workflows/packaging.yml/badge.svg?branch=main)](https://github.com/jetperch/jls/actions/workflows/packaging.yml)
 
 
 # JLS
