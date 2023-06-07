@@ -29,7 +29,7 @@ on:
 
 
 env:
-  PYTHON_VERSION: "3.11"
+  PYTHON_VERSION: '3.11'
 
 
 jobs:
@@ -161,6 +161,7 @@ jobs:
           CIBW_ARCHS_MACOS: universal2
           CIBW_ARCHS_WINDOWS: native
           CIBW_ARCHS_LINUX: native
+          CIBW_SKIP: pp*   # Skip all PyPy builds, only support Cython with CPython
           CIBW_TEST_REQUIRES: pytest
           CIBW_TEST_COMMAND: pytest --pyargs pyjls
         with:
