@@ -46,12 +46,15 @@ with open(VERSION_PATH, 'r', encoding='utf-8') as f:
     exec(f.read(), about)
 
 
+extra_compile_args = []
 if platform.system() == 'Windows':
     sources = ['src/backend_win.c']
     libraries = []
 else:
     sources = ['src/backend_posix.c']
     libraries = ['pthread', 'm']
+    if platform.system() == 'Linux':
+        extra_compile_args = ['-msse4.2']
 
 
 ext = '.pyx' if USE_CYTHON else '.c'
@@ -76,6 +79,7 @@ extensions = [
         ] + sources,
         include_dirs=['include', 'include_prv', np.get_include()],
         libraries=libraries,
+        extra_compile_args=extra_compile_args,
     ),
 ]
 
