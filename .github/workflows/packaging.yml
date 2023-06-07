@@ -22,13 +22,10 @@ name: Packaging
 
 on:
   push:
-    branches:
-      - 'main'
-      - 'feature/**'
-      - 'releases/**'
+  pull_request:
   release:
     types:
-      - 'created'
+      - 'published'
 
 
 env:
@@ -189,7 +186,7 @@ jobs:
 
   publish_python:
     name: Publish python packages to PyPi
-    if: startswith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'release' && startswith(github.ref, 'refs/tags/v')
     needs:
       - build_python_sdist
       - build_python_wheels
