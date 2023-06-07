@@ -66,6 +66,7 @@ jobs:
     name: Build native on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: ["ubuntu-latest", "macos-latest"]
     steps:
@@ -100,7 +101,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: $PYTHON_VERSION
+          python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Display version
         run: python -VV
@@ -146,7 +147,7 @@ jobs:
       - name: Set up Python ${{ matrix.python }}
         uses: actions/setup-python@v4
         with:
-          python-version: $PYTHON_VERSION
+          python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install python dependencies
         run: |
@@ -165,7 +166,7 @@ jobs:
 
       - name: Run python unit tests
         run: python3 -m unittest
-        working-directory: $PYTHON_PACKAGE/test
+        working-directory: "$PYTHON_PACKAGE/test"
 
       - name: Upload python wheels
         uses: actions/upload-artifact@v3
