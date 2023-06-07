@@ -181,14 +181,11 @@ jobs:
 
   publish_python:
     name: Publish python packages to PyPi
-    if: startswith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && startswith(github.ref, 'refs/tags/v')
     needs:
       - build_python_sdist
       - build_python_wheels
     runs-on: ubuntu-latest
-    environment:
-      name: pypi
-      url: https://pypi.org/p/pyjls
     permissions:
       id-token: write
 
@@ -210,4 +207,7 @@ jobs:
         run: ls dist/*
 
       - name: Publish packages to PyPi
-        uses: pypa/gh-action-pypi-publish@v1.8.0
+        uses: pypa/gh-action-pypi-publish@v1.8.6
+        with:
+          verbose: true
+          print-hash: true
