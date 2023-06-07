@@ -26,6 +26,9 @@ on:
       - 'main'
       - 'feature/**'
       - 'releases/**'
+  release:
+    types:
+      - 'created'
 
 
 env:
@@ -98,6 +101,14 @@ jobs:
     name: Build python sdist
     runs-on: ubuntu-latest
     steps:
+      - name: Display info
+        run: |
+          echo "github.event_name=$GITHUB_EVENT_NAME"
+          echo "github.ref=$GITHUB_REF"
+          echo "github.ref_type=$GITHUB_REF_TYPE"
+          echo "runner.os=$RUNNER_OS"
+          echo "runner.arch=$RUNNER_ARCH"
+
       - name: Checkout repo
         uses: actions/checkout@v3
 
@@ -178,7 +189,7 @@ jobs:
 
   publish_python:
     name: Publish python packages to PyPi
-    if: startswith(github.event.ref, 'refs/tags/v')
+    if: startswith(github.ref, 'refs/tags/v')
     needs:
       - build_python_sdist
       - build_python_wheels
