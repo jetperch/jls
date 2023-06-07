@@ -146,6 +146,11 @@ jobs:
           name: sdist
           path: dist/
 
+      - name: Find sdist filename
+        shell: bash
+        id: find_sdist_filename
+        run: echo "::set-output name=filename::$(ls dist/*.tar.gz)"
+
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.13.0
         env:
@@ -155,7 +160,7 @@ jobs:
           CIBW_TEST_REQUIRES: pytest
           CIBW_TEST_COMMAND: pytest {project}/pyjls/test
         with:
-          package-dir: dist/pyjls-*.tar.gz
+          package-dir: ${{ steps.find_sdist_filename.outputs.filename }}
 
       - name: Upload python wheels
         uses: actions/upload-artifact@v3
