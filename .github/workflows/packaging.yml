@@ -167,3 +167,29 @@ jobs:
         with:
           path: wheelhouse/*.whl
           if-no-files-found: error
+
+  publish_python:
+    name: Publish python packages to PyPi
+    if: startswith(github.event.ref, 'refs/tags/v')
+    needs:
+      - build_python_sdist
+      - build_python_wheels
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/jls
+    permissions:
+      id-token: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: dist/
+
+      - name: Display artifacts
+        shell: bah
+        run: ls dist/*
+
+      - name: Publish packages to PyPi
+        uses: pypa/gh-action-pypi-publish@v1.8.0
