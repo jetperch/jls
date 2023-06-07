@@ -55,6 +55,8 @@ else:
     libraries = ['pthread', 'm']
     if platform.system() == 'Linux':
         extra_compile_args = ['-msse4.2']
+    elif platform.system() == 'Darwin':
+        extra_compile_args = ['-msse4.2', '-mcrc']
 
 
 ext = '.pyx' if USE_CYTHON else '.c'

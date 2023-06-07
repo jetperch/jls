@@ -162,7 +162,7 @@ jobs:
           CIBW_ARCHS_WINDOWS: native
           CIBW_ARCHS_LINUX: native
           CIBW_TEST_REQUIRES: pytest
-          CIBW_TEST_COMMAND: pytest {package}/pyjls/test
+          CIBW_TEST_COMMAND: pytest --pyargs pyjls
         with:
           package-dir: ${{ steps.find_sdist_filename.outputs.filename }}
 
