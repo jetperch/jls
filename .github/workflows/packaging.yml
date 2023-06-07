@@ -20,12 +20,7 @@
 
 name: Packaging
 
-on:
-  push:
-  pull_request:
-  release:
-    types:
-      - 'published'
+on: ['push', 'pull_request']
 
 
 env:
@@ -186,7 +181,7 @@ jobs:
 
   publish_python:
     name: Publish python packages to PyPi
-    if: github.event_name == 'release' && startswith(github.ref, 'refs/tags/v')
+    if: startswith(github.ref, 'refs/tags/v')
     needs:
       - build_python_sdist
       - build_python_wheels
