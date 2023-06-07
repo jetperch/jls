@@ -156,9 +156,9 @@ jobs:
       - name: Build wheels
         run: pypa/cibuildwheel@v2.13.0
         env:
-          CIBW_ARCHS_MACOS = universal2
-          CIBW_ARCHS_WINDOWS = native
-          CIBW_ARCHS_LINUX = x86_64 aarch64
+          CIBW_ARCHS_MACOS: universal2
+          CIBW_ARCHS_WINDOWS: native
+          CIBW_ARCHS_LINUX: x86_64 aarch64
         with:
           output-dir: wheels
 
