@@ -21,7 +21,11 @@
 name: Packaging
 
 on:
-  - push
+  push:
+    branches:
+      - 'main'
+      - 'feature/**'
+      - 'releases/**'
 
 
 env:
