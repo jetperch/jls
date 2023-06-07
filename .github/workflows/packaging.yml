@@ -127,7 +127,7 @@ jobs:
       - name: Upload python source package
         uses: actions/upload-artifact@v3
         with:
-          name: sdist
+          name: python_sdist
           path: dist/*.tar.gz
           if-no-files-found: error
 
@@ -147,7 +147,7 @@ jobs:
       - name: Download sdist
         uses: actions/download-artifact@v3
         with:
-          name: sdist
+          name: python_sdist
           path: dist/
 
       - name: Find sdist filename
@@ -161,7 +161,9 @@ jobs:
           CIBW_ARCHS_MACOS: universal2
           CIBW_ARCHS_WINDOWS: native
           CIBW_ARCHS_LINUX: native
-          CIBW_SKIP: pp*   # Skip all PyPy builds, only support Cython with CPython
+          # skip PyPy: Cython only supports CPython
+          # skip musllinux: build takes too long with default os images.
+          CIBW_SKIP: 'pp* *musllinux*'
           CIBW_TEST_REQUIRES: pytest
           CIBW_TEST_COMMAND: pytest --pyargs pyjls
         with:
@@ -170,6 +172,7 @@ jobs:
       - name: Upload python wheels
         uses: actions/upload-artifact@v3
         with:
+          name: python_wheels
           path: wheelhouse/*.whl
           if-no-files-found: error
 
@@ -182,18 +185,25 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/p/jls
+      url: https://pypi.org/p/pyjls
     permissions:
       id-token: write
 
     steps:
-      - name: Download all artifacts
+      - name: Download python sdist artifact
         uses: actions/download-artifact@v3
         with:
+          name: python_sdist
+          path: dist/
+
+      - name: Download python wheel artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: python_wheels
           path: dist/
 
       - name: Display artifacts
-        shell: bah
+        shell: bash
         run: ls dist/*
 
       - name: Publish packages to PyPi
