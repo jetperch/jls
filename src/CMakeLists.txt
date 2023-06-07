@@ -17,6 +17,7 @@ include_directories(../include_prv)
 set(SOURCES
         bit_shift.c
         datatype.c
+        crc32c.c
         ec.c
         log.c
         msg_ring_buffer.c
@@ -30,26 +31,15 @@ set(SOURCES
         writer.c
 )
 
-if (CMAKE_SYSTEM_PROCESSOR STREQUAL "armv7l")
-    set(SOURCES ${SOURCES} backend_posix.c crc32c_sw.c)
-    set(JLS_LIBS jls m pthread PARENT_SCOPE)
-elseif ((CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64") OR (CMAKE_SYSTEM_PROCESSOR STREQUAL "arm64"))
-    set(SOURCES ${SOURCES} backend_posix.c crc32c_arm_neon.c)
-    set(JLS_LIBS jls m pthread PARENT_SCOPE)
-elseif (WIN32)
-    set(SOURCES ${SOURCES} backend_win.c crc32c_intel_sse4.c)
+if (WIN32)
+    set(SOURCES ${SOURCES} backend_win.c)
     set(JLS_LIBS jls PARENT_SCOPE)
     if (BUILD_SHARED_LIBS)
         add_definitions(-DJLS_EXPORT=1)
     endif()
-elseif (APPLE)
-    set(SOURCES ${SOURCES} backend_posix.c crc32c_intel_sse4.c)
-    set(JLS_LIBS jls m pthread PARENT_SCOPE)
-elseif (UNIX)
-    set(SOURCES ${SOURCES} backend_posix.c crc32c_intel_sse4.c)
-    set(JLS_LIBS jls m pthread PARENT_SCOPE)
 else()
-    message(FATAL_ERROR "Unsupported platform")
+    set(SOURCES ${SOURCES} backend_posix.c)
+    set(JLS_LIBS jls m pthread PARENT_SCOPE)
 endif()
 
 foreach(f IN LISTS SOURCES)

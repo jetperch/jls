@@ -47,21 +47,11 @@ with open(VERSION_PATH, 'r', encoding='utf-8') as f:
 
 
 if platform.system() == 'Windows':
-    sources = ['src/backend_win.c', 'src/crc32c_intel_sse4.c']
+    sources = ['src/backend_win.c']
     libraries = []
-    extra_compile_args = []
-elif 'armv7' in platform.machine():
-    sources = ['src/backend_posix.c', 'src/crc32c_sw.c']
-    libraries = ['pthread', 'm']
-    extra_compile_args = []
-elif platform.processor() == 'aarch64' or platform.machine() in ['arm64', 'aarch64']:
-    sources = ['src/backend_posix.c', 'src/crc32c_arm_neon.c']
-    libraries = ['pthread', 'm']
-    extra_compile_args = ['-march=armv8-a+crc+simd']
 else:
-    sources = ['src/backend_posix.c', 'src/crc32c_intel_sse4.c']
+    sources = ['src/backend_posix.c']
     libraries = ['pthread', 'm']
-    extra_compile_args = ['-msse4']
 
 
 ext = '.pyx' if USE_CYTHON else '.c'
@@ -70,6 +60,7 @@ extensions = [
         sources=[
             'pyjls/binding' + ext,
             'src/bit_shift.c',
+            'src/crc32c.c',
             'src/datatype.c',
             'src/ec.c',
             'src/log.c',
@@ -85,7 +76,6 @@ extensions = [
         ] + sources,
         include_dirs=['include', 'include_prv', np.get_include()],
         libraries=libraries,
-        extra_compile_args=[] + extra_compile_args,
     ),
 ]
 
@@ -160,7 +150,6 @@ setuptools.setup(
         # Supported Python versions
         'Programming Language :: Python',
         'Programming Language :: Python :: 3',
-        'Programming Language :: Python :: 3.8',
         'Programming Language :: Python :: 3.9',
         'Programming Language :: Python :: 3.10',
         'Programming Language :: Python :: 3.11',
@@ -184,7 +173,7 @@ setuptools.setup(
     include_dirs=[],
     
     # See https://packaging.python.org/guides/distributing-packages-using-setuptools/#python-requires
-    python_requires='~=3.8',
+    python_requires='~=3.9',
 
     # See https://packaging.python.org/en/latest/requirements.html
     install_requires=[

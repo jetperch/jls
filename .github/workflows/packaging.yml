@@ -23,15 +23,121 @@ name: Packaging
 on:
   - push
 
+
+env:
+  PYTHON_VERSION: "3.11"
+  PYTHON_PACKAGE: pyjls
+
+
 jobs:
 
-  build:
-    name: Build on ${{ matrix.os }}
+  build_native_win:
+    name: Build native on windows-latest
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Display CMake version
+        run: cmake --version
+
+      - name: Build static
+        run: |
+          cmake -S . -B cmake_build_static -G "Visual Studio 17 2022" -DCMAKE_CONFIGURATION_TYPES=Release -DCMAKE_VERBOSE_MAKEFILE=ON
+          cmake --build cmake_build_static --config Release --target ALL_BUILD
+
+      - name: Run tests
+        run: cmake --build cmake_build_static --config Release --target RUN_TESTS
+
+      - name: Build dynamic
+        run: |
+          cmake -S . -B cmake_build_dyn -G "Visual Studio 17 2022" -DCMAKE_CONFIGURATION_TYPES=Release -DCMAKE_VERBOSE_MAKEFILE=ON -DBUILD_SHARED_LIBS=ON
+          cmake --build cmake_build_dyn --config Release --target jls
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v3
+        with:
+          name: windows-latest
+          path: |
+            cmake_build_static/example/Release/jls.exe
+            cmake_build_dyn/src/Release/jls.*
+
+  build_native_posix:
+    name: Build native on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        python: ["3.9", "3.10", "3.11"]
-        os: ["ubuntu-latest", "windows-latest", "macos-13", "macos-12"]
+        os: ["ubuntu-latest", "macos-latest"]
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Display CMake version
+        run: cmake --version
+
+      - name: Build static
+        run: |
+          cmake -S . -B cmake_build_static -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_VERBOSE_MAKEFILE=ON -DCMAKE_VERBOSE_MAKEFILE=ON
+          cmake --build cmake_build_static
+
+      - name: Run tests
+        run: cmake --build cmake_build_static --target test
+
+      - name: Upload binaries
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.os }}
+          path: |
+            cmake_build_static/example/jls
+
+  build_python_sdist:
+    name: Build python sdist
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: $PYTHON_VERSION
+
+      - name: Display version
+        run: python -VV
+
+      - name: Install python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build wheel
+
+      - name: Build sdist
+        run: python -m build --sdist
+
+      - name: Install the wheel
+        run: python -m pip install -f dist $PYTHON_PACKAGE
+
+      - name: Run python unit tests
+        run: python3 -m unittest
+        working-directory: $PYTHON_PACKAGE
+
+      - name: Upload python source package
+        uses: actions/upload-artifact@v3
+        with:
+          name: sdist
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  build_python_wheels:
+    name: Build on ${{ matrix.os }}
+    needs:
+      - build_native_win
+      - build_native_posix
+      - build_python_sdist
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ["ubuntu-latest", "windows-latest", "macos-latest"]
 
     steps:
       - name: Checkout repo
@@ -40,49 +146,30 @@ jobs:
       - name: Set up Python ${{ matrix.python }}
         uses: actions/setup-python@v4
         with:
-          python-version: ${{ matrix.python }}
-
-      - name: Display versions
-        run: |
-          cmake --version
-          python -VV
-
-      - name: Build on Windows
-        if: ${{ startsWith(matrix.os, 'windows-') }}
-        run: |
-          cmake -S . -B cmake_build -G "Visual Studio 17 2022" -DCMAKE_CONFIGURATION_TYPES=Release
-          cmake --build cmake_build --config Release --target ALL_BUILD
-          cmake --build cmake_build --config Release --target RUN_TESTS
-
-      - name: Build on POSIX
-        if: ${{ !startsWith(matrix.os, 'windows-') }}
-        run: |
-          cmake -S . -B cmake_build -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release
-          cmake --build cmake_build
-          cmake --build cmake_build --target test
+          python-version: $PYTHON_VERSION
 
       - name: Install python dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install build wheel
+          python -m pip install cibuildwheel
 
-      - name: Build python wheel
-        run: python -m build
+      - name: Build wheels
+        run: pypa/cibuildwheel@v2.13.0
+        env:
+          CIBW_ARCHS_MACOS = universal2
+          CIBW_ARCHS_WINDOWS = native
+          CIBW_ARCHS_LINUX = x86_64 aarch64
+        with:
+          output-dir: wheels
 
       - name: Install the wheel
-        run: python -m pip install -f dist pyjls
+        run: python -m pip install -f wheels $PYTHON_PACKAGE
 
       - name: Run python unit tests
         run: python3 -m unittest
-        working-directory: pyjls
-
-      - name: Upload python source package
-        if: ${{ matrix.os }} == "ubuntu-latest" && ${{ matrix.python }} == "3.11"
-        uses: actions/upload-artifact@v3
-        with:
-          path: dist/*.tar.gz
+        working-directory: $PYTHON_PACKAGE/test
 
       - name: Upload python wheel
         uses: actions/upload-artifact@v3
         with:
-          path: dist/*.whl
+          path: wheels/*.whl

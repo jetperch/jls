@@ -6,13 +6,14 @@ This file contains the list of changes made to the JLS project.
 
 ## 0.7.1
 
-2023 Jun 6
+2023 Jun 7
 
 * Added Reader.signal_lookup.
 * Improved documentation.
 * Added Read The Docs integration.
 * Improved python "export" subcommand to specify "--signal" by name.
 * Added python subcommand "plot".
+* Improved build process, migrated to GitHub Actions.
 
 
 ## 0.7.0
