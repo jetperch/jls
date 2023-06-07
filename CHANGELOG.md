@@ -14,6 +14,7 @@ This file contains the list of changes made to the JLS project.
 * Improved python "export" subcommand to specify "--signal" by name.
 * Added python subcommand "plot".
 * Improved build process, migrated to GitHub Actions.
+* Bumped minimum python version from 3.8 to 3.9.
 
 
 ## 0.7.0
