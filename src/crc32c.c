@@ -23,7 +23,10 @@
  * macOS universal2 builds.  Since the native compilation must know
  * compiler flags, we make the decision here.
  */
-#if defined(_M_ARM64) || defined(__aarch64__) || defined(__arm64__)
+
+#if defined(__TARGET_ARCH_ARM) && (__TARGET_ARCH_ARM < 8)
+#include "crc32c_sw.c"
+#elif defined(_M_ARM64) || defined(__aarch64__) || defined(__arm64__)
 #include "crc32c_arm_neon.c"
 #elif defined(_M_AMD64) || defined(__amd64__)
 #include "crc32c_intel_sse4.c"

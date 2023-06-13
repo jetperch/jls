@@ -163,7 +163,7 @@ jobs:
         env:
           CIBW_ARCHS_MACOS: universal2
           CIBW_ARCHS_WINDOWS: native
-          CIBW_ARCHS_LINUX: native
+          CIBW_ARCHS_LINUX: x86_64
           # skip PyPy: Cython only supports CPython
           # skip musllinux: build takes too long with default os images.
           CIBW_SKIP: 'pp* *musllinux*'

@@ -54,9 +54,14 @@ else:
     sources = ['src/backend_posix.c']
     libraries = ['pthread', 'm']
     if platform.system() == 'Linux':
-        extra_compile_args = ['-msse4.2']
+        if 'armv7' in platform.machine():
+            pass  # no acceleration
+        elif platform.processor() == 'aarch64' or platform.machine() in ['arm64', 'aarch64']:
+            extra_compile_args = ['-mcrc']
+        else:
+            extra_compile_args = ['-msse4.2']
     elif platform.system() == 'Darwin':
-        extra_compile_args = ['-msse4.2', '-mcrc']
+        extra_compile_args = ['-msse4.2', '-mcrc']  # universal2
 
 
 ext = '.pyx' if USE_CYTHON else '.c'

@@ -4,6 +4,13 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.7.2
+
+2023 Jun 13
+
+* Fixed build for Raspberry Pi
+
+
 ## 0.7.1
 
 2023 Jun 7
