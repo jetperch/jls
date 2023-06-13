@@ -50,18 +50,22 @@ extra_compile_args = []
 if platform.system() == 'Windows':
     sources = ['src/backend_win.c']
     libraries = []
+    if platform.machine() in ['AMD64', 'x86_64']:
+        pass  # SSE supported by default
+    else:
+        print(f'Unknown windows machine: {platform.machine()}')
 else:
     sources = ['src/backend_posix.c']
     libraries = ['pthread', 'm']
-    if platform.system() == 'Linux':
-        if 'armv7' in platform.machine():
-            pass  # no acceleration
-        elif platform.processor() == 'aarch64' or platform.machine() in ['arm64', 'aarch64']:
-            extra_compile_args = ['-mcrc']
-        else:
-            extra_compile_args = ['-msse4.2']
-    elif platform.system() == 'Darwin':
+    if platform.system() == 'Darwin':
         extra_compile_args = ['-msse4.2', '-mcrc']  # universal2
+    elif platform.system() == 'Linux':
+        if platform.processor() == 'x86_64':
+            extra_compile_args = ['-msse4.2']
+        else:
+            # Raspberry Pi 4 does not support CRC acceleration
+            # While other non x86_64 platforms may, do not provide any compiler flags
+            print(f'CRC optimization likely disabled')
 
 
 ext = '.pyx' if USE_CYTHON else '.c'

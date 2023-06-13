@@ -24,14 +24,35 @@
  * compiler flags, we make the decision here.
  */
 
-#if defined(__TARGET_ARCH_ARM) && (__TARGET_ARCH_ARM < 8)
+#if defined(JLS_OPTIMIZE_CRC_DISABLE)
 #include "crc32c_sw.c"
-#elif defined(_M_ARM64) || defined(__aarch64__) || defined(__arm64__)
-#include "crc32c_arm_neon.c"
-#elif defined(_M_AMD64) || defined(__amd64__)
+
+#elif defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
+#if defined(_M_X64) || defined(__x86_64__)
 #include "crc32c_intel_sse4.c"
+#else
+#include "crc32c_sw.c"
+#endif
+
+#elif defined(__APPLE__) && defined(__MACH__)
+#if defined(_M_ARM64) || defined(__aarch64__) || defined(__arm64__)
+#include "crc32c_arm_neon.c"
 #elif defined(_M_X64) || defined(__x86_64__)
 #include "crc32c_intel_sse4.c"
 #else
 #include "crc32c_sw.c"
+#endif
+
+#elif defined(__linux__) && __linux__
+#if defined(_M_X64) || defined(__x86_64__)
+#include "crc32c_intel_sse4.c"
+#else
+// Raspberry Pi 4 does not support CRC optimization.
+// Other Linux platforms may, but disable for now.
+#include "crc32c_sw.c"
+#endif
+
+#else
+#include "crc32c_sw.c"
+
 #endif
