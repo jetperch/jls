@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-cmake_minimum_required (VERSION 3.1)
+cmake_minimum_required (VERSION 3.10)
 set(PARENT_PROJECT_DIR ${PROJECT_SOURCE_DIR})
 set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "" FORCE)  # universal2
 project(JLS
@@ -55,6 +55,7 @@ elseif (APPLE)
     message(STATUS "macOS universal2")
     add_definitions(-msse4.2 -mcrc)
 elseif (UNIX)
+    include(CheckCCompilerFlag)
     check_c_compiler_flag("-msse4.2" FEATURE_MSSE_SUPPORTED)
     check_c_compiler_flag("-mcrc" FEATURE_CRC_SUPPORTED)
     if (FEATURE_MSSE_SUPPORTED)
