@@ -192,7 +192,7 @@ class SummaryFSR:
     COUNT = c_jls.JLS_SUMMARY_FSR_COUNT
 
 
-cdef void _log_cbk(const char * msg) nogil:
+cdef void _log_cbk(const char * msg) noexcept nogil:
     with gil:
         m = msg.decode('utf-8').strip()
         level, location, s = m.split(' ', 2)
@@ -739,7 +739,7 @@ cdef class Reader:
         return sample_id
 
 
-cdef int32_t _annotation_cbk_fn(void * user_data, const c_jls.jls_annotation_s * annotation):
+cdef int32_t _annotation_cbk_fn(void * user_data, const c_jls.jls_annotation_s * annotation) noexcept:
     obj: AnnotationCallback = <object> user_data
     data = _storage_unpack(annotation[0].storage_type, annotation[0].data, annotation[0].data_size)
     y = annotation[0].y
@@ -757,14 +757,14 @@ cdef int32_t _annotation_cbk_fn(void * user_data, const c_jls.jls_annotation_s *
 
 
 cdef int32_t _user_data_cbk_fn(void * user_data, uint16_t chunk_meta, c_jls.jls_storage_type_e storage_type,
-        uint8_t * data, uint32_t data_size):
+        uint8_t * data, uint32_t data_size) noexcept:
     cbk_fn = <object> user_data
     d = _storage_unpack(storage_type, data, data_size)
     rc = cbk_fn(chunk_meta, d)
     return 1 if bool(rc) else 0
 
 
-cdef int32_t _utc_cbk_fn(void * user_data, const c_jls.jls_utc_summary_entry_s * utc, uint32_t size):
+cdef int32_t _utc_cbk_fn(void * user_data, const c_jls.jls_utc_summary_entry_s * utc, uint32_t size) noexcept:
     cdef uint32_t idx
     cbk_fn = <object> user_data
     entries = np.empty((size, 2), dtype=np.int64)

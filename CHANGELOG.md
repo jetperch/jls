@@ -4,6 +4,14 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.7.3
+
+2023 Jul 24
+
+* Added "noexcept" to python callbacks.
+  Cython 3.0 deprecates implicit noexcept.
+
+
 ## 0.7.2
 
 2023 Jun 13
