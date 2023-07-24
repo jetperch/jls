@@ -14,7 +14,7 @@ This file contains the list of changes made to the JLS project.
 
 ## 0.7.2
 
-2023 Jun 13
+2023 Jun 14
 
 * Fixed build for Raspberry Pi.
 * Added JLS_OPTIMIZE_CRC cmake option.
