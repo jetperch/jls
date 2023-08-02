@@ -85,6 +85,7 @@ int on_info(struct app_s * self, int argc, char * argv[]) {
     uint16_t signal_count = 0;
     ROE(jls_rd_signals(rd, &signals, &signal_count));
     if (signal_count) {
+        printf("Signals:\n");
         for (uint16_t i = 0; i < signal_count; ++i) {
             printf("  %d:\n", (int) signals[i].signal_id);
             printf("    name: %s\n", signals[i].name);

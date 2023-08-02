@@ -71,7 +71,8 @@ JLS_CPP_GUARD_START
     X(SEQUENCE,                 "The requested operation was out of sequence.") \
     X(ABORTED,                  "The requested operation was previously aborted.") \
     X(SYNCHRONIZATION,          "The target is not synchronized with the originator.")\
-    X(UNSUPPORTED_FILE,         "The target file is not supported.")
+    X(UNSUPPORTED_FILE,         "The target file is not supported.")             \
+    X(TRUNCATED,                "The target file was not closed correctly or was truncated.")
 
 /// The macro used to define the error code enum.
 #define JLS_ERROR_ENUM(NAME, TEXT) JLS_ERROR_ ## NAME,

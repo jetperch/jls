@@ -4,6 +4,13 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.7.4
+
+2023 Aug 2 [in progress]
+
+* Added file truncation repair. [in progress]
+
+
 ## 0.7.3
 
 2023 Jul 24

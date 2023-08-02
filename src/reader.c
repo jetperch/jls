@@ -135,6 +135,8 @@ struct jls_rd_s {
     struct chunk_s user_data_head;  // user_data, ignore first
 };
 
+static int32_t truncation_repair(struct jls_rd_s * rd);
+
 static int32_t strings_alloc(struct jls_rd_s * self) {
     struct strings_s * s = malloc(STRING_BUFFER_SIZE_DEFAULT);
     if (!s) {
@@ -561,7 +563,8 @@ static int32_t scan(struct jls_rd_s * self) {
     return 0;
 }
 
-int32_t jls_rd_open(struct jls_rd_s ** instance, const char * path) {
+static int32_t jls_rd_open_inner(struct jls_rd_s ** instance, const char * path, const char * mode) {
+    bool repair = false;
     if (!instance) {
         return JLS_ERROR_PARAMETER_INVALID;
     }
@@ -586,27 +589,44 @@ int32_t jls_rd_open(struct jls_rd_s ** instance, const char * path) {
     self->payload.cur = self->payload.start;
     self->payload.end = self->payload.start;
 
-    int32_t rc = jls_raw_open(&self->raw, path, "r");
-    if (rc) {
+    int32_t rc = jls_raw_open(&self->raw, path, mode);
+    if (rc == 0) {
+        int64_t end_pos = jls_raw_chunk_tell_end(self->raw);
+        if (!end_pos) {
+            JLS_LOGW("not properly closed");
+            // Not properly closed.  Indices & summary may be incomplete.
+            // for most applications, will want to launch file reconstruction tool
+            rc = JLS_ERROR_TRUNCATED;
+        }
+    }
+
+    repair = ((mode[0] == 'a') && (rc == JLS_ERROR_TRUNCATED));
+    if (rc && !repair) {
         jls_rd_close(self);
         return rc;
     }
 
-    if (jls_raw_version(self->raw).s.major < 1) {
-        JLS_LOGE("version < 1.x.x no longer supported");
-        return JLS_ERROR_UNSUPPORTED_FILE;
-    }
-
-    int64_t end_pos = jls_raw_chunk_tell_end(self->raw);
-    if (!end_pos) {
-        JLS_LOGW("not properly closed");
-        // Not properly closed.  Indices & summary may be incomplete.
-        // for most applications, will want to launch file reconstruction tool
-        return JLS_ERROR_MESSAGE_INTEGRITY;
-    }
-
     ROE(scan(self));
+    if (repair) {
+        rc = truncation_repair(self);
+        jls_rd_close(self);
+        return rc;
+    }
     *instance = self;
+    return 0;
+}
+
+int32_t jls_rd_open(struct jls_rd_s ** instance, const char * path) {
+    int32_t rc;
+    rc = jls_rd_open_inner(instance, path, "r");
+    if (rc == JLS_ERROR_TRUNCATED) {
+        JLS_LOGI("attempt to repair truncated file");
+        rc = jls_rd_open_inner(instance, path, "a");
+        if (rc) {
+            return rc;
+        }
+        rc = jls_rd_open_inner(instance, path, "r");
+    }
     return rc;
 }
 
@@ -1448,4 +1468,9 @@ int32_t jls_rd_timestamp_to_sample_id(struct jls_rd_s * self, uint16_t signal_id
                                               int64_t timestamp, int64_t * sample_id) {
     ROE(utc_load(self, signal_id));
     return jls_rd_fsr_timestamp_to_sample_id(self->signals[signal_id].rd_fsr, timestamp, sample_id);
+}
+
+static int32_t truncation_repair(struct jls_rd_s * rd) {
+    JLS_LOGE("truncation_repair not yet implemented");
+    return 0;
 }

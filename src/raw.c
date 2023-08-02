@@ -116,11 +116,6 @@ static int32_t rd_file_header(struct jls_raw_s * self, struct jls_file_header_s 
         JLS_LOGI("old file format: %d < %d", (int) hdr->version.s.major, JLS_FORMAT_VERSION_MAJOR);
     }
     self->version.u32 = hdr->version.u32;
-
-    if (0 == hdr->length) {
-        JLS_LOGW("file header length 0, not closed gracefully");
-    }
-
     return 0;
 }
 
@@ -143,6 +138,10 @@ static int32_t read_verify(struct jls_raw_s * self) {
     self->offset = self->backend.fpos;
     if (!rc) {
         fend_get(self);
+    }
+    if (0 == file_hdr.length) {
+        JLS_LOGW("file header length 0, not closed gracefully");
+        rc = JLS_ERROR_TRUNCATED;
     }
     return rc;
 }
@@ -173,15 +172,17 @@ int32_t jls_raw_open(struct jls_raw_s ** instance, const char * path, const char
             rc = read_verify(self);
             break;
         case 'a':
-            self->write_en = 1;
-            rc = read_verify(self);
-            if (self->version.u32 != JLS_FORMAT_VERSION_U32) {
+            rc = jls_bk_fseek(&self->backend, 0, SEEK_SET);
+            if (0 == rc) {
+                self->write_en = 1;
+                rc = read_verify(self);
+                if (rc == JLS_ERROR_TRUNCATED) {
+                    rc = 0;
+                }
+            }
+            if ((0 == rc) && (self->version.u32 != JLS_FORMAT_VERSION_U32)) {
                 JLS_LOGE("cannot append, different format versions");
                 rc = JLS_ERROR_UNSUPPORTED_FILE;
-            } else if (jls_bk_fseek(&self->backend, 0, SEEK_END)) {
-                rc = JLS_ERROR_IO;
-            } else {
-                self->offset = self->backend.fpos;
             }
             break;
         default:
@@ -298,7 +299,8 @@ int32_t jls_raw_rd_header(struct jls_raw_s * self, struct jls_chunk_header_s * h
         }
         uint32_t crc32 = jls_crc32c_hdr(h);
         if (crc32 != h->crc32) {
-            JLS_LOGE("chunk header crc error: %u != %u", crc32, h->crc32);
+            JLS_LOGE("chunk header fpos=%" PRIi64 " crc error: %u != %u",
+                     self->backend.fpos, crc32, h->crc32);
             invalidate_current_chunk(self);
             return JLS_ERROR_MESSAGE_INTEGRITY;
         }
@@ -442,17 +444,14 @@ int64_t jls_raw_chunk_tell_end(struct jls_raw_s * self) {
     int64_t starting_pos = jls_raw_chunk_tell(self);
     int64_t end_pos = self->backend.fend - sizeof(struct jls_chunk_header_s);
     if (end_pos < (int64_t) sizeof(struct jls_file_header_s)) {
-        return 0;
-    }
-    if (jls_raw_chunk_seek(self, end_pos)) {
+        end_pos = 0;
+    } else if (jls_raw_chunk_seek(self, end_pos)) {
         JLS_LOGW("seek to end failed");
-        return 0;
-    }
-    if (jls_raw_rd_header(self, NULL)) {
+        end_pos = 0;
+    } else if (jls_raw_rd_header(self, NULL)) {
         JLS_LOGW("end chunk not found");
-        return 0;
-    }
-    if (self->hdr.tag != JLS_TAG_END) {
+        end_pos = 0;
+    } else if (self->hdr.tag != JLS_TAG_END) {
         end_pos = 0;
     }
     jls_raw_chunk_seek(self, starting_pos);
