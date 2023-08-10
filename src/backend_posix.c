@@ -29,6 +29,7 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <stdio.h>
 
 
 // https://stackoverflow.com/questions/8883512/pthread-condition-variables-vs-win32-events-linux-vs-windows-ce
