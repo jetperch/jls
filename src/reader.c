@@ -562,7 +562,6 @@ static int32_t scan(struct jls_rd_s * self) {
 }
 
 static int32_t jls_rd_open_inner(struct jls_rd_s ** instance, const char * path, const char * mode) {
-    bool repair = false;
     if (!instance) {
         return JLS_ERROR_PARAMETER_INVALID;
     }

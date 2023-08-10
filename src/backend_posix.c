@@ -172,7 +172,7 @@ int32_t jls_bk_fflush(struct jls_bkf_s * self) {
 }
 
 int32_t jls_bk_truncate(struct jls_bkf_s * self) {
-    int rc = ftruncate(fileno(self->fd, self->fpos));
+    int rc = ftruncate(fileno(self->fd), self->fpos);
     if (rc) {
         JLS_LOGE("truncate fail %d", errno);
         return JLS_ERROR_IO;
