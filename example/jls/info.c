@@ -93,13 +93,15 @@ int on_info(struct app_s * self, int argc, char * argv[]) {
             printf("    signal_type: %s\n", signals[i].signal_type ? "VSR" : "FSR");
             printf("    data_type: 0x08%" PRIx32 "\n", signals[i].data_type);
             printf("    sample_rate: %" PRIu32 "\n", signals[i].sample_rate);
-            printf("    samples_per_data: %" PRIu32 "\n", signals[i].samples_per_data);
-            printf("    sample_decimate_factor: %" PRIu32 "\n", signals[i].sample_decimate_factor);
-            printf("    entries_per_summary: %" PRIu32 "\n", signals[i].entries_per_summary);
-            printf("    summary_decimate_factor: %" PRIu32 "\n", signals[i].summary_decimate_factor);
-            printf("    annotation_decimate_factor: %" PRIu32 "\n", signals[i].annotation_decimate_factor);
-            printf("    utc_decimate_factor: %" PRIu32 "\n", signals[i].utc_decimate_factor);
-            printf("    sample_id_offset: %" PRId64 "\n", signals[i].sample_id_offset);
+            if (verbose) {
+                printf("    samples_per_data: %" PRIu32 "\n", signals[i].samples_per_data);
+                printf("    sample_decimate_factor: %" PRIu32 "\n", signals[i].sample_decimate_factor);
+                printf("    entries_per_summary: %" PRIu32 "\n", signals[i].entries_per_summary);
+                printf("    summary_decimate_factor: %" PRIu32 "\n", signals[i].summary_decimate_factor);
+                printf("    annotation_decimate_factor: %" PRIu32 "\n", signals[i].annotation_decimate_factor);
+                printf("    utc_decimate_factor: %" PRIu32 "\n", signals[i].utc_decimate_factor);
+                printf("    sample_id_offset: %" PRId64 "\n", signals[i].sample_id_offset);
+            }
             printf("    units: %s\n", signals[i].units);
             if (signals[i].signal_type == JLS_SIGNAL_TYPE_FSR) {
                 int64_t length = 0;

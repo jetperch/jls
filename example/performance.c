@@ -377,7 +377,7 @@ static int32_t print(const char * filename, uint32_t level) {
     return 0;
 }
 
-static int usage() {
+static int usage(void) {
     printf("%s", usage_str);
     return 1;
 }

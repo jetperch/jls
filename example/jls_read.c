@@ -59,7 +59,7 @@ static const char usage_str[] =
     }                                       \
 } while (0)
 
-static int usage() {
+static int usage(void) {
     printf("%s", usage_str);
     return 1;
 }

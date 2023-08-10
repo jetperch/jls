@@ -88,7 +88,7 @@ static void test_one_chunk(void **state) {
     remove(filename);
 }
 
-static void construct_n_chunks() {
+static void construct_n_chunks(void) {
     struct jls_raw_s * j = NULL;
     struct jls_chunk_header_s hdr;
     uint32_t payload_prev_length = 0;

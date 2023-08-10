@@ -29,7 +29,6 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <errno.h>
-#include <stdio.h>
 
 
 // https://stackoverflow.com/questions/8883512/pthread-condition-variables-vs-win32-events-linux-vs-windows-ce
@@ -51,7 +50,7 @@ struct jls_twr_s {
     struct jls_bkt_s * bk;  // REQUIRED first entry
 };
 
-static struct event_flag* eventflag_create() {
+static struct event_flag* eventflag_create(void) {
     struct event_flag* ev;
     ev = (struct event_flag*) malloc(sizeof(struct event_flag));
     pthread_mutex_init(&ev->mutex, NULL);
@@ -173,7 +172,7 @@ int32_t jls_bk_fflush(struct jls_bkf_s * self) {
 }
 
 int32_t jls_bk_truncate(struct jls_bkf_s * self) {
-    int rc = ftruncate(fileno(self->fd), self->fpos);
+    int rc = ftruncate(self->fd, self->fpos);
     if (rc) {
         JLS_LOGE("truncate fail %d", errno);
         return JLS_ERROR_IO;
