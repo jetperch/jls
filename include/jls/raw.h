@@ -78,6 +78,14 @@ int32_t jls_raw_close(struct jls_raw_s * self);
 union jls_version_u jls_raw_version(struct jls_raw_s * self);
 
 /**
+ * @brief Get the backend associated with this instance.
+ *
+ * @param self The JLS raw instance.
+ * @return The backend or NULL.
+ */
+struct jls_bkf_s * jls_raw_backend(struct jls_raw_s * self);
+
+/**
  * @brief Write a chunk to the file at the current location and advance on success.
  *
  * @param self The JLS raw instance.
@@ -208,6 +216,15 @@ int32_t jls_raw_item_prev(struct jls_raw_s * self);
  * @see jls_raw_chunk_tell
  */
 int64_t jls_raw_chunk_tell_end(struct jls_raw_s * self);
+
+/**
+ * @brief Truncate the file to remove the active chunk and all following chunks.
+ *
+ * @param self The JLS raw instance.
+ * @return 0 or an error code.
+ * @see jls_raw_chunk_seek
+ */
+int64_t jls_raw_truncate(struct jls_raw_s * self);
 
 /**
  * @brief Convert the JLS tag into a user-meaningful string.

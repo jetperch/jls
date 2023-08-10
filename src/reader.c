@@ -135,8 +135,6 @@ struct jls_rd_s {
     struct chunk_s user_data_head;  // user_data, ignore first
 };
 
-static int32_t truncation_repair(struct jls_rd_s * rd);
-
 static int32_t strings_alloc(struct jls_rd_s * self) {
     struct strings_s * s = malloc(STRING_BUFFER_SIZE_DEFAULT);
     if (!s) {
@@ -600,18 +598,12 @@ static int32_t jls_rd_open_inner(struct jls_rd_s ** instance, const char * path,
         }
     }
 
-    repair = ((mode[0] == 'a') && (rc == JLS_ERROR_TRUNCATED));
-    if (rc && !repair) {
+    if (rc) {
         jls_rd_close(self);
         return rc;
     }
 
     ROE(scan(self));
-    if (repair) {
-        rc = truncation_repair(self);
-        jls_rd_close(self);
-        return rc;
-    }
     *instance = self;
     return 0;
 }
@@ -619,14 +611,6 @@ static int32_t jls_rd_open_inner(struct jls_rd_s ** instance, const char * path,
 int32_t jls_rd_open(struct jls_rd_s ** instance, const char * path) {
     int32_t rc;
     rc = jls_rd_open_inner(instance, path, "r");
-    if (rc == JLS_ERROR_TRUNCATED) {
-        JLS_LOGI("attempt to repair truncated file");
-        rc = jls_rd_open_inner(instance, path, "a");
-        if (rc) {
-            return rc;
-        }
-        rc = jls_rd_open_inner(instance, path, "r");
-    }
     return rc;
 }
 
@@ -1468,9 +1452,4 @@ int32_t jls_rd_timestamp_to_sample_id(struct jls_rd_s * self, uint16_t signal_id
                                               int64_t timestamp, int64_t * sample_id) {
     ROE(utc_load(self, signal_id));
     return jls_rd_fsr_timestamp_to_sample_id(self->signals[signal_id].rd_fsr, timestamp, sample_id);
-}
-
-static int32_t truncation_repair(struct jls_rd_s * rd) {
-    JLS_LOGE("truncation_repair not yet implemented");
-    return 0;
 }

@@ -130,6 +130,14 @@ int32_t jls_bk_fflush(struct jls_bkf_s * self) {
     return _commit(self->fd);
 }
 
+int32_t jls_bk_truncate(struct jls_bkf_s * self) {
+    if (_chsize(self->fd, self->fpos) < 0) {
+        JLS_LOGE("V failed %d", errno);
+        return JLS_ERROR_IO;
+    }
+    return 0;
+}
+
 static DWORD WINAPI task(LPVOID lpParam) {
     struct jls_twr_s * self = (struct jls_twr_s *) lpParam;
     return jls_twr_run(self);

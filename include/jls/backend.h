@@ -60,6 +60,7 @@ int32_t jls_bk_fread(struct jls_bkf_s * self, void * const buffer, unsigned cons
 int32_t jls_bk_fseek(struct jls_bkf_s * self, int64_t offset, int origin);
 int64_t jls_bk_ftell(struct jls_bkf_s * self);
 int32_t jls_bk_fflush(struct jls_bkf_s * self);
+int32_t jls_bk_truncate(struct jls_bkf_s * self);
 
 // forward declaration for "threaded_writer.h"
 struct jls_twr_s;

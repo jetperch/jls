@@ -171,6 +171,15 @@ int32_t jls_bk_fflush(struct jls_bkf_s * self) {
     return fsync(self->fd);
 }
 
+int32_t jls_bk_truncate(struct jls_bkf_s * self) {
+    int rc = ftruncate(fileno(self->fd, self->fpos));
+    if (rc) {
+        JLS_LOGE("truncate fail %d", errno);
+        return JLS_ERROR_IO;
+    }
+    return 0;
+}
+
 static void * task(void * user_data) {
     struct jls_twr_s * self = (struct jls_twr_s *) user_data;
     jls_twr_run(self);
