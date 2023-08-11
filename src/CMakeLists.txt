@@ -16,6 +16,7 @@ include_directories(../include_prv)
 
 set(SOURCES
         bit_shift.c
+        buffer.c
         datatype.c
         crc32c.c
         ec.c

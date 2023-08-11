@@ -20,8 +20,9 @@
 #include "jls/datatype.h"
 #include "jls/ec.h"
 #include "jls/log.h"
-#include "jls/crc32c.h"
+#include "jls/cdef.h"
 #include "jls/rd_fsr.h"
+#include "jls/buffer.h"
 #include "jls/statistics.h"
 #include "jls/bit_shift.h"
 #include "jls/util.h"
@@ -33,67 +34,14 @@
 #include <stdbool.h>
 #include <float.h>
 
-#define PAYLOAD_BUFFER_SIZE_DEFAULT (1 << 25)   // 32 MB
-#define STRING_BUFFER_SIZE_DEFAULT (1 << 23)    // 8 MB
-#define ANNOTATIONS_SIZE_DEFAULT (1 << 20)      // 1 MB
 #define F64_BUF_LENGTH_MIN (1 << 16)
 #define SIGNAL_MASK  (0x0fff)
 #define DECIMATE_PER_DURATION (25)
 
 
-#define ROE(x)  do {                        \
-    int32_t rc__ = (x);                     \
-    if (rc__) {                             \
-        return rc__;                        \
-    }                                       \
-} while (0)
-
-#define RLE(x)  do {                        \
-    int32_t rc__ = (x);                     \
-    if (rc__) {                             \
-        JLS_LOGE("error %d: " #x, rc__);    \
-        return rc__;                        \
-    }                                       \
-} while (0)
-
-#if 0
-struct source_s {
-    struct jls_source_def_s def;
-};
-
-struct signal_s {
-    struct jls_signal_def_s def;
-};
-
-struct jls_rd_s {
-    struct source_s * sources[JLS_SOURCE_COUNT];
-    struct signal_s * signals[JLS_SIGNAL_COUNT];
-    struct jls_chunk_header_s hdr;  // the header for the current chunk
-    uint8_t * chunk_buffer;         // storage for the
-    size_t chunk_buffer_sz;
-    FILE * f;
-};
-#endif
-
-
 struct chunk_s {
     struct jls_chunk_header_s hdr;
     int64_t offset;
-};
-
-struct payload_s {
-    uint8_t * start;
-    uint8_t * cur;
-    uint8_t * end;  // current end
-    size_t length;  // current length
-    size_t alloc_size;
-};
-
-struct strings_s {
-    struct strings_s * next;
-    char * start;
-    char * cur;
-    char * end;
 };
 
 struct f64_buf_s {
@@ -123,9 +71,7 @@ struct jls_rd_s {
     struct signal_s signals[JLS_SIGNAL_COUNT];
 
     struct chunk_s chunk_cur;
-    struct payload_s payload;
-    struct strings_s * strings_tail;
-    struct strings_s * strings_head;
+    struct jls_buf_s * buf;
     struct f64_buf_s * f64_sample_buf;
     struct f64_buf_s * f64_stats_buf;
 
@@ -134,34 +80,6 @@ struct jls_rd_s {
 
     struct chunk_s user_data_head;  // user_data, ignore first
 };
-
-static int32_t strings_alloc(struct jls_rd_s * self) {
-    struct strings_s * s = malloc(STRING_BUFFER_SIZE_DEFAULT);
-    if (!s) {
-        return JLS_ERROR_NOT_ENOUGH_MEMORY;
-    }
-    char * c8 = (char *) s;
-    s->next = NULL;
-    s->start = c8 + sizeof(struct strings_s);
-    s->cur = s->start;
-    s->end = c8 + STRING_BUFFER_SIZE_DEFAULT;
-    if (!self->strings_head) {
-        self->strings_head = s;
-        self->strings_tail = s;
-    } else {
-        self->strings_tail->next = s;
-    }
-    return 0;
-}
-
-static void strings_free(struct jls_rd_s * self) {
-    struct strings_s * s = self->strings_head;
-    while (s) {
-        struct strings_s * n = s->next;
-        free(s);
-        s = n;
-    }
-}
 
 static int32_t f64_buf_alloc(size_t length, struct f64_buf_s ** buf) {
     if (*buf) {
@@ -187,117 +105,16 @@ static int32_t f64_buf_alloc(size_t length, struct f64_buf_s ** buf) {
     return 0;
 }
 
-static int32_t payload_skip(struct jls_rd_s * self, size_t count) {
-    if ((self->payload.cur + count) > self->payload.end) {
-        return JLS_ERROR_EMPTY;
-    }
-    self->payload.cur += count;
-    return 0;
-}
-
-static int32_t payload_parse_u8(struct jls_rd_s * self, uint8_t * value) {
-    if ((self->payload.cur + 1) > self->payload.end) {
-        return JLS_ERROR_EMPTY;
-    }
-    *value = self->payload.cur[0];
-    self->payload.cur += 1;
-    return 0;
-}
-
-static int32_t payload_parse_u16(struct jls_rd_s * self, uint16_t * value) {
-    if ((self->payload.cur + 2) > self->payload.end) {
-        return JLS_ERROR_EMPTY;
-    }
-    *value = ((uint16_t) self->payload.cur[0])
-            | (((uint16_t) self->payload.cur[1]) << 8);
-    self->payload.cur += 2;
-    return 0;
-}
-
-static int32_t payload_parse_u32(struct jls_rd_s * self, uint32_t * value) {
-    if ((self->payload.cur + 4) > self->payload.end) {
-        return JLS_ERROR_EMPTY;
-    }
-    *value = ((uint32_t) self->payload.cur[0])
-             | (((uint32_t) self->payload.cur[1]) << 8)
-             | (((uint32_t) self->payload.cur[2]) << 16)
-             | (((uint32_t) self->payload.cur[3]) << 24);
-    self->payload.cur += 4;
-    return 0;
-}
-
-#if 0
-
-static int32_t payload_parse_u64(struct jls_rd_s * self, uint64_t * value) {
-    if ((self->payload.cur + 8) > self->payload.end) {
-        return JLS_ERROR_EMPTY;
-    }
-    *value = ((uint64_t) self->payload.cur[0])
-             | (((uint64_t) self->payload.cur[1]) << 8)
-             | (((uint64_t) self->payload.cur[2]) << 16)
-             | (((uint64_t) self->payload.cur[3]) << 24)
-             | (((uint64_t) self->payload.cur[4]) << 32)
-             | (((uint64_t) self->payload.cur[5]) << 40)
-             | (((uint64_t) self->payload.cur[6]) << 48)
-             | (((uint64_t) self->payload.cur[7]) << 56);
-    self->payload.cur += 8;
-    return 0;
-}
-
-#endif
-
-static int32_t payload_parse_str(struct jls_rd_s * self, char ** value) {
-    struct strings_s * s = self->strings_tail;
-    char * str = s->cur;
-    char ch;
-    while (self->payload.cur != self->payload.end) {
-        if (s->cur >= s->end) {
-            ROE(strings_alloc(self));
-            // copy over partial.
-            while (str <= s->end) {
-                *self->strings_tail->cur++ = *str++;
-            }
-            s = self->strings_tail;
-            str = s->start;
-        }
-
-        ch = (char) *self->payload.cur++;
-        *s->cur++ = ch;
-        if (ch == 0) {
-            if (*self->payload.cur == 0x1f) {
-                self->payload.cur++;
-            }
-            *value = str;
-            return 0;
-        }
-    }
-
-    *value = NULL;
-    return JLS_ERROR_EMPTY;
-}
-
 static int32_t rd(struct jls_rd_s * self) {
     while (1) {
         self->chunk_cur.offset = jls_raw_chunk_tell(self->raw);
-        int32_t rc = jls_raw_rd(self->raw, &self->chunk_cur.hdr, (uint32_t) self->payload.alloc_size, self->payload.start);
+        int32_t rc = jls_raw_rd(self->raw, &self->chunk_cur.hdr, (uint32_t) self->buf->alloc_size, self->buf->start);
         if (rc == JLS_ERROR_TOO_BIG) {
-            size_t sz_new = self->payload.alloc_size;
-            while (sz_new < self->chunk_cur.hdr.payload_length) {
-                sz_new *= 2;
-            }
-            uint8_t *ptr = realloc(self->payload.start, sz_new);
-            if (!ptr) {
-                return JLS_ERROR_NOT_ENOUGH_MEMORY;
-            }
-            self->payload.start = ptr;
-            self->payload.cur = ptr;
-            self->payload.end = ptr;
-            self->payload.length = 0;
-            self->payload.alloc_size = sz_new;
+            ROE(jls_buf_realloc(self->buf, self->chunk_cur.hdr.payload_length));
         } else if (rc == 0) {
-            self->payload.cur = self->payload.start;
-            self->payload.length = self->chunk_cur.hdr.payload_length;
-            self->payload.end = self->payload.start + self->payload.length;
+            self->buf->cur = self->buf->start;
+            self->buf->length = self->chunk_cur.hdr.payload_length;
+            self->buf->end = self->buf->start + self->buf->length;
             return 0;
         } else {
             return rc;
@@ -315,12 +132,12 @@ static int32_t scan_sources(struct jls_rd_s * self) {
             JLS_LOGW("source_id %d too big - skip", (int) source_id);
         } else {
             struct jls_source_def_s *src = &self->source_def[source_id];
-            ROE(payload_skip(self, 64));
-            ROE(payload_parse_str(self, (char **) &src->name));
-            ROE(payload_parse_str(self, (char **) &src->vendor));
-            ROE(payload_parse_str(self, (char **) &src->model));
-            ROE(payload_parse_str(self, (char **) &src->version));
-            ROE(payload_parse_str(self, (char **) &src->serial_number));
+            ROE(jls_buf_rd_skip(self->buf, 64));
+            ROE(jls_buf_rd_str(self->buf, (char **) &src->name));
+            ROE(jls_buf_rd_str(self->buf, (char **) &src->vendor));
+            ROE(jls_buf_rd_str(self->buf, (char **) &src->model));
+            ROE(jls_buf_rd_str(self->buf, (char **) &src->version));
+            ROE(jls_buf_rd_str(self->buf, (char **) &src->serial_number));
             src->source_id = source_id;  // indicate that this source is valid!
             JLS_LOGD1("Found source %d : %s", (int) source_id, src->name);
         }
@@ -361,20 +178,20 @@ static int32_t handle_signal_def(struct jls_rd_s * self) {
     }
     struct jls_signal_def_s *s = &self->signal_def[signal_id];
     s->signal_id = signal_id;
-    ROE(payload_parse_u16(self, &s->source_id));
-    ROE(payload_parse_u8(self, &s->signal_type));
-    ROE(payload_skip(self, 1));
-    ROE(payload_parse_u32(self, &s->data_type));
-    ROE(payload_parse_u32(self, &s->sample_rate));
-    ROE(payload_parse_u32(self, &s->samples_per_data));
-    ROE(payload_parse_u32(self, &s->sample_decimate_factor));
-    ROE(payload_parse_u32(self, &s->entries_per_summary));
-    ROE(payload_parse_u32(self, &s->summary_decimate_factor));
-    ROE(payload_parse_u32(self, &s->annotation_decimate_factor));
-    ROE(payload_parse_u32(self, &s->utc_decimate_factor));
-    ROE(payload_skip(self, 92));
-    ROE(payload_parse_str(self, (char **) &s->name));
-    ROE(payload_parse_str(self, (char **) &s->units));
+    ROE(jls_buf_rd_u16(self->buf, &s->source_id));
+    ROE(jls_buf_rd_u8(self->buf, &s->signal_type));
+    ROE(jls_buf_rd_skip(self->buf, 1));
+    ROE(jls_buf_rd_u32(self->buf, &s->data_type));
+    ROE(jls_buf_rd_u32(self->buf, &s->sample_rate));
+    ROE(jls_buf_rd_u32(self->buf, &s->samples_per_data));
+    ROE(jls_buf_rd_u32(self->buf, &s->sample_decimate_factor));
+    ROE(jls_buf_rd_u32(self->buf, &s->entries_per_summary));
+    ROE(jls_buf_rd_u32(self->buf, &s->summary_decimate_factor));
+    ROE(jls_buf_rd_u32(self->buf, &s->annotation_decimate_factor));
+    ROE(jls_buf_rd_u32(self->buf, &s->utc_decimate_factor));
+    ROE(jls_buf_rd_skip(self->buf, 92));
+    ROE(jls_buf_rd_str(self->buf, (char **) &s->name));
+    ROE(jls_buf_rd_str(self->buf, (char **) &s->units));
     if (0 == signal_validate(self, signal_id, s)) {  // validate passed
         s->signal_id = signal_id;  // indicate that this signal is valid
         JLS_LOGD1("Found signal %d : %s", (int) signal_id, s->name);
@@ -455,12 +272,12 @@ static int32_t handle_track_head(struct jls_rd_s * self, int64_t pos) {
     self->signals[signal_id].track_head_offsets[track_type] = pos;
     size_t expect_sz = JLS_SUMMARY_LEVEL_COUNT * sizeof(int64_t);
 
-    if (self->payload.length != expect_sz) {
+    if (self->buf->length != expect_sz) {
         JLS_LOGW("cannot parse signal %d head, sz=%zu, expect=%zu",
-                 (int) signal_id, self->payload.length, expect_sz);
+                 (int) signal_id, self->buf->length, expect_sz);
         return JLS_ERROR_PARAMETER_INVALID;
     }
-    memcpy(self->signals[signal_id].track_head_data[track_type], self->payload.start, expect_sz);
+    memcpy(self->signals[signal_id].track_head_data[track_type], self->buf->start, expect_sz);
     return 0;
 }
 
@@ -505,7 +322,7 @@ static int32_t scan_fsr_sample_id(struct jls_rd_s * self) {
             continue;
         }
 
-        struct jls_fsr_data_s * r = (struct jls_fsr_data_s *) self->payload.start;
+        struct jls_fsr_data_s * r = (struct jls_fsr_data_s *) self->buf->start;
         self->signal_def[signal_id].sample_id_offset = r->header.timestamp;
     }
     return 0;
@@ -575,16 +392,11 @@ static int32_t jls_rd_open_inner(struct jls_rd_s ** instance, const char * path,
         self->signal_length[k] = -1;
     }
 
-    self->payload.start = malloc(PAYLOAD_BUFFER_SIZE_DEFAULT);
-    strings_alloc(self);
-
-    if (!self->payload.start || !self->strings_head) {
+    self->buf = jls_buf_alloc();
+    if (!self->buf) {
         jls_rd_close(self);
         return JLS_ERROR_NOT_ENOUGH_MEMORY;
     }
-    self->payload.alloc_size = PAYLOAD_BUFFER_SIZE_DEFAULT;
-    self->payload.cur = self->payload.start;
-    self->payload.end = self->payload.start;
 
     int32_t rc = jls_raw_open(&self->raw, path, mode);
     if (rc == 0) {
@@ -616,11 +428,7 @@ int32_t jls_rd_open(struct jls_rd_s ** instance, const char * path) {
 void jls_rd_close(struct jls_rd_s * self) {
     if (self) {
         jls_raw_close(self->raw);
-        strings_free(self);
-        if (self->payload.start) {
-            free(self->payload.start);
-            self->payload.start = NULL;
-        }
+        jls_buf_free(self->buf);
         if (self->f64_stats_buf) {
             free(self->f64_stats_buf);
             self->f64_stats_buf = NULL;
@@ -713,10 +521,10 @@ static int32_t ts_seek(struct jls_rd_s * self, uint16_t signal_id, uint8_t level
             JLS_LOGW("seek tag mismatch: %d", (int) self->chunk_cur.hdr.tag);
         }
 
-        struct jls_index_s * r = (struct jls_index_s *) self->payload.start;
+        struct jls_index_s * r = (struct jls_index_s *) self->buf->start;
         uint8_t * p_end = (uint8_t *) &r->entries[r->header.entry_count];
 
-        if ((size_t) (p_end - self->payload.start) > self->payload.length) {
+        if ((size_t) (p_end - self->buf->start) > self->buf->length) {
             JLS_LOGE("invalid payload length");
             return JLS_ERROR_PARAMETER_INVALID;
         }
@@ -789,13 +597,13 @@ static int32_t fsr_seek(struct jls_rd_s * self, uint16_t signal_id, uint8_t leve
             JLS_LOGW("seek tag mismatch: %d", (int) self->chunk_cur.hdr.tag);
         }
 
-        struct jls_fsr_index_s * r = (struct jls_fsr_index_s *) self->payload.start;
+        struct jls_fsr_index_s * r = (struct jls_fsr_index_s *) self->buf->start;
         int64_t chunk_timestamp = r->header.timestamp;
         int64_t chunk_entries = r->header.entry_count;
         JLS_LOGD3("timestamp=%" PRIi64 ", entries=%" PRIi64, chunk_timestamp, chunk_entries);
         uint8_t * p_end = (uint8_t *) &r->offsets[r->header.entry_count];
 
-        if ((size_t) (p_end - self->payload.start) > self->payload.length) {
+        if ((size_t) (p_end - self->buf->start) > self->buf->length) {
             JLS_LOGE("invalid payload length");
             return JLS_ERROR_PARAMETER_INVALID;
         }
@@ -846,13 +654,13 @@ int32_t jls_rd_fsr_length(struct jls_rd_s * self, uint16_t signal_id, int64_t * 
         ROE(jls_raw_chunk_seek(self->raw, offset));
         ROE(rd(self));
 
-        r = (struct jls_fsr_index_s *) self->payload.start;
+        r = (struct jls_fsr_index_s *) self->buf->start;
         if (r->header.entry_size_bits != (sizeof(r->offsets[0]) * 8)) {
             JLS_LOGE("invalid FSR index entry size: %d bits", (int) r->header.entry_size_bits);
             return JLS_ERROR_PARAMETER_INVALID;
         }
         size_t sz = sizeof(r->header) + r->header.entry_count * sizeof(r->offsets[0]);
-        if (sz > self->payload.length) {
+        if (sz > self->buf->length) {
             JLS_LOGE("invalid payload length");
             return JLS_ERROR_PARAMETER_INVALID;
         }
@@ -863,7 +671,7 @@ int32_t jls_rd_fsr_length(struct jls_rd_s * self, uint16_t signal_id, int64_t * 
 
     ROE(jls_raw_chunk_seek(self->raw, offset));
     ROE(rd(self));
-    r = (struct jls_fsr_index_s *) self->payload.start;
+    r = (struct jls_fsr_index_s *) self->buf->start;
     self->signal_length[signal_id] = r->header.timestamp + r->header.entry_count
             - self->signal_def[signal_id].sample_id_offset;
     *samples = self->signal_length[signal_id];
@@ -941,7 +749,7 @@ int32_t jls_rd_fsr(struct jls_rd_s * self, uint16_t signal_id, int64_t start_sam
         } else if (rv) {
             return rv;
         }
-        struct jls_fsr_data_s * r = (struct jls_fsr_data_s *) self->payload.start;
+        struct jls_fsr_data_s * r = (struct jls_fsr_data_s *) self->buf->start;
         int64_t chunk_sample_id = r->header.timestamp;
         int64_t chunk_sample_count = r->header.entry_count;
         if (r->header.entry_size_bits != entry_size_bits) {
@@ -1061,8 +869,8 @@ static int32_t fsr_statistics(struct jls_rd_s * self, uint16_t signal_id,
     int64_t pos = jls_raw_chunk_tell(self->raw);
     ROE(rd_stats_chunk(self, signal_id, level));
 
-    struct jls_fsr_f32_summary_s * f32_summary = (struct jls_fsr_f32_summary_s *) self->payload.start;
-    struct jls_fsr_f64_summary_s * f64_summary = (struct jls_fsr_f64_summary_s *) self->payload.start;
+    struct jls_fsr_f32_summary_s * f32_summary = (struct jls_fsr_f32_summary_s *) self->buf->start;
+    struct jls_fsr_f64_summary_s * f64_summary = (struct jls_fsr_f64_summary_s *) self->buf->start;
     int64_t chunk_sample_id = f32_summary->header.timestamp;
     if (f32_summary->header.entry_size_bits == JLS_SUMMARY_FSR_COUNT * sizeof(float) * 8) {
         is_f32 = true;  // 32-bit float summaries
@@ -1101,8 +909,8 @@ static int32_t fsr_statistics(struct jls_rd_s * self, uint16_t signal_id,
             if (self->chunk_cur.hdr.item_next) {
                 ROE(jls_raw_chunk_seek(self->raw, self->chunk_cur.hdr.item_next));
                 ROE(rd_stats_chunk(self, signal_id, level));
-                f32_summary = (struct jls_fsr_f32_summary_s *) self->payload.start;
-                f64_summary = (struct jls_fsr_f64_summary_s *) self->payload.start;
+                f32_summary = (struct jls_fsr_f32_summary_s *) self->buf->start;
+                f64_summary = (struct jls_fsr_f64_summary_s *) self->buf->start;
                 if (f32_summary->header.entry_size_bits == JLS_SUMMARY_FSR_COUNT * sizeof(float) * 8) {
                     is_f32 = true;  // 32-bit float summaries
                 } else if (f32_summary->header.entry_size_bits == JLS_SUMMARY_FSR_COUNT * sizeof(double) * 8) {
@@ -1223,7 +1031,7 @@ int32_t jls_rd_fsr_statistics(struct jls_rd_s * self, uint16_t signal_id,
 
     ROE(fsr_seek(self, signal_id, 0, start_sample_id));
     ROE(rd(self));
-    struct jls_fsr_data_s * s = (struct jls_fsr_data_s *) self->payload.start;
+    struct jls_fsr_data_s * s = (struct jls_fsr_data_s *) self->buf->start;
     int64_t chunk_sample_id = s->header.timestamp;
     if (s->header.entry_size_bits != entry_size_bits) {
         JLS_LOGE("invalid data entry size: %d", (int) s->header.entry_size_bits);
@@ -1256,7 +1064,7 @@ int32_t jls_rd_fsr_statistics(struct jls_rd_s * self, uint16_t signal_id,
             if (self->chunk_cur.hdr.chunk_meta != signal_id) {
                 JLS_LOGW("unexpected chunk meta: %d", (int) self->chunk_cur.hdr.chunk_meta);
             }
-            s = (struct jls_fsr_data_s *) self->payload.start;
+            s = (struct jls_fsr_data_s *) self->buf->start;
             if (s->header.entry_size_bits != entry_size_bits) {
                 JLS_LOGE("invalid data entry size: %d", (int) s->header.entry_size_bits);
                 return JLS_ERROR_PARAMETER_INVALID;
@@ -1329,7 +1137,7 @@ int32_t jls_rd_annotations(struct jls_rd_s * self, uint16_t signal_id, int64_t t
         if (self->chunk_cur.hdr.tag != JLS_TAG_TRACK_ANNOTATION_DATA) {
             return JLS_ERROR_NOT_FOUND;
         }
-        annotation = (struct jls_annotation_s *) self->payload.start;
+        annotation = (struct jls_annotation_s *) self->buf->start;
         annotation->timestamp -= sample_id_offset;
         if (cbk_fn(cbk_user_data, annotation)) {
             return 0;
@@ -1363,7 +1171,7 @@ int32_t jls_rd_user_data(struct jls_rd_s * self, jls_rd_user_data_cbk_fn cbk_fn,
         }
         chunk_meta = self->chunk_cur.hdr.chunk_meta & 0x0fff;
         rv = cbk_fn(cbk_user_data, chunk_meta, storage_type,
-                    self->payload.start, self->chunk_cur.hdr.payload_length);
+                    self->buf->start, self->chunk_cur.hdr.payload_length);
         if (rv) {  // iteration done
             return 0;
         }
@@ -1406,7 +1214,7 @@ JLS_API int32_t jls_rd_utc(struct jls_rd_s * self, uint16_t signal_id, int64_t s
         if (self->chunk_cur.hdr.tag != JLS_TAG_TRACK_UTC_SUMMARY) {
             return JLS_ERROR_NOT_FOUND;
         }
-        utc = (struct jls_utc_summary_s *) self->payload.start;
+        utc = (struct jls_utc_summary_s *) self->buf->start;
         uint32_t idx = 0;
         for (; (idx < utc->header.entry_count) && (sample_id > utc->entries[idx].sample_id); ++idx) {
             // iterate

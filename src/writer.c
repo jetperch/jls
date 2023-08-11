@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2022 Jetperch LLC
+ * Copyright 2021-2023 Jetperch LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,21 +17,18 @@
 #include "jls/writer.h"
 #include "jls/raw.h"
 #include "jls/format.h"
+#include "jls/buffer.h"
 #include "jls/wr_prv.h"
 #include "jls/wr_fsr.h"
 #include "jls/wr_ts.h"
 #include "jls/cdef.h"
 #include "jls/ec.h"
 #include "jls/log.h"
-#include "jls/crc32c.h"
 #include "jls/util.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <inttypes.h>
-
-
-#define BUFFER_SIZE (1 << 20)
 
 
 struct chunk_s {
@@ -64,16 +61,9 @@ struct signal_info_s {
     struct jls_wr_fsr_s * signal_writer;
 };
 
-struct buf_s {
-    uint8_t * cur;
-    uint8_t * start;
-    uint8_t * end;
-};
-
 struct jls_wr_s {
     struct jls_raw_s * raw;
-    uint8_t buffer[BUFFER_SIZE];
-    struct buf_s buf;
+    struct jls_buf_s * buf;
 
     struct chunk_s source_info[JLS_SOURCE_COUNT];
     struct chunk_s source_mra;  // most recently added
@@ -116,6 +106,12 @@ int32_t jls_wr_open(struct jls_wr_s ** instance, const char * path) {
 
     struct jls_wr_s * self = calloc(1, sizeof(struct jls_wr_s));
     if (!self) {
+        return JLS_ERROR_NOT_ENOUGH_MEMORY;
+    }
+
+    self->buf = jls_buf_alloc();
+    if (!self->buf) {
+        free(self);
         return JLS_ERROR_NOT_ENOUGH_MEMORY;
     }
 
@@ -176,6 +172,10 @@ int32_t jls_wr_close(struct jls_wr_s * self) {
         }
         wr_end(self);
         int32_t rc = jls_raw_close(self->raw);
+        if (self->buf) {
+            jls_buf_free(self->buf);
+            self->buf = NULL;
+        }
         free(self);
         return rc;
     }
@@ -184,116 +184,6 @@ int32_t jls_wr_close(struct jls_wr_s * self) {
 
 JLS_API int32_t jls_wr_flush(struct jls_wr_s * self) {
     return jls_raw_flush(self->raw);
-}
-
-static void buf_reset(struct jls_wr_s * self) {
-    self->buf.start = self->buffer;
-    self->buf.cur = self->buffer;
-    self->buf.end = self->buffer + BUFFER_SIZE;
-}
-
-static int32_t buf_add_zero(struct jls_wr_s * self, uint32_t count) {
-    struct buf_s * buf = &self->buf;
-    if ((buf->cur + count) > buf->end) {
-        JLS_LOGE("buffer to small");
-        return JLS_ERROR_NOT_ENOUGH_MEMORY;
-    }
-    for (uint32_t i = 0; i < count; ++i) {
-        *buf->cur++ = 0;
-    }
-    return 0;
-}
-
-static int32_t buf_add_str(struct jls_wr_s * self, const char * cstr) {
-    // Strings end with {0, 0x1f} = {null, unit separator}
-    struct buf_s * buf = &self->buf;
-    uint8_t * end = buf->end - 2;
-    while (buf->cur < end) {
-        if (cstr && *cstr) {
-            *buf->cur++ = *cstr++;
-        } else {
-            *buf->cur++ = 0;
-            *buf->cur++ = 0x1f;
-            return 0;
-        }
-    }
-    JLS_LOGE("buffer to small");
-    return JLS_ERROR_NOT_ENOUGH_MEMORY;
-}
-
-static int32_t buf_add_bin(struct jls_wr_s * self, const uint8_t * data, uint32_t data_size) {
-    struct buf_s * buf = &self->buf;
-    if ((buf->cur + data_size) > buf->end) {
-        JLS_LOGE("buffer to small");
-        return JLS_ERROR_NOT_ENOUGH_MEMORY;
-    }
-    memcpy(buf->cur, data, data_size);
-    buf->cur += data_size;
-    return 0;
-}
-
-static uint32_t buf_size(struct jls_wr_s * self) {
-    return (uint32_t) (self->buf.cur - self->buf.start);
-}
-
-static int32_t buf_wr_u8(struct jls_wr_s * self, uint8_t value) {
-    struct buf_s * buf = &self->buf;
-    if ((buf->cur + 1) > buf->end) {
-        return JLS_ERROR_NOT_ENOUGH_MEMORY;
-    }
-    *buf->cur++ = value;
-    return 0;
-}
-
-static int32_t buf_wr_u16(struct jls_wr_s * self, uint16_t value) {
-    struct buf_s * buf = &self->buf;
-    if ((buf->cur + 2) > buf->end) {
-        return JLS_ERROR_NOT_ENOUGH_MEMORY;
-    }
-    *buf->cur++ = (uint8_t) (value & 0xff);
-    *buf->cur++ = (uint8_t) ((value >> 8) & 0xff);
-    return 0;
-}
-
-static int32_t buf_wr_u32(struct jls_wr_s * self, uint32_t value) {
-    struct buf_s * buf = &self->buf;
-    if ((buf->cur + 4) > buf->end) {
-        return JLS_ERROR_NOT_ENOUGH_MEMORY;
-    }
-    *buf->cur++ = (uint8_t) (value & 0xff);
-    *buf->cur++ = (uint8_t) ((value >> 8) & 0xff);
-    *buf->cur++ = (uint8_t) ((value >> 16) & 0xff);
-    *buf->cur++ = (uint8_t) ((value >> 24) & 0xff);
-    return 0;
-}
-
-static int32_t buf_wr_f32(struct jls_wr_s * self, float value) {
-    struct buf_s * buf = &self->buf;
-    uint8_t * p = (uint8_t *) &value;
-    if ((buf->cur + 4) > buf->end) {
-        return JLS_ERROR_NOT_ENOUGH_MEMORY;
-    }
-    *buf->cur++ = *p++;
-    *buf->cur++ = *p++;
-    *buf->cur++ = *p++;
-    *buf->cur++ = *p++;
-    return 0;
-}
-
-static int32_t buf_wr_i64(struct jls_wr_s * self, int64_t value) {
-    struct buf_s * buf = &self->buf;
-    if ((buf->cur + 8) > buf->end) {
-        return JLS_ERROR_NOT_ENOUGH_MEMORY;
-    }
-    *buf->cur++ = (uint8_t) (value & 0xff);
-    *buf->cur++ = (uint8_t) ((value >> 8) & 0xff);
-    *buf->cur++ = (uint8_t) ((value >> 16) & 0xff);
-    *buf->cur++ = (uint8_t) ((value >> 24) & 0xff);
-    *buf->cur++ = (uint8_t) ((value >> 32) & 0xff);
-    *buf->cur++ = (uint8_t) ((value >> 40) & 0xff);
-    *buf->cur++ = (uint8_t) ((value >> 48) & 0xff);
-    *buf->cur++ = (uint8_t) ((value >> 56) & 0xff);
-    return 0;
 }
 
 static int32_t update_mra(struct jls_wr_s * self, struct chunk_s * mra, struct chunk_s * update) {
@@ -321,14 +211,14 @@ int32_t jls_wr_source_def(struct jls_wr_s * self, const struct jls_source_def_s 
     }
 
     // construct payload
-    buf_reset(self);
-    buf_add_zero(self, 64);  // reserve space for future use.
-    ROE(buf_add_str(self, source->name));
-    ROE(buf_add_str(self, source->vendor));
-    ROE(buf_add_str(self, source->model));
-    ROE(buf_add_str(self, source->version));
-    ROE(buf_add_str(self, source->serial_number));
-    uint32_t payload_length = buf_size(self);
+    jls_buf_reset(self->buf);
+    jls_buf_wr_zero(self->buf, 64);  // reserve space for future use.
+    ROE(jls_buf_wr_str(self->buf, source->name));
+    ROE(jls_buf_wr_str(self->buf, source->vendor));
+    ROE(jls_buf_wr_str(self->buf, source->model));
+    ROE(jls_buf_wr_str(self->buf, source->version));
+    ROE(jls_buf_wr_str(self->buf, source->serial_number));
+    uint32_t payload_length = (uint32_t) jls_buf_length(self->buf);
 
     // construct header
     struct chunk_s * chunk = &self->source_info[source->source_id];
@@ -342,7 +232,7 @@ int32_t jls_wr_source_def(struct jls_wr_s * self, const struct jls_source_def_s 
     chunk->offset = jls_raw_chunk_tell(self->raw);
 
     // write
-    ROE(jls_raw_wr(self->raw, &chunk->hdr, self->buffer));
+    ROE(jls_raw_wr(self->raw, &chunk->hdr, self->buf->start));
     self->payload_prev_length = payload_length;
     return update_mra(self, &self->source_mra, chunk);
 }
@@ -449,22 +339,22 @@ int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signal_def_s 
     }
 
     // construct payload
-    buf_reset(self);
-    ROE(buf_wr_u16(self, def->source_id));
-    ROE(buf_wr_u8(self, def->signal_type));
-    ROE(buf_wr_u8(self, 0));  // reserved
-    ROE(buf_wr_u32(self, def->data_type));
-    ROE(buf_wr_u32(self, def->sample_rate));
-    ROE(buf_wr_u32(self, def->samples_per_data));
-    ROE(buf_wr_u32(self, def->sample_decimate_factor));
-    ROE(buf_wr_u32(self, def->entries_per_summary));
-    ROE(buf_wr_u32(self, def->summary_decimate_factor));
-    ROE(buf_wr_u32(self, def->annotation_decimate_factor));
-    ROE(buf_wr_u32(self, def->utc_decimate_factor));
-    ROE(buf_add_zero(self, 92));  // reserve space for future use.
-    ROE(buf_add_str(self, def->name));
-    ROE(buf_add_str(self, def->units));
-    uint32_t payload_length = buf_size(self);
+    jls_buf_reset(self->buf);
+    ROE(jls_buf_wr_u16(self->buf, def->source_id));
+    ROE(jls_buf_wr_u8(self->buf, def->signal_type));
+    ROE(jls_buf_wr_u8(self->buf, 0));  // reserved
+    ROE(jls_buf_wr_u32(self->buf, def->data_type));
+    ROE(jls_buf_wr_u32(self->buf, def->sample_rate));
+    ROE(jls_buf_wr_u32(self->buf, def->samples_per_data));
+    ROE(jls_buf_wr_u32(self->buf, def->sample_decimate_factor));
+    ROE(jls_buf_wr_u32(self->buf, def->entries_per_summary));
+    ROE(jls_buf_wr_u32(self->buf, def->summary_decimate_factor));
+    ROE(jls_buf_wr_u32(self->buf, def->annotation_decimate_factor));
+    ROE(jls_buf_wr_u32(self->buf, def->utc_decimate_factor));
+    ROE(jls_buf_wr_zero(self->buf, 92));  // reserve space for future use.
+    ROE(jls_buf_wr_str(self->buf, def->name));
+    ROE(jls_buf_wr_str(self->buf, def->units));
+    uint32_t payload_length = (uint32_t) jls_buf_length(self->buf);
 
     // construct header
     struct chunk_s * chunk = &info->chunk_def;
@@ -478,7 +368,7 @@ int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signal_def_s 
     chunk->offset = jls_raw_chunk_tell(self->raw);
 
     // write
-    ROE(jls_raw_wr(self->raw, &chunk->hdr, self->buffer));
+    ROE(jls_raw_wr(self->raw, &chunk->hdr, self->buf->start));
     self->payload_prev_length = payload_length;
     ROE(update_mra(self, &self->signal_mra, chunk));
 
@@ -708,33 +598,33 @@ int32_t jls_wr_annotation(struct jls_wr_s * self, uint16_t signal_id, int64_t ti
     }
 
     // construct payload
-    buf_reset(self);
-    ROE(buf_wr_i64(self, timestamp));
-    ROE(buf_wr_u32(self, 1));  // number of entries
-    ROE(buf_wr_u16(self, 0));  // unspecified entry length
-    ROE(buf_wr_u16(self, 0));  // reserved
-    ROE(buf_wr_u8(self, annotation_type));
-    ROE(buf_wr_u8(self, storage_type));
-    ROE(buf_wr_u8(self, group_id));
-    ROE(buf_wr_u8(self, 0));    // reserved
-    ROE(buf_wr_f32(self, y));
+    jls_buf_reset(self->buf);
+    ROE(jls_buf_wr_i64(self->buf, timestamp));
+    ROE(jls_buf_wr_u32(self->buf, 1));  // number of entries
+    ROE(jls_buf_wr_u16(self->buf, 0));  // unspecified entry length
+    ROE(jls_buf_wr_u16(self->buf, 0));  // reserved
+    ROE(jls_buf_wr_u8(self->buf, annotation_type));
+    ROE(jls_buf_wr_u8(self->buf, storage_type));
+    ROE(jls_buf_wr_u8(self->buf, group_id));
+    ROE(jls_buf_wr_u8(self->buf, 0));    // reserved
+    ROE(jls_buf_wr_f32(self->buf, y));
     switch (storage_type) {
         case JLS_STORAGE_TYPE_BINARY:
-            ROE(buf_wr_u32(self, data_size));
-            ROE(buf_add_bin(self, data, data_size));
+            ROE(jls_buf_wr_u32(self->buf, data_size));
+            ROE(jls_buf_wr_bin(self->buf, data, data_size));
             break;
         case JLS_STORAGE_TYPE_STRING:
-            ROE(buf_wr_u32(self, (uint32_t) (strlen((const char *) data) + 1)));
-            ROE(buf_add_str(self, (const char *) data));
+            ROE(jls_buf_wr_u32(self->buf, (uint32_t) (strlen((const char *) data) + 1)));
+            ROE(jls_buf_wr_str(self->buf, (const char *) data));
             break;
         case JLS_STORAGE_TYPE_JSON:
-            ROE(buf_wr_u32(self, (uint32_t) (strlen((const char *) data) + 1)));
-            ROE(buf_add_str(self, (const char *) data));
+            ROE(jls_buf_wr_u32(self->buf, (uint32_t) (strlen((const char *) data) + 1)));
+            ROE(jls_buf_wr_str(self->buf, (const char *) data));
             break;
         default:
             return JLS_ERROR_PARAMETER_INVALID;
     }
-    uint32_t payload_length = buf_size(self);
+    uint32_t payload_length = (uint32_t) jls_buf_length(self->buf);
 
     // construct header
     struct chunk_s chunk;
@@ -749,7 +639,7 @@ int32_t jls_wr_annotation(struct jls_wr_s * self, uint16_t signal_id, int64_t ti
     chunk.offset = offset;
 
     // write
-    ROE(jls_raw_wr(self->raw, &chunk.hdr, self->buf.start));
+    ROE(jls_raw_wr(self->raw, &chunk.hdr, self->buf->start));
     self->payload_prev_length = payload_length;
     ROE(update_mra(self, &signal_info->tracks[JLS_TRACK_TYPE_ANNOTATION].data, &chunk));
     ROE(update_track(self, track, 0, offset));
