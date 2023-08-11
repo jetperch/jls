@@ -133,11 +133,11 @@ static int32_t scan_sources(struct jls_rd_s * self) {
         } else {
             struct jls_source_def_s *src = &self->source_def[source_id];
             ROE(jls_buf_rd_skip(self->buf, 64));
-            ROE(jls_buf_rd_str(self->buf, (char **) &src->name));
-            ROE(jls_buf_rd_str(self->buf, (char **) &src->vendor));
-            ROE(jls_buf_rd_str(self->buf, (char **) &src->model));
-            ROE(jls_buf_rd_str(self->buf, (char **) &src->version));
-            ROE(jls_buf_rd_str(self->buf, (char **) &src->serial_number));
+            ROE(jls_buf_rd_str(self->buf, (const char **) &src->name));
+            ROE(jls_buf_rd_str(self->buf, (const char **) &src->vendor));
+            ROE(jls_buf_rd_str(self->buf, (const char **) &src->model));
+            ROE(jls_buf_rd_str(self->buf, (const char **) &src->version));
+            ROE(jls_buf_rd_str(self->buf, (const char **) &src->serial_number));
             src->source_id = source_id;  // indicate that this source is valid!
             JLS_LOGD1("Found source %d : %s", (int) source_id, src->name);
         }
@@ -190,8 +190,8 @@ static int32_t handle_signal_def(struct jls_rd_s * self) {
     ROE(jls_buf_rd_u32(self->buf, &s->annotation_decimate_factor));
     ROE(jls_buf_rd_u32(self->buf, &s->utc_decimate_factor));
     ROE(jls_buf_rd_skip(self->buf, 92));
-    ROE(jls_buf_rd_str(self->buf, (char **) &s->name));
-    ROE(jls_buf_rd_str(self->buf, (char **) &s->units));
+    ROE(jls_buf_rd_str(self->buf, (const char **) &s->name));
+    ROE(jls_buf_rd_str(self->buf, (const char **) &s->units));
     if (0 == signal_validate(self, signal_id, s)) {  // validate passed
         s->signal_id = signal_id;  // indicate that this signal is valid
         JLS_LOGD1("Found signal %d : %s", (int) signal_id, s->name);
