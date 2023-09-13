@@ -455,6 +455,14 @@ cdef class Writer:
             rc = c_jls.jls_twr_fsr(wr, signal_id_u16, sample_id_i64, &u8[0], length)
         _handle_rc('fsr', rc)
 
+    def fsr_omit_data(self, signal_id, enable):
+        cdef c_jls.jls_twr_s * wr = self._wr
+        cdef uint16_t signal_id_u16 = signal_id
+        cdef uint32_t enable_u32 = 0 if bool(enable) else 1
+        cdef int32_t rc
+        rc = c_jls.jls_twr_fsr_omit_data(wr, signal_id_u16, enable_u32)
+        _handle_rc('fsr_omit_data', rc)
+
     def annotation(self, signal_id, timestamp, y, annotation_type, group_id, data):
         """Add an annotation to a signal.
 

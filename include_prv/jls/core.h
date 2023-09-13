@@ -77,6 +77,7 @@ struct jls_core_fsr_s {
     struct jls_fsr_data_s * data;  // for level 0 sample data
     double * data_f64;             // for level 0 sample data summarization statistics computation
     int64_t sample_id_offset;
+    uint8_t write_omit_data;      // omit level 0 sample data. >1=enabled, else disabled
     uint8_t shift_amount;
     uint8_t shift_buffer;
     uint64_t buffer_u64[4096];     // for shifting incoming sample data on skips & duplicates

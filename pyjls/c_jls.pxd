@@ -112,6 +112,7 @@ cdef extern from "jls/threaded_writer.h":
             jls_storage_type_e storage_type, const uint8_t * data, uint32_t data_size) nogil
     int32_t jls_twr_fsr(jls_twr_s * self, uint16_t signal_id,
             int64_t sample_id, const void * data, uint32_t data_length) nogil
+    int32_t jls_twr_fsr_omit_data(jls_twr_s * self, uint16_t signal_id, uint32_t enable)
     int32_t jls_twr_annotation(jls_twr_s * self, uint16_t signal_id,
             int64_t timestamp,
             float y,

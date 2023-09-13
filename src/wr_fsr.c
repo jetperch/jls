@@ -145,11 +145,16 @@ static int32_t wr_data(struct jls_core_fsr_s * self) {
             + (self->data->header.entry_count * sample_size_bits(self) + 7) / 8;
     uint8_t * p_start = (uint8_t *) self->data;
     int64_t pos = jls_raw_chunk_tell(self->parent->parent->raw);
-    ROE(jls_core_wr_data(self->parent->parent, self->parent->signal_def.signal_id, JLS_TRACK_TYPE_FSR, p_start,
-                         payload_length));
+    if (self->write_omit_data > 1) {
+        pos = 0;
+    } else {
+        ROE(jls_core_wr_data(self->parent->parent, self->parent->signal_def.signal_id, JLS_TRACK_TYPE_FSR, p_start,
+                             payload_length));
+    }
     ROE(jls_core_fsr_summary1(self, pos));
     self->data->header.timestamp += self->parent->signal_def.samples_per_data;
     self->data->header.entry_count = 0;
+    self->write_omit_data = (self->write_omit_data << 1) | (self->write_omit_data & 1);
     return 0;
 }
 

@@ -121,7 +121,7 @@ int32_t jls_wr_close(struct jls_wr_s * self) {
     return 0;
 }
 
-JLS_API int32_t jls_wr_flush(struct jls_wr_s * self) {
+int32_t jls_wr_flush(struct jls_wr_s * self) {
     return jls_raw_flush(self->core.raw);
 }
 
@@ -331,7 +331,7 @@ int32_t jls_wr_user_data(struct jls_wr_s * self, uint16_t chunk_meta,
     return jls_core_update_item_head(&self->core, &self->core.user_data_head, &chunk);
 }
 
-JLS_API int32_t jls_wr_fsr(struct jls_wr_s * self, uint16_t signal_id,
+int32_t jls_wr_fsr(struct jls_wr_s * self, uint16_t signal_id,
                            int64_t sample_id, const void * data, uint32_t data_length) {
     ROE(jls_core_signal_validate(&self->core, signal_id));
     struct jls_core_signal_s * info = &self->core.signal_info[signal_id];
@@ -346,6 +346,17 @@ int32_t jls_wr_fsr_f32(struct jls_wr_s * self, uint16_t signal_id,
         return JLS_ERROR_PARAMETER_INVALID;
     }
     return jls_wr_fsr_data(info->track_fsr, sample_id, data, data_length);
+}
+
+int32_t jls_wr_fsr_omit_data(struct jls_wr_s * self, uint16_t signal_id, uint32_t enable) {
+    ROE(jls_core_signal_validate(&self->core, signal_id));
+    struct jls_core_signal_s * info = &self->core.signal_info[signal_id];
+    if (enable) {
+        info->track_fsr->write_omit_data |= 1;
+    } else {
+        info->track_fsr->write_omit_data = 0;
+    }
+    return 0;
 }
 
 int32_t jls_wr_annotation(struct jls_wr_s * self, uint16_t signal_id, int64_t timestamp,

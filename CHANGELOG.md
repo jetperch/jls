@@ -13,6 +13,7 @@ This file contains the list of changes made to the JLS project.
 * Refactored reader and writer into new core to enable repairer.
 * Added jls_twr_flags_get/set.
 * Added JLS_TWR_FLAG_DROP_ON_OVERFLOW which drops samples on overflow.
+* Added jls_wr_fsr_omit_data and jls_twr_fsr_omit_data.
 
 
 ## 0.7.3

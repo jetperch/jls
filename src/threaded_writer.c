@@ -54,6 +54,11 @@ struct msg_header_fsr_s {
     uint32_t sample_count;
 };
 
+struct msg_header_fsr_omit_s {
+    uint16_t signal_id;
+    int32_t enable;
+};
+
 struct msg_header_annotation_s {
     uint16_t signal_id;
     int64_t timestamp;
@@ -74,6 +79,7 @@ struct msg_header_s {
     union {
         struct msg_header_user_data_s user_data;
         struct msg_header_fsr_s fsr;
+        struct msg_header_fsr_omit_s fsr_omit;
         struct msg_header_annotation_s annotation;
         struct msg_header_utc_s utc;
     } h;
@@ -85,6 +91,7 @@ enum message_e {
     MSG_FLUSH,          // no header data, no args
     MSG_USER_DATA,      // hdr.user_data, user_data
     MSG_FSR,            // hdr.fsr_f32, data
+    MSG_FSR_OMIT,       // hdr.fsr_omit, no args
     MSG_ANNOTATION,     // hdr.annotation, data
     MSG_UTC,            // hdr.utc, data
     MSG_ITEM_COUNT,
@@ -155,6 +162,9 @@ int32_t jls_twr_run(struct jls_twr_s * self) {
                     break;
                 case MSG_FSR:
                     rc = jls_wr_fsr(self->wr, hdr.h.fsr.signal_id, hdr.h.fsr.sample_id, payload, hdr.h.fsr.sample_count);
+                    break;
+                case MSG_FSR_OMIT:
+                    rc = jls_wr_fsr_omit_data(self->wr, hdr.h.fsr_omit.signal_id, hdr.h.fsr_omit.enable);
                     break;
                 case MSG_ANNOTATION:
                     rc = jls_wr_annotation(self->wr, hdr.h.annotation.signal_id, hdr.h.annotation.timestamp,
@@ -357,6 +367,20 @@ int32_t jls_twr_fsr(struct jls_twr_s * self, uint16_t signal_id,
 int32_t jls_twr_fsr_f32(struct jls_twr_s * self, uint16_t signal_id,
                         int64_t sample_id, const float * data, uint32_t data_length) {
     return jls_twr_fsr(self, signal_id, sample_id, data, data_length);
+}
+
+int32_t jls_twr_fsr_omit_data(struct jls_twr_s * self, uint16_t signal_id, uint32_t enable) {
+    struct msg_header_s hdr = {
+            .msg_type = MSG_FSR_OMIT,
+            .h = {
+                    .fsr_omit = {
+                            .signal_id = signal_id,
+                            .enable = enable,
+                    }
+            },
+            .d = 0
+    };
+    return msg_send(self, &hdr, NULL, 0);
 }
 
 int32_t jls_twr_annotation(struct jls_twr_s * self, uint16_t signal_id, int64_t timestamp,

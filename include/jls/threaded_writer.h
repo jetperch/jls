@@ -162,6 +162,21 @@ JLS_API int32_t jls_twr_fsr_f32(struct jls_twr_s * self, uint16_t signal_id,
         int64_t sample_id, const float * data, uint32_t data_length);
 
 /**
+ * @brief Omit level 0 data chunks from the signal's stream.
+ *
+ * @param self The JLS writer instance
+ * @param signal_id The signal id.
+ * @param enable 0 to disable (default), 1 to enable.
+ * @return 0 or error code.
+ *
+ * Enable is delayed by one sample block to ensure any pending
+ * data is writen.  Disable takes effect immediately.
+ *
+ * On read, the level 0 data is reconstructed using the summaries.
+ */
+JLS_API int32_t jls_twr_fsr_omit_data(struct jls_twr_s * self, uint16_t signal_id, uint32_t enable);
+
+/**
  * @brief Add an annotation to a signal.
  *
  * @param self The writer instance.
