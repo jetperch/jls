@@ -177,6 +177,9 @@ int32_t jls_bk_truncate(struct jls_bkf_s * self) {
         JLS_LOGE("truncate fail %d", errno);
         return JLS_ERROR_IO;
     }
+    if (self->fend > self->fpos) {
+        self->fend = self->fpos;
+    }
     return 0;
 }
 

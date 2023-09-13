@@ -35,7 +35,7 @@ extern "C" {
 
 /**
  * @ingroup jls
- * @defgroup jls_rd_fsr FSR sample_id & JLS timestamp conversions.
+ * @defgroup jls_tmap Time mapping for FSR sample_id & JLS timestamp conversions.
  *
  * @brief Convert between sample_id and JLS timestamps for the
  *      JLS reader for FSR signals with UTC channels.
@@ -45,15 +45,15 @@ extern "C" {
 
 
 /// The opaque instance.
-struct jls_rd_fsr_s;
+struct jls_tmap_s;
 
-struct jls_rd_fsr_s * jls_rd_fsr_alloc(double sample_rate);
-void jls_rd_fsr_free(struct jls_rd_fsr_s * self);
+struct jls_tmap_s * jls_tmap_alloc(double sample_rate);
+void jls_tmap_free(struct jls_tmap_s * self);
 
-int32_t jls_rd_fsr_add_cbk(void * user_data, const struct jls_utc_summary_entry_s * utc, uint32_t size);
-int32_t jls_rd_fsr_add(struct jls_rd_fsr_s * self, int64_t sample_id, int64_t timestamp);
-int32_t jls_rd_fsr_sample_id_to_timestamp(struct jls_rd_fsr_s * self, int64_t sample_id, int64_t * timestamp);
-int32_t jls_rd_fsr_timestamp_to_sample_id(struct jls_rd_fsr_s * self, int64_t timestamp, int64_t * sample_id);
+int32_t jls_tmap_add_cbk(void * user_data, const struct jls_utc_summary_entry_s * utc, uint32_t size);
+int32_t jls_tmap_add(struct jls_tmap_s * self, int64_t sample_id, int64_t timestamp);
+int32_t jls_tmap_sample_id_to_timestamp(struct jls_tmap_s * self, int64_t sample_id, int64_t * timestamp);
+int32_t jls_tmap_timestamp_to_sample_id(struct jls_tmap_s * self, int64_t timestamp, int64_t * sample_id);
 
 
 /** @} */

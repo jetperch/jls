@@ -102,7 +102,7 @@ int32_t jls_bk_fread(struct jls_bkf_s * self, void * const buffer, unsigned cons
     }
     self->fpos += sz;
     if ((unsigned int) sz != buffer_size) {
-        JLS_LOGE("write mismatch %d != %d", sz, buffer_size);
+        JLS_LOGE("read length mismatch: read %d, expected %d", sz, buffer_size);
         return JLS_ERROR_IO;
     }
     return 0;
@@ -131,9 +131,12 @@ int32_t jls_bk_fflush(struct jls_bkf_s * self) {
 }
 
 int32_t jls_bk_truncate(struct jls_bkf_s * self) {
-    if (_chsize(self->fd, self->fpos) < 0) {
+    if (_chsize_s(self->fd, self->fpos) < 0) {
         JLS_LOGE("V failed %d", errno);
         return JLS_ERROR_IO;
+    }
+    if (self->fend > self->fpos) {
+        self->fend = self->fpos;
     }
     return 0;
 }

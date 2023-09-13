@@ -51,6 +51,7 @@ struct jls_raw_s {
     struct jls_bkf_s backend;
     struct jls_chunk_header_s hdr;  // the current chunk header.
     int64_t offset;                 // the offset for the current chunk
+    uint32_t last_payload_length;   // the payload length for the last chunk in the file.
     uint8_t write_en;
     union jls_version_u version;
 };
@@ -230,6 +231,9 @@ int32_t jls_raw_wr(struct jls_raw_s * self, struct jls_chunk_header_s * hdr, con
 }
 
 int32_t jls_raw_wr_header(struct jls_raw_s * self, struct jls_chunk_header_s * hdr) {
+    if (self->backend.fpos >= self->backend.fend) {
+        hdr->payload_prev_length = self->last_payload_length;
+    }
     hdr->crc32 = jls_crc32c_hdr(hdr);
     if (self->offset != self->backend.fpos) {
         invalidate_current_chunk(self);
@@ -269,7 +273,11 @@ int32_t jls_raw_wr_payload(struct jls_raw_s * self, uint32_t payload_length, con
     footer[pad + 3] = (crc32 >> 24) & 0xff;
 
     RLE(jls_bk_fwrite(&self->backend, payload, hdr->payload_length));
-    return jls_bk_fwrite(&self->backend, footer, pad + 4);
+    RLE(jls_bk_fwrite(&self->backend, footer, pad + 4));
+    if (self->backend.fpos >= self->backend.fend) {
+        self->last_payload_length = payload_length;
+    }
+    return 0;
 }
 
 int32_t jls_raw_rd(struct jls_raw_s * self, struct jls_chunk_header_s * hdr, uint32_t payload_length_max, uint8_t * payload) {
@@ -306,7 +314,7 @@ int32_t jls_raw_rd_header(struct jls_raw_s * self, struct jls_chunk_header_s * h
         }
         uint32_t crc32 = jls_crc32c_hdr(h);
         if (crc32 != h->crc32) {
-            JLS_LOGE("chunk header fpos=%" PRIi64 " crc error: %u != %u",
+            JLS_LOGW("chunk header fpos=%" PRIi64 " crc error: %u != %u",
                      self->backend.fpos, crc32, h->crc32);
             invalidate_current_chunk(self);
             return JLS_ERROR_MESSAGE_INTEGRITY;
@@ -361,6 +369,15 @@ int32_t jls_raw_chunk_seek(struct jls_raw_s * self, int64_t offset) {
         return JLS_ERROR_IO;
     }
     if (jls_bk_fseek(&self->backend, offset, SEEK_SET)) {
+        return JLS_ERROR_IO;
+    }
+    self->offset = self->backend.fpos;
+    return 0;
+}
+
+int32_t jls_raw_seek_end(struct jls_raw_s * self) {
+    invalidate_current_chunk(self);
+    if (jls_bk_fseek(&self->backend, 0, SEEK_END)) {
         return JLS_ERROR_IO;
     }
     self->offset = self->backend.fpos;
@@ -461,12 +478,11 @@ int64_t jls_raw_chunk_tell_end(struct jls_raw_s * self) {
     } else if (self->hdr.tag != JLS_TAG_END) {
         end_pos = 0;
     }
-    jls_raw_chunk_seek(self, starting_pos);
+    if (jls_raw_chunk_seek(self, starting_pos)) {
+        JLS_LOGW("seek to starting_pos failed");
+        end_pos = 0;
+    }
     return end_pos;
-}
-
-int64_t jls_raw_truncate(struct jls_raw_s * self) {
-    return jls_bk_truncate(&self->backend);
 }
 
 const char * jls_tag_to_name(uint8_t tag) {

@@ -100,6 +100,10 @@ int32_t jls_raw_wr(struct jls_raw_s * self, struct jls_chunk_header_s * hdr, con
  *
  * @param self The JLS raw instance.
  * @param hdr The header with all fields populated except CRC32.
+ *      For chunks being appended to the file, this function will
+ *      also automatically set payload_prev_length.
+ *      This function modifies the structure in place with the actual
+ *      values written in the file.
  * @return 0 or error code.
  */
 int32_t jls_raw_wr_header(struct jls_raw_s * self, struct jls_chunk_header_s * hdr);
@@ -152,6 +156,14 @@ int32_t jls_raw_rd_payload(struct jls_raw_s * self, uint32_t payload_length_max,
  * @return 0 or error code.
  */
 int32_t jls_raw_chunk_seek(struct jls_raw_s * self, int64_t offset);
+
+/**
+ * @brief Seek to the file end for writing.
+ *
+ * @param self The JLS raw instance.
+ * @return 0 or error code.
+ */
+int32_t jls_raw_seek_end(struct jls_raw_s * self);
 
 /**
  * @brief Get the current chunk offset.
@@ -207,24 +219,6 @@ int32_t jls_raw_item_next(struct jls_raw_s * self);
  * @return 0, JLS_ERROR_EMPTY at beginning, or error code.
  */
 int32_t jls_raw_item_prev(struct jls_raw_s * self);
-
-/**
- * @brief Get the end chunk offset.
- *
- * @param self The JLS raw instance.
- * @return The chunk offset or 0 if not present.
- * @see jls_raw_chunk_tell
- */
-int64_t jls_raw_chunk_tell_end(struct jls_raw_s * self);
-
-/**
- * @brief Truncate the file to remove the active chunk and all following chunks.
- *
- * @param self The JLS raw instance.
- * @return 0 or an error code.
- * @see jls_raw_chunk_seek
- */
-int64_t jls_raw_truncate(struct jls_raw_s * self);
 
 /**
  * @brief Convert the JLS tag into a user-meaningful string.

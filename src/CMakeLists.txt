@@ -18,15 +18,17 @@ set(SOURCES
         bit_shift.c
         buffer.c
         datatype.c
+        core.c
         crc32c.c
         ec.c
         log.c
         msg_ring_buffer.c
         raw.c
-        rd_fsr.c
+        tmap.c
         reader.c
         statistics.c
         threaded_writer.c
+        track.c
         wr_fsr.c
         wr_ts.c
         writer.c

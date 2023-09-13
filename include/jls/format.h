@@ -263,6 +263,8 @@ enum jls_track_chunk_e {
     JLS_TRACK_CHUNK_SUMMARY = 4,
 };
 
+#define JLS_TRACK_TAG_FLAG (0x20U)
+
 /**
  * @brief Pack the chunk tag.
  *
@@ -271,7 +273,7 @@ enum jls_track_chunk_e {
  * @return The tag value.
  */
 #define JLS_TRACK_TAG_PACK(track_type, track_chunk) \
-    (0x20 | (((track_type) & 0x03) << 3) | ((track_chunk) & 0x07))
+    (JLS_TRACK_TAG_FLAG | (((track_type) & 0x03) << 3) | ((track_chunk) & 0x07))
 
 #define JLS_TRACK_TAG_PACKER(track_type, track_chunk) \
     JLS_TRACK_TAG_PACK(JLS_TRACK_TYPE_##track_type, JLS_TRACK_CHUNK_##track_chunk)
@@ -492,7 +494,7 @@ struct jls_file_header_s {
  * this chunk header.  If the length is not zero, then the chunk consists of:
  * - A chunk header
  * - payload of length bytes
- * - Zero padding of 0-7 bytes, so that the entire chunk will end on a mulitple
+ * - Zero padding of 0-7 bytes, so that the entire chunk will end on a multiple
  *   of 8 bytes.  This field ends on: 8 * k - 4
  * - crc32 over the payload.
  */

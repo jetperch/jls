@@ -15,7 +15,7 @@
  */
 
 #include "jls/ec.h"
-#include "jls/rd_fsr.h"
+#include "jls/tmap.h"
 #include "jls/log.h"
 #include "jls/time.h"
 #include <stddef.h>
@@ -27,7 +27,7 @@
 #define ENTRIES_ALLOC_INIT  (1000)
 
 
-struct jls_rd_fsr_s {
+struct jls_tmap_s {
     double sample_rate;
     size_t entries_length;
     size_t entries_alloc;
@@ -36,11 +36,11 @@ struct jls_rd_fsr_s {
 };
 
 
-struct jls_rd_fsr_s * jls_rd_fsr_alloc(double sample_rate) {
+struct jls_tmap_s * jls_tmap_alloc(double sample_rate) {
     if (sample_rate <= 0) {
         JLS_LOGE("Invalid sample_rate");
     }
-    struct jls_rd_fsr_s * s = malloc(sizeof(struct jls_rd_fsr_s));
+    struct jls_tmap_s * s = malloc(sizeof(struct jls_tmap_s));
     if (NULL == s) {
         return NULL;
     }
@@ -61,7 +61,7 @@ struct jls_rd_fsr_s * jls_rd_fsr_alloc(double sample_rate) {
     return s;
 }
 
-void jls_rd_fsr_free(struct jls_rd_fsr_s * self) {
+void jls_tmap_free(struct jls_tmap_s * self) {
     if (NULL != self) {
         if (NULL != self->sample_id) {
             free(self->sample_id);
@@ -77,7 +77,7 @@ void jls_rd_fsr_free(struct jls_rd_fsr_s * self) {
     }
 }
 
-int32_t jls_rd_fsr_add(struct jls_rd_fsr_s * self, int64_t sample_id, int64_t timestamp) {
+int32_t jls_tmap_add(struct jls_tmap_s * self, int64_t sample_id, int64_t timestamp) {
     int64_t * p1;
     int64_t * p2;
     if (self->entries_length >= self->entries_alloc) {
@@ -108,15 +108,15 @@ int32_t jls_rd_fsr_add(struct jls_rd_fsr_s * self, int64_t sample_id, int64_t ti
     return 0;
 }
 
-int32_t jls_rd_fsr_add_cbk(void * user_data, const struct jls_utc_summary_entry_s * utc, uint32_t size) {
-    struct jls_rd_fsr_s * self = (struct jls_rd_fsr_s *) user_data;
+int32_t jls_tmap_add_cbk(void * user_data, const struct jls_utc_summary_entry_s * utc, uint32_t size) {
+    struct jls_tmap_s * self = (struct jls_tmap_s *) user_data;
     for (uint32_t i = 0; i < size; ++i) {
-        jls_rd_fsr_add(self, utc[i].sample_id, utc[i].timestamp);
+        jls_tmap_add(self, utc[i].sample_id, utc[i].timestamp);
     }
     return 0;
 }
 
-int64_t interp_i64(struct jls_rd_fsr_s * self, int64_t x0, int64_t const * x, int64_t const * y) {
+int64_t interp_i64(struct jls_tmap_s * self, int64_t x0, int64_t const * x, int64_t const * y) {
     // binary search for x index with value less than or equal to x0
     size_t low = 0;
     size_t high = self->entries_length;
@@ -145,7 +145,7 @@ int64_t interp_i64(struct jls_rd_fsr_s * self, int64_t x0, int64_t const * x, in
     return y[low] + k;
 }
 
-int32_t jls_rd_fsr_sample_id_to_timestamp(struct jls_rd_fsr_s * self, int64_t sample_id, int64_t * timestamp) {
+int32_t jls_tmap_sample_id_to_timestamp(struct jls_tmap_s * self, int64_t sample_id, int64_t * timestamp) {
     if (self->entries_length == 0) {
         return JLS_ERROR_UNAVAILABLE;
     } else if (self->entries_length == 1) {
@@ -162,7 +162,7 @@ int32_t jls_rd_fsr_sample_id_to_timestamp(struct jls_rd_fsr_s * self, int64_t sa
     return 0;
 }
 
-int32_t jls_rd_fsr_timestamp_to_sample_id(struct jls_rd_fsr_s * self, int64_t timestamp, int64_t * sample_id) {
+int32_t jls_tmap_timestamp_to_sample_id(struct jls_tmap_s * self, int64_t timestamp, int64_t * sample_id) {
     if (self->entries_length == 0) {
         return JLS_ERROR_UNAVAILABLE;
     } else if (self->entries_length == 1) {

@@ -19,6 +19,7 @@
 #include <setjmp.h>
 #include <cmocka.h>
 #include "jls/raw.h"
+#include "jls/backend.h"
 #include "jls/format.h"
 #include "jls/ec.h"
 #include <stdio.h>
@@ -44,6 +45,7 @@ static void test_open_write(void **state) {
     struct jls_raw_s * j = NULL;
     assert_int_equal(0, jls_raw_open(&j, filename, "w"));
     assert_int_equal(JLS_FORMAT_VERSION_U32, jls_raw_version(j).u32);
+    assert_int_equal(32, jls_bk_ftell(jls_raw_backend(j)));
     assert_int_equal(0, jls_raw_close(j));
 
     FILE * f = fopen(filename, "rb");
@@ -92,15 +94,11 @@ static void construct_n_chunks(void) {
     struct jls_raw_s * j = NULL;
     struct jls_chunk_header_s hdr;
     uint32_t payload_prev_length = 0;
-    uint32_t payload_length = 0;
     assert_int_equal(0, jls_raw_open(&j, filename, "w"));
     for (size_t i = 0; i < sizeof(PAYLOAD1); ++i) {
         // printf("chunk %d: %d\n", i, (int32_t) jls_raw_chunk_tell(j));
-        payload_length = (uint32_t) (sizeof(PAYLOAD1) - i);
-        hdr_set(&hdr, JLS_TAG_USER_DATA, 0, payload_length);
-        hdr.payload_prev_length = payload_prev_length;
+        hdr_set(&hdr, JLS_TAG_USER_DATA, 0, (uint32_t) (sizeof(PAYLOAD1) - i));
         assert_int_equal(0, jls_raw_wr(j, &hdr, PAYLOAD1 + i));
-        payload_prev_length = payload_length;
     }
     assert_int_equal(0, jls_raw_close(j));
 }
@@ -231,23 +229,6 @@ static void test_tag_to_name(void **state) {
     assert_string_equal("invalid", jls_tag_to_name(JLS_TAG_INVALID));
 }
 
-static void test_end(void **state) {
-    (void) state;
-    struct jls_raw_s * j = NULL;
-    struct jls_chunk_header_s hdr;
-    assert_int_equal(0, jls_raw_open(&j, filename, "w"));
-    hdr_set(&hdr, JLS_TAG_END, 0, 0);
-    assert_int_equal(0, jls_raw_wr(j, &hdr, NULL));
-    assert_int_equal(0, jls_raw_close(j));
-
-    assert_int_equal(0, jls_raw_open(&j, filename, "r"));
-    int64_t pos_end = jls_raw_chunk_tell_end(j);
-    assert_int_equal(32, pos_end);
-
-    assert_int_equal(0, jls_raw_close(j));
-    remove(filename);
-}
-
 int main(void) {
     const struct CMUnitTest tests[] = {
             cmocka_unit_test(test_invalid_open),
@@ -258,7 +239,6 @@ int main(void) {
             cmocka_unit_test(test_seek),
             cmocka_unit_test(test_items_nav),
             cmocka_unit_test(test_tag_to_name),
-            cmocka_unit_test(test_end),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);

@@ -26,6 +26,7 @@
 
 #include <stdint.h>
 #include "jls/format.h"
+#include "jls/core.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -40,23 +41,18 @@ extern "C" {
  * @{
  */
 
-struct jls_wr_s; // opaque, see writer.h
-struct jls_wr_ts_s;  // opaque, see wr_ts.c
-
 /**
  * @brief Open a new timeseries for index writing.
  *
  * @param instance[out] The new instance
- * @param wr The JLS file writer.
- * @param signal_id The signal_id for this timeseries.
+ * @param parent The parent instance.
  * @param track_type The track type (ANNOTATION, UTC) for this timeseries.
  * @param decimate_factor The decimation factor for each index level.
  * @return 0 or error code.
  */
 int32_t jls_wr_ts_open(
-        struct jls_wr_ts_s ** instance,
-        struct jls_wr_s * wr,
-        uint16_t signal_id,
+        struct jls_core_ts_s ** instance,
+        struct jls_core_signal_s * parent,
         enum jls_track_type_e track_type,
         uint32_t decimate_factor);
 
@@ -66,7 +62,7 @@ int32_t jls_wr_ts_open(
  * @param self The timeseries instance.
  * @return 0 or error code.
  */
-int32_t jls_wr_ts_close(struct jls_wr_ts_s * self);
+int32_t jls_wr_ts_close(struct jls_core_ts_s * self);
 
 /**
  * @brief Add a timeseries annotation entry.
@@ -80,7 +76,7 @@ int32_t jls_wr_ts_close(struct jls_wr_ts_s * self);
  * @return 0 or error code.
  * @note The annotation data chunk must be written by the caller.
  */
-int32_t jls_wr_ts_anno(struct jls_wr_ts_s * self, int64_t timestamp, int64_t offset,
+int32_t jls_wr_ts_anno(struct jls_core_ts_s * self, int64_t timestamp, int64_t offset,
                        enum jls_annotation_type_e annotation_type, uint8_t group_id,
                        float y);
 
@@ -95,7 +91,7 @@ int32_t jls_wr_ts_anno(struct jls_wr_ts_s * self, int64_t timestamp, int64_t off
  * @note The utc data chunk must be written by the caller, if desired.
  *     Alternatively, provide offset=0 to omit level 0 data chunks.
  */
-int32_t jls_wr_ts_utc(struct jls_wr_ts_s * self, int64_t sample_id, int64_t offset, int64_t utc);
+int32_t jls_wr_ts_utc(struct jls_core_ts_s * self, int64_t sample_id, int64_t offset, int64_t utc);
 
 
 /** @} */
