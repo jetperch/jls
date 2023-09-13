@@ -380,7 +380,7 @@ int32_t jls_core_rd_chunk_end(struct jls_core_s * self) {
     int64_t end_pos = backend->fend & ~0x7ULL;
     int64_t length = end_pos;
     struct jls_chunk_header_s * h;
-    while ((end_pos > 0) && (length > sizeof(*h))) {
+    while ((end_pos > 0) && (length > (int64_t) sizeof(*h))) {
         int64_t pos = end_pos - sizeof(data);
         if (pos < 0) {
             pos = 0;
@@ -480,12 +480,14 @@ static int32_t handle_signal_def(struct jls_core_s * self) {
 }
 
 static int32_t handle_track_def(struct jls_core_s * self, int64_t pos) {
+    (void) pos;  // unused
     uint16_t signal_id = self->chunk_cur.hdr.chunk_meta & SIGNAL_MASK;
     ROE(jls_core_validate_track_tag(self, signal_id, self->chunk_cur.hdr.tag));
     return 0;
 }
 
 static int32_t handle_track_head(struct jls_core_s * self, int64_t pos) {
+    (void) pos;  // unused
     uint16_t signal_id = self->chunk_cur.hdr.chunk_meta & SIGNAL_MASK;
     ROE(jls_core_validate_track_tag(self, signal_id, self->chunk_cur.hdr.tag));
     uint8_t track_type = jls_core_tag_parse_track_type(self->chunk_cur.hdr.tag);

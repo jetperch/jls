@@ -156,11 +156,11 @@ int32_t jls_wr_source_def(struct jls_wr_s * self, const struct jls_source_def_s 
     // construct payload
     jls_buf_reset(buf);
     jls_buf_wr_zero(buf, 64);  // reserve space for future use.
-    ROE(buf_wr_str(buf, source->name, &sdef->name));
-    ROE(buf_wr_str(buf, source->vendor, &sdef->vendor));
-    ROE(buf_wr_str(buf, source->model, &sdef->model));
-    ROE(buf_wr_str(buf, source->version, &sdef->version));
-    ROE(buf_wr_str(buf, source->serial_number, &sdef->serial_number));
+    ROE(buf_wr_str(buf, source->name, (char **) &sdef->name));
+    ROE(buf_wr_str(buf, source->vendor, (char **) &sdef->vendor));
+    ROE(buf_wr_str(buf, source->model, (char **) &sdef->model));
+    ROE(buf_wr_str(buf, source->version, (char **) &sdef->version));
+    ROE(buf_wr_str(buf, source->serial_number, (char **) &sdef->serial_number));
     uint32_t payload_length = (uint32_t) jls_buf_length(buf);
 
     // construct header
@@ -209,8 +209,8 @@ int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signal_def_s 
     // copy signal def
     info->signal_def = *signal;
     struct jls_signal_def_s * def = &info->signal_def;
-    jls_buf_string_save(buf, signal->name, &def->name);
-    jls_buf_string_save(buf, signal->units, &def->units);
+    jls_buf_string_save(buf, signal->name, (char **) &def->name);
+    jls_buf_string_save(buf, signal->units, (char **) &def->units);
     ROE(jls_core_signal_def_validate(def));
     ROE(jls_core_signal_def_align(def));
 

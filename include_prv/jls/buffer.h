@@ -80,7 +80,7 @@ size_t jls_buf_length(struct jls_buf_s * self);
  * @param cstr_save The saved string, which remains valid until jls_buf_free(self).
  * @return 0 or error code.
  */
-int32_t jls_buf_string_save(struct jls_buf_s * self, const char * cstr_in, const char ** cstr_save);
+int32_t jls_buf_string_save(struct jls_buf_s * self, const char * cstr_in, char ** cstr_save);
 
 int32_t jls_buf_wr_zero(struct jls_buf_s * self, uint32_t count);
 int32_t jls_buf_wr_str(struct jls_buf_s * self, const char * cstr);

@@ -99,7 +99,7 @@ int32_t jls_track_repair_pointers(struct jls_core_track_s * track) {
     bool skip_next = false;
 
     for (; level > 0; --level) {
-        JLS_LOGI("repair signal %d, track %d", signal_id, (int) track->track_type, level);
+        JLS_LOGI("repair signal %d, track %d, level %d", signal_id, (int) track->track_type, level);
         offset = offset_next ? offset_next : offsets[level];
         skip_next = offset_next;
         offset_next = 0;

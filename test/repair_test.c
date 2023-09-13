@@ -169,7 +169,7 @@ static float * gen_truncate(int64_t sample_count, size_t truncate) {
 static void test_truncate_end_only(void **state) {
     (void) state;
     int64_t sample_count = WINDOW_SIZE * 1000;
-    float * signal = gen_truncate(sample_count, sizeof(struct jls_chunk_header_s));
+    gen_truncate(sample_count, sizeof(struct jls_chunk_header_s));
     struct jls_rd_s * rd = NULL;
     assert_int_equal(0, jls_rd_open(&rd, filename));  // automatically repaired
     int64_t samples = 0;

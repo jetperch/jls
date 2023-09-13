@@ -93,7 +93,6 @@ static void test_one_chunk(void **state) {
 static void construct_n_chunks(void) {
     struct jls_raw_s * j = NULL;
     struct jls_chunk_header_s hdr;
-    uint32_t payload_prev_length = 0;
     assert_int_equal(0, jls_raw_open(&j, filename, "w"));
     for (size_t i = 0; i < sizeof(PAYLOAD1); ++i) {
         // printf("chunk %d: %d\n", i, (int32_t) jls_raw_chunk_tell(j));

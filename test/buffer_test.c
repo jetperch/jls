@@ -50,7 +50,7 @@ static void test_empty(void **state) {
 static void test_string_save(void **state) {
     (void) state;
     const char * str1 = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-    const char * str2 = NULL;
+    char * str2 = NULL;
     struct jls_buf_s * b = jls_buf_alloc();
     assert_non_null(b);
     assert_null(b->strings_tail);

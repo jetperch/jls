@@ -112,7 +112,7 @@ size_t jls_buf_length(struct jls_buf_s * self) {
     return self->length;
 }
 
-int32_t jls_buf_string_save(struct jls_buf_s * self, const char * cstr_in, const char ** cstr_save) {
+int32_t jls_buf_string_save(struct jls_buf_s * self, const char * cstr_in, char ** cstr_save) {
     if (NULL == self->strings_tail) {
         ROE(strings_alloc(self));
     }
