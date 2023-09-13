@@ -276,6 +276,8 @@ cdef class Writer:
     cdef c_jls.jls_twr_s * _wr
     cdef c_jls.jls_signal_def_s _signals[_JLS_SIGNAL_COUNT]
 
+    FLAG_DROP_ON_OVERFLOW = c_jls.JLS_TWR_FLAG_DROP_ON_OVERFLOW
+
     def __init__(self, path: str):
         cdef c_jls.jls_twr_s ** wr_ptr = &self._wr
         cdef int32_t rc
@@ -292,6 +294,16 @@ cdef class Writer:
 
     def __exit__(self, type, value, traceback):
         self.close()
+
+    @property
+    def flags(self):
+        cdef c_jls.jls_twr_s * wr = self._wr
+        return c_jls.jls_twr_flags_get(wr)
+
+    @flags.setter
+    def flags(self, value):
+        cdef c_jls.jls_twr_s * wr = self._wr
+        c_jls.jls_twr_flags_set(wr, value)
 
     def close(self):
         """Close the JLS file and release all resources."""

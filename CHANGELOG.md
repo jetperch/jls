@@ -4,13 +4,15 @@
 This file contains the list of changes made to the JLS project.
 
 
-## 0.7.4
+## 0.8.0
 
 2023 Sep 13
 
 * Added file truncation repair.
 * Added jls_raw_truncate and jls_raw_backend.
 * Refactored reader and writer into new core to enable repairer.
+* Added jls_twr_flags_get/set.
+* Added JLS_TWR_FLAG_DROP_ON_OVERFLOW which drops samples on overflow.
 
 
 ## 0.7.3

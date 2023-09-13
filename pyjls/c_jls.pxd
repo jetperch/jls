@@ -99,8 +99,12 @@ cdef extern from "jls/time.h":
 
 cdef extern from "jls/threaded_writer.h":
     struct jls_twr_s
+    enum jls_twr_flag_e:
+        JLS_TWR_FLAG_DROP_ON_OVERFLOW = (1 << 0)
     int32_t jls_twr_open(jls_twr_s ** instance, const char * path) nogil
     int32_t jls_twr_close(jls_twr_s * self) nogil
+    uint32_t jls_twr_flags_get(jls_twr_s * self)
+    int32_t jls_twr_flags_set(jls_twr_s * self, uint32_t flags)
     int32_t jls_twr_flush(jls_twr_s * self) nogil
     int32_t jls_twr_source_def(jls_twr_s * self, const jls_source_def_s * source)
     int32_t jls_twr_signal_def(jls_twr_s * self, const jls_signal_def_s * signal)

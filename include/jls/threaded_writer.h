@@ -46,6 +46,13 @@ JLS_CPP_GUARD_START
 struct jls_twr_s;
 
 /**
+ * @brief The threaded writer flags
+ */
+enum jls_twr_flag_e {
+    JLS_TWR_FLAG_DROP_ON_OVERFLOW = (1 << 0),   ///< Drop on overflow when set, block otherwise.
+};
+
+/**
  * @brief Open a JLS file for writing.
  *
  * @param[out] instance The JLS writer instance.
@@ -63,6 +70,24 @@ JLS_API int32_t jls_twr_open(struct jls_twr_s ** instance, const char * path);
  * @return 0 or error code.
  */
 JLS_API int32_t jls_twr_close(struct jls_twr_s * self);
+
+/**
+ * @param Get threaded writer flags.
+ *
+ * @param self The JLS writer instance from jls_twr_open().
+ * @param flags The jls_twr_flag_e bits.
+ * @return 0 or error code.
+ */
+JLS_API uint32_t jls_twr_flags_get(struct jls_twr_s * self);
+
+/**
+ * @param Set threaded writer flags.
+ *
+ * @param self The JLS writer instance from jls_twr_open().
+ * @param flags The jls_twr_flag_e bits.
+ * @return 0 or error code.
+ */
+JLS_API int32_t jls_twr_flags_set(struct jls_twr_s * self, uint32_t flags);
 
 /**
  * @brief Flush a JLS file to disk.

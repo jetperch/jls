@@ -35,6 +35,7 @@ struct jls_twr_s {
     struct jls_bkt_s * bk;  // REQUIRED first entry
     struct jls_wr_s * wr;
     volatile int quit;
+    uint32_t flags;  // jls_twr_flags_e bits
     volatile uint64_t flush_send_id;
     volatile uint64_t flush_processed_id;
     uint8_t fsr_entry_size_bits[JLS_SIGNAL_COUNT];
@@ -202,6 +203,7 @@ int32_t jls_twr_open(struct jls_twr_s ** instance, const char * path) {
         return JLS_ERROR_NOT_ENOUGH_MEMORY;
     }
     self->quit = 0;
+    self->flags = 0;
     self->wr = wr;
     self->flush_send_id = 0;
     self->flush_processed_id = 0;
@@ -218,21 +220,39 @@ int32_t jls_twr_open(struct jls_twr_s ** instance, const char * path) {
     return 0;
 }
 
-int32_t msg_send(struct jls_twr_s * self, const struct msg_header_s * hdr, const uint8_t * payload, uint32_t payload_size) {
+uint32_t jls_twr_flags_get(struct jls_twr_s * self) {
+    return self->flags;
+}
+
+int32_t jls_twr_flags_set(struct jls_twr_s * self, uint32_t flags) {
+    self->flags = flags;
+    return 0;
+}
+
+static int32_t msg_send_inner(struct jls_twr_s * self, const struct msg_header_s * hdr, const uint8_t * payload, uint32_t payload_size) {
+    int32_t rc = 0;
     uint32_t sz = sizeof(*hdr) + payload_size;
-    for (uint32_t count = 0; count < (JLS_BK_MSG_WRITE_TIMEOUT_MS / 5); ++count) {
-        jls_bkt_msg_lock(self->bk);
-        uint8_t *msg = jls_mrb_alloc(&self->mrb, sz);
-        if (msg) {
-            memcpy(msg, hdr, sizeof(*hdr));
-            if (payload_size) {
-                memcpy(msg + sizeof(*hdr), payload, payload_size);
-            }
-            jls_bkt_msg_unlock(self->bk);
-            jls_bkt_msg_signal(self->bk);
+    jls_bkt_msg_lock(self->bk);
+    uint8_t *msg = jls_mrb_alloc(&self->mrb, sz);
+    if (msg) {
+        memcpy(msg, hdr, sizeof(*hdr));
+        if (payload_size) {
+            memcpy(msg + sizeof(*hdr), payload, payload_size);
+        }
+    } else {
+        rc = JLS_ERROR_BUSY;
+    }
+    jls_bkt_msg_unlock(self->bk);
+    return rc;
+}
+
+static int32_t msg_send(struct jls_twr_s * self, const struct msg_header_s * hdr, const uint8_t * payload, uint32_t payload_size) {
+    int64_t t_start = jls_now();
+    int64_t t_stop = t_start + JLS_TIME_MILLISECOND * (int64_t) JLS_BK_MSG_WRITE_TIMEOUT_MS;
+    while (jls_now() <= t_stop) {
+        if (0 == msg_send_inner(self, hdr, payload, payload_size)) {
             return 0;
         }
-        jls_bkt_msg_unlock(self->bk);
         jls_bkt_sleep_ms(5);
     }
     return JLS_ERROR_BUSY;
@@ -321,7 +341,17 @@ int32_t jls_twr_fsr(struct jls_twr_s * self, uint16_t signal_id,
             .d = 0
     };
     uint32_t length = (data_length * self->fsr_entry_size_bits[signal_id] + 7) / 8;
-    return msg_send(self, &hdr, (const uint8_t *) data, length);
+    int32_t rc;
+    if (self->flags & JLS_TWR_FLAG_DROP_ON_OVERFLOW) {
+        rc = msg_send_inner(self, &hdr, (const uint8_t *) data, length);
+    } else {
+        rc = msg_send(self, &hdr, (const uint8_t *) data, length);
+    }
+    if (rc) {
+        JLS_LOGW("signal %" PRIu16 " drop %" PRIu32 " samples @ %" PRIi64,
+                 signal_id, data_length, sample_id);
+    }
+    return rc;
 }
 
 int32_t jls_twr_fsr_f32(struct jls_twr_s * self, uint16_t signal_id,
