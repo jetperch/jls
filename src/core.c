@@ -817,7 +817,7 @@ static int32_t reconstruct_omitted_chunk(struct jls_core_s * self, uint16_t sign
         }
 
         if (signal_def->data_type == JLS_DATATYPE_F32) {
-            construct_f32(start_sample_id + k * sz_samples,
+            construct_f32(sample_id + k * sz_samples,
                           (float *) d, sz_samples,
                           s->data[s_index][JLS_SUMMARY_FSR_MEAN], s->data[s_index][JLS_SUMMARY_FSR_STD]);
         } else if (signal_def->data_type == JLS_DATATYPE_U8) {
