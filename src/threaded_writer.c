@@ -240,7 +240,6 @@ int32_t jls_twr_flags_set(struct jls_twr_s * self, uint32_t flags) {
 }
 
 static int32_t msg_send_inner(struct jls_twr_s * self, const struct msg_header_s * hdr, const uint8_t * payload, uint32_t payload_size) {
-    int32_t rc = 0;
     uint32_t sz = sizeof(*hdr) + payload_size;
     jls_bkt_msg_lock(self->bk);
     uint8_t *msg = jls_mrb_alloc(&self->mrb, sz);
@@ -249,11 +248,13 @@ static int32_t msg_send_inner(struct jls_twr_s * self, const struct msg_header_s
         if (payload_size) {
             memcpy(msg + sizeof(*hdr), payload, payload_size);
         }
+        jls_bkt_msg_unlock(self->bk);
+        jls_bkt_msg_signal(self->bk);
+        return 0;
     } else {
-        rc = JLS_ERROR_BUSY;
+        jls_bkt_msg_unlock(self->bk);
+        return JLS_ERROR_BUSY;
     }
-    jls_bkt_msg_unlock(self->bk);
-    return rc;
 }
 
 static int32_t msg_send(struct jls_twr_s * self, const struct msg_header_s * hdr, const uint8_t * payload, uint32_t payload_size) {
