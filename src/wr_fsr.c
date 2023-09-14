@@ -134,6 +134,17 @@ static void summary_free(struct jls_core_fsr_s * self, uint8_t level) {
     }
 }
 
+static bool is_mem_const(void * mem, size_t mem_size, uint8_t c) {
+    uint8_t * m = (uint8_t *) mem;
+    uint8_t * m_end = m + mem_size;
+    while (m < m_end) {
+        if (*m++ != c) {
+            return false;
+        }
+    }
+    return true;
+}
+
 static int32_t wr_data(struct jls_core_fsr_s * self) {
     if (!self->data->header.entry_count) {
         return 0;
@@ -141,15 +152,27 @@ static int32_t wr_data(struct jls_core_fsr_s * self) {
     if (self->data->header.entry_count > self->data_length) {
         JLS_LOGE("internal memory error");
     }
-    uint32_t payload_length = sizeof(struct jls_fsr_data_s)
-            + (self->data->header.entry_count * sample_size_bits(self) + 7) / 8;
+    uint32_t data_length = (self->data->header.entry_count * sample_size_bits(self) + 7) / 8;
+    uint32_t payload_length = sizeof(struct jls_fsr_data_s) + data_length;
+    bool omit_data = (self->write_omit_data > 1);
+    if (!omit_data && (sample_size_bits(self) <= 8)) {
+        uint8_t data_const = *((uint8_t *) self->data->data);
+        if (sample_size_bits(self) == 1) {
+            data_const = (data_const & 1) ? 0xff : 0x00;
+        } else if (sample_size_bits(self) == 4) {
+            data_const = (data_const & 0x0f);
+            data_const |= (data_const << 4);
+        }
+        omit_data = is_mem_const(self->data->data, data_length, data_const);
+    }
+
     uint8_t * p_start = (uint8_t *) self->data;
     int64_t pos = jls_raw_chunk_tell(self->parent->parent->raw);
-    if (self->write_omit_data > 1) {
+    if (omit_data) {
         pos = 0;
     } else {
-        ROE(jls_core_wr_data(self->parent->parent, self->parent->signal_def.signal_id, JLS_TRACK_TYPE_FSR, p_start,
-                             payload_length));
+        ROE(jls_core_wr_data(self->parent->parent, self->parent->signal_def.signal_id,
+                             JLS_TRACK_TYPE_FSR, p_start, payload_length));
     }
     ROE(jls_core_fsr_summary1(self, pos));
     self->data->header.timestamp += self->parent->signal_def.samples_per_data;

@@ -27,6 +27,7 @@
 #include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 
 #define SAMPLE_SIZE_BYTES_MAX           (32)  // =256 bits, must be power of 2
@@ -36,6 +37,7 @@
 #define SUMMARY_DECIMATE_FACTOR_MIN     (SAMPLE_DECIMATE_FACTOR_MIN)
 #define F64_BUF_LENGTH_MIN (1 << 16)
 #define SIGNAL_MASK  (0x0fff)
+#define TAU_F (6.283185307179586f)
 
 
 static inline uint32_t u32_max(uint32_t a, uint32_t b) {
@@ -728,7 +730,7 @@ int32_t jls_core_fsr_length(struct jls_core_s * self, uint16_t signal_id, int64_
         *samples = 0;
         return 0;
     }
-    struct jls_fsr_index_s * r;
+    struct jls_fsr_index_s * r = NULL;
 
     for (int lvl = level; lvl > 0; --lvl) {
         JLS_LOGD3("signal %d, level %d, index=%" PRIi64, (int) signal_id, (int) lvl, offset);
@@ -748,14 +750,176 @@ int32_t jls_core_fsr_length(struct jls_core_s * self, uint16_t signal_id, int64_
         if (r->header.entry_count > 0) {
             offset = r->offsets[r->header.entry_count - 1];
         }
+
+        // only valid for level 1 index
+        if (lvl == 1) {
+            ROE(jls_core_rd_chunk(self)); // summary
+            *signal_length = r->header.timestamp +
+                             r->header.entry_count * self->signal_info[signal_id].signal_def.sample_decimate_factor
+                             - self->signal_info[signal_id].signal_def.sample_id_offset;
+        }
     }
 
-    ROE(jls_raw_chunk_seek(self->raw, offset));
-    ROE(jls_core_rd_chunk(self));
-    struct jls_fsr_data_s * d = (struct jls_fsr_data_s *) self->buf->start;
-    *signal_length = d->header.timestamp + d->header.entry_count
-            - self->signal_info[signal_id].signal_def.sample_id_offset;
+    if (offset) {
+        ROE(jls_raw_chunk_seek(self->raw, offset));
+        ROE(jls_core_rd_chunk(self));
+        struct jls_fsr_data_s * d = (struct jls_fsr_data_s *) self->buf->start;
+        *signal_length = d->header.timestamp + d->header.entry_count
+                - self->signal_info[signal_id].signal_def.sample_id_offset;
+    }
     *samples = *signal_length;
+    return 0;
+}
+
+static void construct_f32(int64_t sample_id, float * y, int64_t count, float mean, float std) {
+    for (int64_t i = 0; i < count; i += 2) {
+        uint64_t ki = (int64_t) (sample_id + i);
+        int64_t r1 = (ki ^ (ki >> 7)) * 2654435761ULL;                      // pseudo-randomize
+        int64_t r2 = ((ki ^ (ki >> 13)) + 2147483647ULL) * 2654435761ULL;   // pseudo-randomize
+        float f1 = (r1 & 0xffffffff) / (float) 0xffffffff;
+        float f2 = (r2 & 0xffffffff) / (float) 0xffffffff;
+        // https://en.wikipedia.org/wiki/Box%E2%80%93Muller_transform
+        float g = std * sqrtf(-2.0f * logf(f1));
+        f2 *= TAU_F;
+        y[i + 0] = mean + g * cosf(f2);
+        if ((i + 1) <= count) {
+            y[i + 1] = mean + g * sinf(f2);
+        }
+    }
+}
+
+static int32_t reconstruct_omitted_chunk(struct jls_core_s * self, uint16_t signal_id, int64_t start_sample_id) {
+    struct jls_signal_def_s * signal_def = &self->signal_info[signal_id].signal_def;
+    uint8_t sample_size_bits = jls_datatype_parse_size(signal_def->data_type);
+
+    struct jls_fsr_index_s * r = (struct jls_fsr_index_s *) self->rd_index->start;
+    int64_t t_index = (start_sample_id - r->header.timestamp) / signal_def->samples_per_data;
+    int64_t sample_id = (t_index * signal_def->samples_per_data) + r->header.timestamp;
+
+    struct jls_fsr_f32_summary_s * s = (struct jls_fsr_f32_summary_s *) self->rd_summary->start;
+    int64_t s_index = (sample_id - s->header.timestamp) / signal_def->sample_decimate_factor;
+
+    size_t sz = (signal_def->samples_per_data * sample_size_bits) / 8 + sizeof(struct jls_fsr_data_s);
+    ROE(jls_buf_realloc(self->buf, sz));
+
+    struct jls_fsr_data_s * data = (struct jls_fsr_data_s *) self->buf->start;
+    data->header.entry_count = 0;
+    data->header.timestamp = sample_id;
+    data->header.entry_size_bits = sample_size_bits;
+    data->header.rsv16 = 0;
+    uint8_t * d = (uint8_t *) data->data;
+
+    const uint64_t sz_samples = signal_def->sample_decimate_factor;
+    const uint64_t sz_bytes = (sz_samples * sample_size_bits) / 8;
+    for (uint32_t k = 0; k < signal_def->samples_per_data / sz_samples; ++k) {
+        if (s_index >= s->header.entry_count) {
+            break;
+        }
+
+        if (signal_def->data_type == JLS_DATATYPE_F32) {
+            construct_f32(start_sample_id + k * sz_samples,
+                          (float *) d, sz_samples,
+                          s->data[s_index][JLS_SUMMARY_FSR_MEAN], s->data[s_index][JLS_SUMMARY_FSR_STD]);
+        } else if (signal_def->data_type == JLS_DATATYPE_U8) {
+            uint8_t value = (uint8_t) roundf(s->data[s_index][JLS_SUMMARY_FSR_MEAN]);
+            memset(d, value, sz_bytes);
+        } else if (signal_def->data_type == JLS_DATATYPE_U4) {
+            uint8_t value = ((uint8_t) roundf(s->data[s_index][JLS_SUMMARY_FSR_MEAN])) & 0x04;
+            value |= (value << 4);
+            memset(d, value, sz_bytes);
+        } else if (signal_def->data_type == JLS_DATATYPE_U1) {
+            uint8_t value = ((uint8_t) roundf(s->data[s_index][JLS_SUMMARY_FSR_MEAN])) & 0x01;
+            if (value) {
+                value = 0xff;
+            }
+            memset(d, value, sz_bytes);
+        } else {
+            memset(d, 0, sz_bytes);  // for now, set to zero
+            break;
+        }
+        d += sz_bytes;
+        ++s_index;
+        data->header.entry_count += (uint32_t) sz_samples;
+    }
+    return 0;
+}
+
+int32_t jls_core_rd_fsr_level1(struct jls_core_s * self, uint16_t signal_id, int64_t start_sample_id) {
+    struct jls_signal_def_s * signal_def = &self->signal_info[signal_id].signal_def;
+    int64_t samples_per_summary = signal_def->entries_per_summary * signal_def->sample_decimate_factor;
+
+    if (self->rd_index_chunk.offset) {
+        struct jls_fsr_index_s * idx = (struct jls_fsr_index_s *) self->rd_index->start;
+        if (start_sample_id >= idx->header.timestamp) {
+            if (start_sample_id < (idx->header.timestamp + samples_per_summary)) {
+                // matches this index/summary entry, already in memory
+                return 0;
+            } else if (start_sample_id < (idx->header.timestamp + 2 * samples_per_summary)) {
+                // matches next index/summary entry
+                self->rd_index_chunk.offset = self->rd_index_chunk.hdr.item_next;
+                jls_raw_chunk_seek(self->raw, self->rd_index_chunk.hdr.item_next);
+            } else {
+                self->rd_index_chunk.offset = 0;
+            }
+        } else {
+            self->rd_index_chunk.offset = 0;
+        }
+    }
+
+    if (0 == self->rd_index_chunk.offset) {
+        ROE(jls_core_fsr_seek(self, signal_id, 1, start_sample_id));
+    }
+    ROE(jls_core_rd_chunk(self));  // index
+    jls_buf_copy(self->rd_index, self->buf);
+    self->rd_index_chunk = self->chunk_cur;
+
+    ROE(jls_core_rd_chunk(self));  // summary
+    jls_buf_copy(self->rd_summary, self->buf);
+    self->rd_summary_chunk = self->chunk_cur;
+    return 0;
+}
+
+int32_t jls_core_rd_fsr_data0(struct jls_core_s * self, uint16_t signal_id, int64_t start_sample_id) {
+    int64_t chunk_sample_id;
+    struct jls_signal_def_s * signal_def = &self->signal_info[signal_id].signal_def;
+    ROE(jls_core_rd_fsr_level1(self, signal_id, start_sample_id));
+    struct jls_fsr_index_s * idx = (struct jls_fsr_index_s *) self->rd_index->start;
+    int64_t idx_entry = (start_sample_id - idx->header.timestamp) / signal_def->samples_per_data;
+    int64_t offset = idx->offsets[idx_entry];
+    struct jls_fsr_data_s * r;
+
+    if (0 == offset) {
+        // omitted, assume full chunk
+        chunk_sample_id = INT64_MAX - INT32_MAX;
+    } else if (jls_raw_chunk_seek(self->raw, offset)) {
+        return JLS_ERROR_NOT_FOUND;
+    } else {
+        int32_t rv = jls_core_rd_chunk(self);
+        if (rv == JLS_ERROR_EMPTY) {
+            return JLS_ERROR_NOT_FOUND;
+        } else if (rv) {
+            return rv;
+        }
+        struct jls_fsr_data_s * r = (struct jls_fsr_data_s *) self->buf->start;
+        chunk_sample_id = r->header.timestamp;
+
+        if (self->chunk_cur.hdr.tag != JLS_TAG_TRACK_FSR_DATA) {
+            JLS_LOGW("unexpected chunk tag: %d", (int) self->chunk_cur.hdr.tag);
+        }
+        if (self->chunk_cur.hdr.chunk_meta != signal_id) {
+            JLS_LOGW("unexpected chunk meta: %d", (int) self->chunk_cur.hdr.chunk_meta);
+        }
+    }
+
+    if (start_sample_id < chunk_sample_id) {  // omitted chunk
+        ROE(reconstruct_omitted_chunk(self, signal_id, start_sample_id));
+    }
+
+    r = (struct jls_fsr_data_s *) self->buf->start;
+    if (r->header.entry_size_bits != jls_datatype_parse_size(signal_def->data_type)) {
+        JLS_LOGE("invalid data entry size: %d", (int) r->header.entry_size_bits);
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
     return 0;
 }
 
@@ -763,7 +927,6 @@ int32_t jls_core_fsr(struct jls_core_s * self, uint16_t signal_id, int64_t start
                      void * data, int64_t data_length) {
     // start_sample_id is API zero-based
     const int64_t data_length_orig = data_length;
-    int32_t rv = 0;
     uint8_t * data_u8 = (uint8_t *) data;
     ROE(jls_core_signal_validate_typed(self, signal_id, JLS_SIGNAL_TYPE_FSR));
     int64_t samples = 0;
@@ -815,39 +978,39 @@ int32_t jls_core_fsr(struct jls_core_s * self, uint16_t signal_id, int64_t start
 
     //JLS_LOGD3("jls_rd_fsr_f32(%d, %" PRIi64 ")", (int) signal_id, start_sample_id);
     start_sample_id += sample_id_offset;  // file sample_id
-    ROE(jls_core_fsr_seek(self, signal_id, 0, start_sample_id));
-    self->chunk_cur.hdr.item_next = jls_raw_chunk_tell(self->raw);
+
+    int64_t chunk_sample_id;
+    int64_t chunk_sample_count;
+    uint8_t * u8;
+
     while (data_length > 0) {
-        if (jls_raw_chunk_seek(self->raw, self->chunk_cur.hdr.item_next)) {
-            return JLS_ERROR_NOT_FOUND;
-        }
-        rv = jls_core_rd_chunk(self);
-        if (rv == JLS_ERROR_EMPTY) {
-            return JLS_ERROR_NOT_FOUND;
-        } else if (rv) {
-            return rv;
-        }
+        ROE(jls_core_rd_fsr_data0(self, signal_id, start_sample_id));
+
         struct jls_fsr_data_s * r = (struct jls_fsr_data_s *) self->buf->start;
-        int64_t chunk_sample_id = r->header.timestamp;
-        int64_t chunk_sample_count = r->header.entry_count;
+        chunk_sample_id = r->header.timestamp;
+        chunk_sample_count = r->header.entry_count;
+        u8 = (uint8_t *) &r->data[0];
         if (r->header.entry_size_bits != entry_size_bits) {
             JLS_LOGE("fsr entry size mismatch");
             return JLS_ERROR_UNSPECIFIED;
         }
-        int64_t idx_start = 0;
+
         if (start_sample_id > chunk_sample_id) {
-            idx_start = start_sample_id - chunk_sample_id;
+            // should only happen on first chunk
+            int64_t idx_start = start_sample_id - chunk_sample_id;
+            chunk_sample_count -= idx_start;
+            u8 += ((idx_start * entry_size_bits) / 8);
         }
-        chunk_sample_count -= idx_start;
+
         if (data_length < chunk_sample_count) {
             chunk_sample_count = data_length;
         }
-        uint8_t * u8 = (uint8_t *) &r->data[0];
+
         size_t sz_bytes = (size_t) (chunk_sample_count * entry_size_bits + 7) / 8;
-        size_t u8_offset = (size_t) ((idx_start * entry_size_bits) / 8);
-        memcpy(data_u8, u8 + u8_offset, sz_bytes);
+        memcpy(data_u8, u8, sz_bytes);
         data_u8 += sz_bytes;
         data_length -= chunk_sample_count;
+        start_sample_id += chunk_sample_count;
     }
 
     if (shift_right_bits) {
@@ -856,7 +1019,6 @@ int32_t jls_core_fsr(struct jls_core_s * self, uint16_t signal_id, int64_t start
 
     return 0;
 }
-
 
 int32_t jls_core_fsr_f32(struct jls_core_s * self, uint16_t signal_id, int64_t start_sample_id,
                          float * data, int64_t data_length) {

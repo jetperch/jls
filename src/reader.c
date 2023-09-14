@@ -70,6 +70,18 @@ int32_t jls_rd_open(struct jls_rd_s ** instance, const char * path) {
         GOE(JLS_ERROR_NOT_ENOUGH_MEMORY);
     }
 
+    core->rd_index_chunk.offset = 0;
+    core->rd_index = jls_buf_alloc();
+    if (!core->rd_index) {
+        GOE(JLS_ERROR_NOT_ENOUGH_MEMORY);
+    }
+
+    core->rd_summary_chunk.offset = 0;
+    core->rd_summary = jls_buf_alloc();
+    if (!core->rd_summary) {
+        GOE(JLS_ERROR_NOT_ENOUGH_MEMORY);
+    }
+
     GOE(jls_raw_open(&core->raw, path, "r"));
 
     GOE(jls_core_scan_initial(core));
@@ -150,6 +162,8 @@ void jls_rd_close(struct jls_rd_s * self) {
         }
         core->raw = NULL;
         jls_buf_free(core->buf);
+        jls_buf_free(core->rd_index);
+        jls_buf_free(core->rd_summary);
         jls_core_f64_buf_free(core->f64_stats_buf);
         core->f64_stats_buf = NULL;
         jls_core_f64_buf_free(core->f64_sample_buf);
@@ -421,8 +435,7 @@ int32_t jls_core_fsr_statistics(struct jls_core_s * self, uint16_t signal_id,
         return JLS_ERROR_UNSUPPORTED_FILE;
     }
 
-    ROE(jls_core_fsr_seek(self, signal_id, 0, start_sample_id));
-    ROE(jls_core_rd_chunk(self));
+    ROE(jls_core_rd_fsr_data0(self, signal_id, start_sample_id));
     struct jls_fsr_data_s * s = (struct jls_fsr_data_s *) self->buf->start;
     int64_t chunk_sample_id = s->header.timestamp;
     if (s->header.entry_size_bits != entry_size_bits) {
@@ -448,19 +461,8 @@ int32_t jls_core_fsr_statistics(struct jls_core_s * self, uint16_t signal_id,
 
     while (data_length > 0) {
         if (src >= src_end) {
-            ROE(jls_raw_chunk_seek(self->raw, self->chunk_cur.hdr.item_next));
-            ROE(jls_core_rd_chunk(self));
-            if (self->chunk_cur.hdr.tag != JLS_TAG_TRACK_FSR_DATA) {
-                JLS_LOGW("unexpected chunk tag: %d", (int) self->chunk_cur.hdr.tag);
-            }
-            if (self->chunk_cur.hdr.chunk_meta != signal_id) {
-                JLS_LOGW("unexpected chunk meta: %d", (int) self->chunk_cur.hdr.chunk_meta);
-            }
+            ROE(jls_core_rd_fsr_data0(self, signal_id, start_sample_id));
             s = (struct jls_fsr_data_s *) self->buf->start;
-            if (s->header.entry_size_bits != entry_size_bits) {
-                JLS_LOGE("invalid data entry size: %d", (int) s->header.entry_size_bits);
-                return JLS_ERROR_PARAMETER_INVALID;
-            }
             chunk_sample_id = s->header.timestamp;
             jls_dt_buffer_to_f64(&s->data[0], signal_def->data_type, self->f64_sample_buf->start, signal_def->samples_per_data);
             src = &self->f64_sample_buf->start[0];
@@ -497,6 +499,7 @@ int32_t jls_core_fsr_statistics(struct jls_core_s * self, uint16_t signal_id,
             v_max = -DBL_MAX;
             --data_length;
         }
+        ++start_sample_id;
     }
     return 0;
 }

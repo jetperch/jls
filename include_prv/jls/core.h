@@ -132,7 +132,12 @@ struct jls_core_source_s {
 
 struct jls_core_s {
     struct jls_raw_s * raw;
-    struct jls_buf_s * buf;
+    struct jls_buf_s * buf;  // automatic target for chunk read
+
+    struct jls_buf_s * rd_index;    // the index for the most recent FSR read operation
+    struct jls_core_chunk_s rd_index_chunk;
+    struct jls_buf_s * rd_summary;  // the summary for the most recent FSR read operation
+    struct jls_core_chunk_s rd_summary_chunk;
 
     struct jls_core_source_s source_info[JLS_SOURCE_COUNT];
     struct jls_source_def_s source_def_api[JLS_SOURCE_COUNT];
@@ -243,6 +248,9 @@ int32_t jls_core_fsr_statistics(struct jls_core_s * self, uint16_t signal_id,
                                 double * data, int64_t data_length);
 int32_t jls_core_ts_seek(struct jls_core_s * self, uint16_t signal_id, uint8_t level,
                          enum jls_track_type_e track_type, int64_t timestamp);
+
+int32_t jls_core_rd_fsr_level1(struct jls_core_s * self, uint16_t signal_id, int64_t start_sample_id);
+int32_t jls_core_rd_fsr_data0(struct jls_core_s * self, uint16_t signal_id, int64_t start_sample_id);
 
 int32_t jls_core_repair_fsr(struct jls_core_s * self, uint16_t signal_id);
 

@@ -112,6 +112,15 @@ size_t jls_buf_length(struct jls_buf_s * self) {
     return self->length;
 }
 
+int32_t jls_buf_copy(struct jls_buf_s * self, const struct jls_buf_s * src) {
+    ROE(jls_buf_realloc(self, src->length));
+    memcpy(self->start, src->start, src->length);
+    self->cur = 0;
+    self->length = src->length;
+    self->end = self->cur + self->length;
+    return 0;
+}
+
 int32_t jls_buf_string_save(struct jls_buf_s * self, const char * cstr_in, char ** cstr_save) {
     if (NULL == self->strings_tail) {
         ROE(strings_alloc(self));

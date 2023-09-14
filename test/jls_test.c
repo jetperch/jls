@@ -926,7 +926,8 @@ static void test_fsr_u1_sample_skip(void **state) {
     assert_int_equal(0, jls_wr_fsr(wr, 9, 5, data_ones, 5));
     assert_int_equal(0, jls_wr_fsr(wr, 9, 10, data_ones, 10));
     assert_int_equal(0, jls_wr_fsr(wr, 9, 20, data_ones, 980));
-    assert_int_equal(0, jls_wr_fsr(wr, 9, 2000, data_ones, 1000));
+    assert_int_equal(0, jls_wr_fsr(wr, 9, 2000, data_ones, 960));
+    assert_int_equal(0, jls_wr_fsr(wr, 9, 2960, data_zeros, 40));
     assert_int_equal(0, jls_wr_close(wr));
 
     struct jls_rd_s * rd = NULL;
@@ -940,7 +941,8 @@ static void test_fsr_u1_sample_skip(void **state) {
     assert_int_equal(0, jls_rd_fsr(rd, 9, 0, data, 3000));
     assert_memory_equal(data_ones, data, 125);
     assert_memory_equal(data_zeros, data + 125, 125);
-    assert_memory_equal(data_ones, data + 250, 125);
+    assert_memory_equal(data_ones, data + 250, 120);
+    assert_memory_equal(data_zeros, data + 370, 5);
 
     jls_rd_close(rd);
     remove(filename);

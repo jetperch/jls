@@ -73,6 +73,18 @@ void jls_buf_reset(struct jls_buf_s * self);
 size_t jls_buf_length(struct jls_buf_s * self);
 
 /**
+ * @brief Copy the buffer binary contents.
+ *
+ * @param self The buffer instance to modify.
+ * @param src The buffer instance to copy.
+ * @return 0 or error code.
+ *
+ * This function does NOT modify the string buffers for self,
+ * only the binary storage.
+ */
+int32_t jls_buf_copy(struct jls_buf_s * self, const struct jls_buf_s * src);
+
+/**
  * @brief Persist a copy of the string.
  *
  * @param self The buffer instance.
