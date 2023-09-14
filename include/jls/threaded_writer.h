@@ -173,6 +173,10 @@ JLS_API int32_t jls_twr_fsr_f32(struct jls_twr_s * self, uint16_t signal_id,
  * data is writen.  Disable takes effect immediately.
  *
  * On read, the level 0 data is reconstructed using the summaries.
+ *
+ * As of Sep 2023, this setting is ignored for u1, u4, u8, i4, and i8
+ * FSR data types.  These data types are omitted whenever the payload
+ * contains a constant data value regardless of this setting.
  */
 JLS_API int32_t jls_twr_fsr_omit_data(struct jls_twr_s * self, uint16_t signal_id, uint32_t enable);
 

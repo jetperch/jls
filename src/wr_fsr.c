@@ -155,7 +155,7 @@ static int32_t wr_data(struct jls_core_fsr_s * self) {
     uint32_t data_length = (self->data->header.entry_count * sample_size_bits(self) + 7) / 8;
     uint32_t payload_length = sizeof(struct jls_fsr_data_s) + data_length;
     bool omit_data = (self->write_omit_data > 1);
-    if (!omit_data && (sample_size_bits(self) <= 8)) {
+    if (sample_size_bits(self) <= 8) {
         uint8_t data_const = *((uint8_t *) self->data->data);
         if (sample_size_bits(self) == 1) {
             data_const = (data_const & 1) ? 0xff : 0x00;

@@ -788,6 +788,23 @@ static void construct_f32(int64_t sample_id, float * y, int64_t count, float mea
     }
 }
 
+static void construct_f64(int64_t sample_id, double * y, int64_t count, double mean, double std) {
+    for (int64_t i = 0; i < count; i += 2) {
+        uint64_t ki = (int64_t) (sample_id + i);
+        int64_t r1 = (ki ^ (ki >> 7)) * 2654435761ULL;                      // pseudo-randomize
+        int64_t r2 = ((ki ^ (ki >> 13)) + 2147483647ULL) * 2654435761ULL;   // pseudo-randomize
+        double f1 = (r1 & 0xffffffff) / (double) 0xffffffff;
+        double f2 = (r2 & 0xffffffff) / (double) 0xffffffff;
+        // https://en.wikipedia.org/wiki/Box%E2%80%93Muller_transform
+        double g = std * sqrt(-2.0 * log(f1));
+        f2 *= TAU_F;
+        y[i + 0] = mean + g * cos(f2);
+        if ((i + 1) <= count) {
+            y[i + 1] = mean + g * sin(f2);
+        }
+    }
+}
+
 static int32_t reconstruct_omitted_chunk(struct jls_core_s * self, uint16_t signal_id, int64_t start_sample_id) {
     struct jls_signal_def_s * signal_def = &self->signal_info[signal_id].signal_def;
     uint8_t sample_size_bits = jls_datatype_parse_size(signal_def->data_type);
@@ -796,8 +813,19 @@ static int32_t reconstruct_omitted_chunk(struct jls_core_s * self, uint16_t sign
     int64_t t_index = (start_sample_id - r->header.timestamp) / signal_def->samples_per_data;
     int64_t sample_id = (t_index * signal_def->samples_per_data) + r->header.timestamp;
 
-    struct jls_fsr_f32_summary_s * s = (struct jls_fsr_f32_summary_s *) self->rd_summary->start;
-    int64_t s_index = (sample_id - s->header.timestamp) / signal_def->sample_decimate_factor;
+    struct jls_fsr_f32_summary_s * s32 = (struct jls_fsr_f32_summary_s *) self->rd_summary->start;
+    struct jls_fsr_f64_summary_s * s64 = (struct jls_fsr_f64_summary_s *) self->rd_summary->start;
+    int64_t s_index = (sample_id - s32->header.timestamp) / signal_def->sample_decimate_factor;
+    bool is_summary_64 = false;
+    if (s32->header.entry_size_bits == (4 * sizeof(float) * 8)) {
+        //
+    } else if (s32->header.entry_size_bits == (4 * sizeof(double) * 8)) {
+        is_summary_64 = true;
+    } else {
+        JLS_LOGE("unsupported summary element size");
+        return JLS_ERROR_NOT_SUPPORTED;
+    }
+
 
     size_t sz = (signal_def->samples_per_data * sample_size_bits) / 8 + sizeof(struct jls_fsr_data_s);
     ROE(jls_buf_realloc(self->buf, sz));
@@ -811,24 +839,40 @@ static int32_t reconstruct_omitted_chunk(struct jls_core_s * self, uint16_t sign
 
     const uint64_t sz_samples = signal_def->sample_decimate_factor;
     const uint64_t sz_bytes = (sz_samples * sample_size_bits) / 8;
+    float mu32;
+    float std32;
+    double mu64;
+    double std64;
+
     for (uint32_t k = 0; k < signal_def->samples_per_data / sz_samples; ++k) {
-        if (s_index >= s->header.entry_count) {
+        if (s_index >= s32->header.entry_count) {
             break;
+        }
+        if (is_summary_64) {
+            mu32 = (float) s64->data[s_index][JLS_SUMMARY_FSR_MEAN];
+            std32 = (float) s64->data[s_index][JLS_SUMMARY_FSR_STD];
+            mu64 = s64->data[s_index][JLS_SUMMARY_FSR_MEAN];
+            std64 = s64->data[s_index][JLS_SUMMARY_FSR_STD];
+        } else {
+            mu32 = s32->data[s_index][JLS_SUMMARY_FSR_MEAN];
+            std32 = s32->data[s_index][JLS_SUMMARY_FSR_STD];
+            mu64 = s32->data[s_index][JLS_SUMMARY_FSR_MEAN];
+            std64 = s32->data[s_index][JLS_SUMMARY_FSR_STD];
         }
 
         if (signal_def->data_type == JLS_DATATYPE_F32) {
-            construct_f32(sample_id + k * sz_samples,
-                          (float *) d, sz_samples,
-                          s->data[s_index][JLS_SUMMARY_FSR_MEAN], s->data[s_index][JLS_SUMMARY_FSR_STD]);
+            construct_f32(sample_id + k * sz_samples, (float *) d, sz_samples, mu32, std32);
+        } else if (signal_def->data_type == JLS_DATATYPE_F64) {
+            construct_f64(sample_id + k * sz_samples, (double *) d, sz_samples, mu64, std64);
         } else if (signal_def->data_type == JLS_DATATYPE_U8) {
-            uint8_t value = (uint8_t) roundf(s->data[s_index][JLS_SUMMARY_FSR_MEAN]);
+            uint8_t value = (uint8_t) roundf(mu32);
             memset(d, value, sz_bytes);
         } else if (signal_def->data_type == JLS_DATATYPE_U4) {
-            uint8_t value = ((uint8_t) roundf(s->data[s_index][JLS_SUMMARY_FSR_MEAN])) & 0x04;
+            uint8_t value = ((uint8_t) roundf(mu32)) & 0x04;
             value |= (value << 4);
             memset(d, value, sz_bytes);
         } else if (signal_def->data_type == JLS_DATATYPE_U1) {
-            uint8_t value = ((uint8_t) roundf(s->data[s_index][JLS_SUMMARY_FSR_MEAN])) & 0x01;
+            uint8_t value = ((uint8_t) roundf(mu32)) & 0x01;
             if (value) {
                 value = 0xff;
             }
