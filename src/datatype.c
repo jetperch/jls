@@ -100,3 +100,27 @@ int32_t jls_dt_buffer_to_f64(const void * src, uint32_t src_datatype, double * d
     }
     return 0;
 }
+
+const char * jls_dt_str(uint32_t datatype) {
+    switch (datatype & 0xffff) {
+        case JLS_DATATYPE_I4:  return "i4";
+        case JLS_DATATYPE_I8:  return "i8";
+        case JLS_DATATYPE_I16: return "i16";
+        case JLS_DATATYPE_I24: return "i24";
+        case JLS_DATATYPE_I32: return "i32";
+        case JLS_DATATYPE_I64: return "i64";
+
+        case JLS_DATATYPE_U1:  return "u1";
+        case JLS_DATATYPE_U4:  return "u4";
+        case JLS_DATATYPE_U8:  return "u8";
+        case JLS_DATATYPE_U16: return "u16";
+        case JLS_DATATYPE_U24: return "u24";
+        case JLS_DATATYPE_U32: return "u32";
+        case JLS_DATATYPE_U64: return "u64";
+
+        case JLS_DATATYPE_F32: return "f32";
+        case JLS_DATATYPE_F64: return "f64";
+
+        default: return "dt_unknown";
+    }
+}

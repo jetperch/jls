@@ -85,13 +85,14 @@ int on_info(struct app_s * self, int argc, char * argv[]) {
     uint16_t signal_count = 0;
     ROE(jls_rd_signals(rd, &signals, &signal_count));
     if (signal_count) {
+
         printf("Signals:\n");
         for (uint16_t i = 0; i < signal_count; ++i) {
             printf("  %d:\n", (int) signals[i].signal_id);
             printf("    name: %s\n", signals[i].name);
             printf("    source_id: %" PRIu16 "\n", signals[i].source_id);
             printf("    signal_type: %s\n", signals[i].signal_type ? "VSR" : "FSR");
-            printf("    data_type: 0x08%" PRIx32 "\n", signals[i].data_type);
+            printf("    data_type: 0x08%" PRIx32 " %s\n", signals[i].data_type, jls_dt_str(signals[i].data_type));
             printf("    sample_rate: %" PRIu32 "\n", signals[i].sample_rate);
             if (verbose) {
                 printf("    samples_per_data: %" PRIu32 "\n", signals[i].samples_per_data);

@@ -228,6 +228,14 @@ int32_t jls_raw_item_prev(struct jls_raw_s * self);
  */
 const char * jls_tag_to_name(uint8_t tag);
 
+/**
+ * @brief Convert the data_type to a string.
+ *
+ * @param datatype The datatype.
+ * @return The string representation of the datatype.
+ */
+const char * jls_dt_str(uint32_t datatype);
+
 JLS_CPP_GUARD_END
 
 /** @} */
