@@ -40,6 +40,50 @@
 #define TAU_F (6.283185307179586f)
 
 
+static const struct jls_signal_def_s SIGNAL_64_DEFAULTS = {
+        .samples_per_data = 8192,
+        .sample_decimate_factor = 128,
+        .entries_per_summary = 640,
+        .summary_decimate_factor = 20,
+};
+
+static const struct jls_signal_def_s SIGNAL_32_DEFAULTS = {
+        .samples_per_data = 8192,
+        .sample_decimate_factor = 128,
+        .entries_per_summary = 640,
+        .summary_decimate_factor = 20,
+        .annotation_decimate_factor = 100,
+        .utc_decimate_factor = 100,
+};
+
+static const struct jls_signal_def_s SIGNAL_16_DEFAULTS = {
+        .samples_per_data = 16384,
+        .sample_decimate_factor = 256,
+        .entries_per_summary = 1280,
+        .summary_decimate_factor = 20,
+};
+
+static const struct jls_signal_def_s SIGNAL_8_DEFAULTS = {
+        .samples_per_data = 32768,
+        .sample_decimate_factor = 1024,
+        .entries_per_summary = 640,
+        .summary_decimate_factor = 20,
+};
+
+static const struct jls_signal_def_s SIGNAL_4_DEFAULTS = {
+        .samples_per_data = 65536,
+        .sample_decimate_factor = 1024,
+        .entries_per_summary = 1280,
+        .summary_decimate_factor = 20,
+};
+
+static const struct jls_signal_def_s SIGNAL_1_DEFAULTS = {
+        .samples_per_data = 65536,
+        .sample_decimate_factor = 1024,
+        .entries_per_summary = 1280,
+        .summary_decimate_factor = 20,
+};
+
 static inline uint32_t u32_max(uint32_t a, uint32_t b) {
     return (a > b) ? a : b;
 }
@@ -135,7 +179,37 @@ int32_t jls_core_signal_def_validate(struct jls_signal_def_s const * def) {
     return 0;
 }
 
+#define SIGNAL_DEF_DEFAULT(field)   \
+    if (0 == def->field) {          \
+        def->field = d->field;      \
+    }
+
+static void signal_def_defaults(struct jls_signal_def_s * def) {
+    const struct jls_signal_def_s * d;
+    uint8_t sample_size = jls_datatype_parse_size(def->data_type);
+    switch (sample_size) {
+        case 1:  d = &SIGNAL_1_DEFAULTS; break;
+        case 4:  d = &SIGNAL_4_DEFAULTS; break;
+        case 8:  d = &SIGNAL_8_DEFAULTS; break;
+        case 16: d = &SIGNAL_16_DEFAULTS; break;
+        case 32: d = &SIGNAL_32_DEFAULTS; break;
+        case 64: d = &SIGNAL_64_DEFAULTS; break;
+        default: return;
+    }
+
+    SIGNAL_DEF_DEFAULT(samples_per_data);
+    SIGNAL_DEF_DEFAULT(sample_decimate_factor);
+    SIGNAL_DEF_DEFAULT(entries_per_summary);
+    SIGNAL_DEF_DEFAULT(samples_per_data);
+
+    // common parameters
+    d = &SIGNAL_32_DEFAULTS;
+    SIGNAL_DEF_DEFAULT(annotation_decimate_factor);
+    SIGNAL_DEF_DEFAULT(utc_decimate_factor);
+}
+
 int32_t jls_core_signal_def_align(struct jls_signal_def_s * def) {
+    signal_def_defaults(def);
     uint8_t sample_size = jls_datatype_parse_size(def->data_type);
     uint32_t samples_per_data_multiple = (SAMPLE_SIZE_BYTES_MAX * 8) / sample_size;
 
@@ -710,6 +784,7 @@ int32_t jls_core_fsr_seek(struct jls_core_s * self, uint16_t signal_id, uint8_t 
 int32_t jls_core_fsr_length(struct jls_core_s * self, uint16_t signal_id, int64_t * samples) {
     ROE(jls_core_signal_validate_typed(self, signal_id, JLS_SIGNAL_TYPE_FSR));
     int64_t * signal_length = &self->signal_info[signal_id].track_fsr->signal_length;
+    struct jls_signal_def_s * signal_def = &self->signal_info[signal_id].signal_def;
     if (*signal_length >= 0) {
         *samples = *signal_length;
         return 0;
@@ -754,9 +829,10 @@ int32_t jls_core_fsr_length(struct jls_core_s * self, uint16_t signal_id, int64_
         // only valid for level 1 index
         if (lvl == 1) {
             ROE(jls_core_rd_chunk(self)); // summary
-            *signal_length = r->header.timestamp +
-                             r->header.entry_count * self->signal_info[signal_id].signal_def.sample_decimate_factor
-                             - self->signal_info[signal_id].signal_def.sample_id_offset;
+            struct jls_fsr_f32_summary_s * s = (struct jls_fsr_f32_summary_s *) self->buf->start;
+            *signal_length = s->header.timestamp +
+                             s->header.entry_count * signal_def->sample_decimate_factor
+                             - signal_def->sample_id_offset;
         }
     }
 
@@ -764,8 +840,7 @@ int32_t jls_core_fsr_length(struct jls_core_s * self, uint16_t signal_id, int64_
         ROE(jls_raw_chunk_seek(self->raw, offset));
         ROE(jls_core_rd_chunk(self));
         struct jls_fsr_data_s * d = (struct jls_fsr_data_s *) self->buf->start;
-        *signal_length = d->header.timestamp + d->header.entry_count
-                - self->signal_info[signal_id].signal_def.sample_id_offset;
+        *signal_length = d->header.timestamp + d->header.entry_count - signal_def->sample_id_offset;
     }
     *samples = *signal_length;
     return 0;

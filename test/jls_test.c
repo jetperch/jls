@@ -948,6 +948,49 @@ static void test_fsr_u1_sample_skip(void **state) {
     remove(filename);
 }
 
+static void test_fsr_u1_auto_def(void **state) {
+    (void) state;
+    struct jls_wr_s *wr = NULL;
+
+    const struct jls_signal_def_s signal_1 = {
+            .signal_id = 1,
+            .source_id = 1,
+            .signal_type = JLS_SIGNAL_TYPE_FSR,
+            .data_type = JLS_DATATYPE_F32,
+            .sample_rate = 100000,
+            .samples_per_data = 0,
+            .sample_decimate_factor = 0,
+            .entries_per_summary = 0,
+            .summary_decimate_factor = 0,
+            .annotation_decimate_factor = 0,
+            .utc_decimate_factor = 0,
+            .name = "current",
+            .units = "",
+    };
+
+    const struct jls_signal_def_s signal_2 = {
+            .signal_id = 2,
+            .source_id = 1,
+            .signal_type = JLS_SIGNAL_TYPE_FSR,
+            .data_type = JLS_DATATYPE_U1,
+            .sample_rate = 100000,
+            .samples_per_data = 0,
+            .sample_decimate_factor = 0,
+            .entries_per_summary = 0,
+            .summary_decimate_factor = 0,
+            .annotation_decimate_factor = 0,
+            .utc_decimate_factor = 0,
+            .name = "gpi[1]",
+            .units = "",
+    };
+
+    assert_int_equal(0, jls_wr_open(&wr, filename));
+    assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_1));
+    assert_int_equal(0, jls_wr_signal_def(wr, &signal_1));
+    assert_int_equal(0, jls_wr_signal_def(wr, &signal_2));
+    assert_int_equal(0, jls_wr_close(wr));
+    remove(filename);
+}
 
 #if !SKIP_REALWORLD
 static void test_fsr_f32_statistics_real(void **state) {
@@ -1008,6 +1051,7 @@ int main(void) {
 
             cmocka_unit_test(test_fsr_f32_sample_skip),
             cmocka_unit_test(test_fsr_u1_sample_skip),
+            cmocka_unit_test(test_fsr_u1_auto_def),
 
 #if !SKIP_REALWORLD
             cmocka_unit_test(test_fsr_f32_statistics_real),

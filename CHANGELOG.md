@@ -6,7 +6,7 @@ This file contains the list of changes made to the JLS project.
 
 ## 0.8.0
 
-2023 Sep 14
+2023 Sep 15
 
 * Added file truncation repair.
 * Added jls_raw_truncate and jls_raw_backend.
@@ -15,6 +15,7 @@ This file contains the list of changes made to the JLS project.
 * Added JLS_TWR_FLAG_DROP_ON_OVERFLOW which drops samples on overflow.
 * Added jls_wr_fsr_omit_data and jls_twr_fsr_omit_data.
 * Automatically omit constant 1, 4, & 8 bit entry FSR data chunks.
+* Modified default signal_def settings for improved performance.
 
 
 ## 0.7.3
