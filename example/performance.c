@@ -1,5 +1,5 @@
 /*
- * Copyright 2021 Jetperch LLC
+ * Copyright 2021-2023 Jetperch LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,6 +40,7 @@ static const char usage_str[] =
 "    <filename>                     The output file path.\n"
 "    --name                         The signal name.\n"
 "    --units                        The SI units.\n"
+"    --datatype                     The datatype: f32, u4, u1.\n"
 "    --sample_rate                  The sample rate in Hz.\n"
 "    --length                       The JLS file length in samples.\n"
 "    --samples_per_data             The samples per data chunk.\n"
@@ -56,7 +57,7 @@ static const char usage_str[] =
 "    <filename>                     The input file path.\n"
 "    --level                        Skip values below level.\n"
 "\n"
-"Copyright 2021 Jetperch LLC, Apache 2.0 license\n"
+"Copyright 2021-2023 Jetperch LLC, Apache 2.0 license\n"
 "\n";
 
 
@@ -83,14 +84,14 @@ const struct jls_signal_def_s SIGNAL_1 = {
         .signal_type = JLS_SIGNAL_TYPE_FSR,
         .data_type = JLS_DATATYPE_F32,
         .sample_rate = 1000000,
-        .samples_per_data = 100000,
-        .sample_decimate_factor = 1000,
-        .entries_per_summary = 20000,
-        .summary_decimate_factor = 100,
-        .annotation_decimate_factor = 100,
-        .utc_decimate_factor = 100,
-        .name = "current",
-        .units = "A",
+        .samples_per_data = 0,
+        .sample_decimate_factor = 0,
+        .entries_per_summary = 0,
+        .summary_decimate_factor = 0,
+        .annotation_decimate_factor = 0,
+        .utc_decimate_factor = 0,
+        .name = NULL,
+        .units = "",
 };
 
 static int isspace_(char c) {
@@ -161,11 +162,58 @@ static void gen_triangle(uint32_t period, float * data, int64_t data_length) {
     }
 }
 
+static void gen_u1(uint32_t period, uint8_t * data, int64_t data_length) {
+    uint8_t quit = 0;
+    int64_t d_end = ((data_length + 7) / 8);
+    for (int64_t k = 0; !quit; ++k) {
+        uint8_t value = k & 1 ? 0x00 : 0xff;
+        int64_t idx_start = (k * period) / 8;
+        int64_t idx_end = ((k + 1) * period) / 8;
+        if (idx_end > d_end) {
+            idx_end = d_end;
+            quit = 1;
+        }
+        memset(data + idx_start, value, idx_end - idx_start);
+    }
+}
+
+static void gen_u4(uint32_t period, uint8_t * data, int64_t data_length) {
+    uint8_t quit = 0;
+    int64_t d_end = ((data_length + 7) / 8);
+    for (int64_t k = 0; !quit; ++k) {
+        uint8_t value = k & 0x0f;
+        value |= (value << 4);
+        int64_t idx_start = (k * period / 4) / 2;
+        int64_t idx_end = ((k + 1) * period / 4) / 2;
+        if (idx_end > d_end) {
+            idx_end = d_end;
+            quit = 1;
+        }
+        memset(data + idx_start, value, idx_end - idx_start);
+    }
+}
+
 static int32_t generate_jls(const char * filename, const struct jls_signal_def_s * signal, int64_t duration) {
-    int64_t data_length = 1000000;
-    float * data = malloc((size_t) data_length * sizeof(float));
+    int64_t data_length = signal->sample_rate;
+    float * data_f32 = NULL;
+    uint8_t * data_u8 = NULL;
     struct jls_twr_s * wr = NULL;
-    gen_triangle(1000, data, data_length);
+    switch (signal->data_type) {
+        case JLS_DATATYPE_F32:
+            data_f32 = malloc((size_t) data_length * sizeof(float));
+            gen_triangle(signal->sample_rate, data_f32, data_length);
+            break;
+        case JLS_DATATYPE_U1:
+            data_u8 = malloc((size_t) (data_length + 7) / 8);
+            gen_u1(signal->sample_rate, data_u8, data_length);
+            break;
+        case JLS_DATATYPE_U4:
+            data_u8 = malloc((size_t) (data_length + 1) / 2);
+            gen_u4(signal->sample_rate, data_u8, data_length);
+            break;
+        default:
+            return JLS_ERROR_NOT_SUPPORTED;
+    }
     RPE(jls_twr_open(&wr, filename));
     RPE(jls_twr_source_def(wr, &SOURCE_1));
     RPE(jls_twr_signal_def(wr, signal));
@@ -178,16 +226,31 @@ static int32_t generate_jls(const char * filename, const struct jls_signal_def_s
             data_length = duration;
         }
         while (1) {
-            rc = jls_twr_fsr_f32(wr, signal->signal_id, sample_id, data, (uint32_t) data_length);
+            switch (signal->data_type) {
+                case JLS_DATATYPE_F32:
+                    rc = jls_twr_fsr_f32(wr, signal->signal_id, sample_id, data_f32, (uint32_t) data_length);
+                    break;
+                case JLS_DATATYPE_U1:
+                case JLS_DATATYPE_U4:
+                    rc = jls_twr_fsr(wr, signal->signal_id, sample_id, data_u8, (uint32_t) data_length);
+                    break;
+                default:
+                    rc = JLS_ERROR_NOT_SUPPORTED;
+            }
             if (rc != JLS_ERROR_NOT_ENOUGH_MEMORY) {
                 break;
             }
-            jls_bkt_sleep_ms(1);
         }
         sample_id += data_length;
         duration -= data_length;
     }
     RPE(jls_twr_close(wr));
+    if (NULL != data_f32) {
+        free(data_f32);
+    }
+    if (NULL != data_u8) {
+        free(data_u8);
+    }
     return 0;
 }
 
@@ -238,7 +301,7 @@ static int32_t profile_fsr_signal(struct jls_rd_s * rd, uint16_t signal_id, FILE
         int64_t step_sz = (length - 1 - sample_count) / step_count;
         int64_t t_start = jls_time_rel();
         for (int64_t sample = 0; sample < length; sample += step_sz) {
-            RPE(jls_rd_fsr_f32(rd, signal_id, sample, data_f32, sample_count));
+            RPE(jls_rd_fsr(rd, signal_id, sample, data_f32, sample_count));
         }
         int64_t t_end = jls_time_rel();
         double t_duration = JLS_TIME_TO_F64(t_end - t_start);
@@ -256,6 +319,9 @@ static int32_t profile_fsr_signal(struct jls_rd_s * rd, uint16_t signal_id, FILE
     const int64_t summary_lengths[] = {1, 11, 479, 1117, 11939};
     int64_t increment = 1;
     printf("#signal,increment,length,time\n");
+    double t_total = 0.0;
+    double t_worst = 0.0;
+
     while (increment < length) {
         for (size_t summary_idx = 0; summary_idx < ARRAY_SIZE(summary_lengths); ++summary_idx) {
             int64_t samples = summary_lengths[summary_idx];
@@ -277,14 +343,19 @@ static int32_t profile_fsr_signal(struct jls_rd_s * rd, uint16_t signal_id, FILE
             }
             int64_t t_end = jls_time_rel();
             double t_duration = JLS_TIME_TO_F64(t_end - t_start);
+            t_duration /= iter_count;
+            if (t_duration > t_worst) {
+                t_worst = t_duration;
+            }
+            t_total += t_duration;
             printf("%d,%" PRIi64 ",%" PRIi64",%g\n", (int) signal_id, increment,
-                   samples, t_duration / iter_count);
+                   samples, t_duration);
             fflush(stdout);
             if (summary_counter) {
                 fprintf(json, ",");
             }
             fprintf(json, "\n    [%d, %" PRIi64 ", %" PRIi64", %g]", (int) signal_id,
-                    increment, samples, t_duration / iter_count);
+                    increment, samples, t_duration);
             ++summary_counter;
         }
         increment *= 3;
@@ -292,6 +363,7 @@ static int32_t profile_fsr_signal(struct jls_rd_s * rd, uint16_t signal_id, FILE
     fprintf(json, "\n  ]");
 
     fprintf(json, "\n}");
+    printf("Total=%.5f, worst=%.5f\n", t_total, t_worst);
     return 0;
 }
 
@@ -447,6 +519,17 @@ int main(int argc, char * argv[]) {
             } else if (0 == strcmp("--units", argv[0])) {
                 REQUIRE_ARGS(2);
                 signal_def.units = argv[1];
+            } else if (0 == strcmp("--data_type", argv[0])) {
+                REQUIRE_ARGS(2);
+                if (0 == strcmp("f32", argv[1])) {
+                    signal_def.data_type = JLS_DATATYPE_F32;
+                } else if (0 == strcmp("u4", argv[1])) {
+                    signal_def.data_type = JLS_DATATYPE_U4;
+                } else if (0 == strcmp("u1", argv[1])) {
+                    signal_def.data_type = JLS_DATATYPE_U1;
+                } else {
+                    return usage();
+                }
             } else if (0 == strcmp("--sample_rate", argv[0])) {
                 REQUIRE_ARGS(2);
                 RPE(cstr_to_u32(argv[1], &signal_def.sample_rate));
@@ -472,6 +555,17 @@ int main(int argc, char * argv[]) {
         }
         REQUIRE_FILENAME();
         int64_t t_start = jls_time_rel();
+        if (NULL == signal_def.name) {
+            switch (signal_def.data_type) {
+                case JLS_DATATYPE_U1: signal_def.name = "gpi[0]"; break;
+                case JLS_DATATYPE_U4: signal_def.name = "current_range"; break;
+                case JLS_DATATYPE_F32:
+                    signal_def.name = "current";
+                    signal_def.units = "A";
+                    break;
+                default: signal_def.name = ""; break;
+            }
+        }
         if (generate_jls(filename, &signal_def, length)) {
             printf("Failed to generate file.\n");
             return 1;

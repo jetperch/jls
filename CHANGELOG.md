@@ -17,6 +17,7 @@ This file contains the list of changes made to the JLS project.
 * Automatically omit constant 1, 4, & 8 bit entry FSR data chunks.
 * Modified default signal_def settings for improved performance.
 * Added jls_dt_str for pretty-printing the data type.
+* Added u1 and u4 FSR data type support to performance tool.
 
 
 ## 0.7.3
