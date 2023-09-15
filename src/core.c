@@ -200,7 +200,7 @@ static void signal_def_defaults(struct jls_signal_def_s * def) {
     SIGNAL_DEF_DEFAULT(samples_per_data);
     SIGNAL_DEF_DEFAULT(sample_decimate_factor);
     SIGNAL_DEF_DEFAULT(entries_per_summary);
-    SIGNAL_DEF_DEFAULT(samples_per_data);
+    SIGNAL_DEF_DEFAULT(summary_decimate_factor);
 
     // common parameters
     d = &SIGNAL_32_DEFAULTS;
@@ -967,7 +967,9 @@ int32_t jls_core_rd_fsr_level1(struct jls_core_s * self, uint16_t signal_id, int
     struct jls_signal_def_s * signal_def = &self->signal_info[signal_id].signal_def;
     int64_t samples_per_summary = signal_def->entries_per_summary * signal_def->sample_decimate_factor;
 
-    if (self->rd_index_chunk.offset) {
+    if (self->rd_index_chunk.hdr.chunk_meta != ((1 << 12) | (signal_id & 0x00ff))) {
+        self->rd_index_chunk.offset = 0;
+    } else if (self->rd_index_chunk.offset) {
         struct jls_fsr_index_s * idx = (struct jls_fsr_index_s *) self->rd_index->start;
         if (start_sample_id >= idx->header.timestamp) {
             if (start_sample_id < (idx->header.timestamp + samples_per_summary)) {
@@ -1019,14 +1021,14 @@ int32_t jls_core_rd_fsr_data0(struct jls_core_s * self, uint16_t signal_id, int6
         } else if (rv) {
             return rv;
         }
-        struct jls_fsr_data_s * r = (struct jls_fsr_data_s *) self->buf->start;
+        r = (struct jls_fsr_data_s *) self->buf->start;
         chunk_sample_id = r->header.timestamp;
 
         if (self->chunk_cur.hdr.tag != JLS_TAG_TRACK_FSR_DATA) {
-            JLS_LOGW("unexpected chunk tag: %d", (int) self->chunk_cur.hdr.tag);
+            JLS_LOGW("unexpected chunk tag: %d (expected %d)", (int) self->chunk_cur.hdr.tag, JLS_TAG_TRACK_FSR_DATA);
         }
         if (self->chunk_cur.hdr.chunk_meta != signal_id) {
-            JLS_LOGW("unexpected chunk meta: %d", (int) self->chunk_cur.hdr.chunk_meta);
+            JLS_LOGW("unexpected chunk meta: %d (expected %d)", (int) self->chunk_cur.hdr.chunk_meta, signal_id);
         }
     }
 
