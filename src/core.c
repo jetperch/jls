@@ -965,23 +965,16 @@ static int32_t reconstruct_omitted_chunk(struct jls_core_s * self, uint16_t sign
 
 int32_t jls_core_rd_fsr_level1(struct jls_core_s * self, uint16_t signal_id, int64_t start_sample_id) {
     struct jls_signal_def_s * signal_def = &self->signal_info[signal_id].signal_def;
-    int64_t samples_per_summary = signal_def->entries_per_summary * signal_def->sample_decimate_factor;
 
     if (self->rd_index_chunk.hdr.chunk_meta != ((1 << 12) | (signal_id & 0x00ff))) {
         self->rd_index_chunk.offset = 0;
     } else if (self->rd_index_chunk.offset) {
         struct jls_fsr_index_s * idx = (struct jls_fsr_index_s *) self->rd_index->start;
-        if (start_sample_id >= idx->header.timestamp) {
-            if (start_sample_id < (idx->header.timestamp + samples_per_summary)) {
-                // matches this index/summary entry, already in memory
-                return 0;
-            } else if (start_sample_id < (idx->header.timestamp + 2 * samples_per_summary)) {
-                // matches next index/summary entry
-                self->rd_index_chunk.offset = self->rd_index_chunk.hdr.item_next;
-                jls_raw_chunk_seek(self->raw, self->rd_index_chunk.hdr.item_next);
-            } else {
-                self->rd_index_chunk.offset = 0;
-            }
+        int64_t sample_id_end = idx->header.timestamp + idx->header.entry_count * signal_def->samples_per_data;
+
+        if ((start_sample_id >= idx->header.timestamp) && (start_sample_id < sample_id_end)) {
+            // matches this index/summary entry, already in memory
+            return 0;
         } else {
             self->rd_index_chunk.offset = 0;
         }
