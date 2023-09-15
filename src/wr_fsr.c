@@ -155,7 +155,10 @@ static int32_t wr_data(struct jls_core_fsr_s * self) {
     uint32_t data_length = (self->data->header.entry_count * sample_size_bits(self) + 7) / 8;
     uint32_t payload_length = sizeof(struct jls_fsr_data_s) + data_length;
     bool omit_data = (self->write_omit_data > 1);
+    struct jls_core_track_s * track = &self->parent->tracks[JLS_TRACK_TYPE_FSR];
+
     if (sample_size_bits(self) <= 8) {
+        // Automatically omit constant value data for data sizes 8 bits or less.
         uint8_t data_const = *((uint8_t *) self->data->data);
         if (sample_size_bits(self) == 1) {
             data_const = (data_const & 1) ? 0xff : 0x00;
@@ -165,6 +168,9 @@ static int32_t wr_data(struct jls_core_fsr_s * self) {
         }
         omit_data = is_mem_const(self->data->data, data_length, data_const);
     }
+
+    // cannot omit first chunk, which stores the sample_id offset.
+    omit_data &= (0 != track->data_head.offset);
 
     uint8_t * p_start = (uint8_t *) self->data;
     int64_t pos = jls_raw_chunk_tell(self->parent->parent->raw);
