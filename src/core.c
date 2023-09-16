@@ -1066,36 +1066,14 @@ int32_t jls_core_fsr(struct jls_core_s * self, uint16_t signal_id, int64_t start
         return JLS_ERROR_PARAMETER_INVALID;
     }
 
-    uint8_t shift_right_bits = 0;
-    if (entry_size_bits < 8) {
-        int64_t sample_id = start_sample_id;
-        switch (entry_size_bits) {
-            case 1:
-                sample_id &= ~0x07;
-                if (sample_id != start_sample_id) {
-                    shift_right_bits = (uint8_t) (start_sample_id - sample_id);
-                }
-                break;
-            case 4:
-                sample_id &= ~0x01;
-                if (sample_id != start_sample_id) {
-                    shift_right_bits = 4;
-                }
-                break;
-            default:
-                JLS_LOGW("entry_size_bits invalid: %d", (int) entry_size_bits);
-                return JLS_ERROR_PARAMETER_INVALID;
-        }
-        data_length += start_sample_id - sample_id;
-        start_sample_id = sample_id;
-    }
-
     //JLS_LOGD3("jls_rd_fsr_f32(%d, %" PRIi64 ")", (int) signal_id, start_sample_id);
     start_sample_id += sample_id_offset;  // file sample_id
 
     int64_t chunk_sample_id;
     int64_t chunk_sample_count;
     uint8_t * u8;
+    uint8_t shift_bits = 0;
+    uint8_t shift_carry = 0;
 
     while (data_length > 0) {
         ROE(jls_core_rd_fsr_data0(self, signal_id, start_sample_id));
@@ -1109,28 +1087,40 @@ int32_t jls_core_fsr(struct jls_core_s * self, uint16_t signal_id, int64_t start
             return JLS_ERROR_UNSPECIFIED;
         }
 
+        int64_t sz_samples = chunk_sample_count;
         if (start_sample_id > chunk_sample_id) {
             // should only happen on first chunk
             int64_t idx_start = start_sample_id - chunk_sample_id;
-            chunk_sample_count -= idx_start;
+            sz_samples = chunk_sample_count - idx_start;
             u8 += ((idx_start * entry_size_bits) / 8);
+            switch (entry_size_bits) {
+                case 1: shift_bits = start_sample_id & 0x07; break;
+                case 4: shift_bits = ((start_sample_id & 0x01) * 4); break;
+                default: break;
+            }
+            if (shift_bits) {
+                shift_carry = (*u8++) >> shift_bits;
+            }
         }
 
-        if (data_length < chunk_sample_count) {
-            chunk_sample_count = data_length;
+        if (sz_samples > data_length) {
+            sz_samples = data_length;
         }
 
-        size_t sz_bytes = (size_t) (chunk_sample_count * entry_size_bits + 7) / 8;
-        memcpy(data_u8, u8, sz_bytes);
+        size_t sz_bytes = (size_t) (sz_samples * entry_size_bits + 7) / 8;
+        if (shift_bits) {
+            for (size_t i = 0; i < sz_bytes; ++i) {
+                data_u8[i] = (u8[i] << (8 - shift_bits)) | shift_carry;
+                shift_carry = u8[i] >> shift_bits;
+            }
+            sz_bytes = (sz_samples * entry_size_bits) / 8;
+        } else {
+            memcpy(data_u8, u8, sz_bytes);
+        }
         data_u8 += sz_bytes;
-        data_length -= chunk_sample_count;
-        start_sample_id += chunk_sample_count;
+        data_length -= sz_samples;
+        start_sample_id += sz_samples;
     }
-
-    if (shift_right_bits) {
-        jls_bit_shift_array_right(shift_right_bits, data, (size_t) ((data_length_orig * entry_size_bits + shift_right_bits + 7) / 8));
-    }
-
     return 0;
 }
 

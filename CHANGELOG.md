@@ -18,6 +18,8 @@ This file contains the list of changes made to the JLS project.
 * Modified default signal_def settings for improved performance.
 * Added jls_dt_str for pretty-printing the data type.
 * Added u1 and u4 FSR data type support to performance tool.
+* Fixed jls_rd_fsr out of bounds memory access.
+* Added read_fuzzer tool to jls example.
 
 
 ## 0.7.3

@@ -35,6 +35,7 @@ add_executable(jls_exe
         jls/fsr_statistic.c
         jls/info.c
         jls/inspect.c
+        jls/read_fuzzer.c
         jls.c
 )
 add_dependencies(jls_exe ${dependencies})
