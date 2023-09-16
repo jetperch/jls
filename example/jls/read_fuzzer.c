@@ -29,14 +29,14 @@ static uint64_t random_seed = 1;
 static const uint64_t random_multiplier = (2654435761ULL | (2654435761ULL << 32));
 
 
-static uint64_t random_u64() {
+static uint64_t random_u64(void) {
     random_seed *= random_multiplier;
     random_seed >>= 1;
     random_seed *= random_multiplier;
     return random_seed;
 }
 
-static uint32_t random_u32() {
+static uint32_t random_u32(void) {
     random_seed *= random_multiplier;
     random_seed >>= 1;
     return (uint32_t) random_seed;
@@ -50,7 +50,6 @@ static int64_t random_range_i64(int64_t min_inc, int64_t max_exc) {
     uint64_t y = (random_u64() % (uint64_t) (max_exc - min_inc));
     return min_inc + (int64_t) y;
 }
-
 
 static int usage(void) {
     printf(
