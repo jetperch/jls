@@ -81,7 +81,7 @@ static bool is_mem_const(void * mem, size_t mem_size, uint8_t c) {
 int on_read_fuzzer(struct app_s * self, int argc, char * argv[]) {
     struct jls_rd_s * rd = NULL;
     char * path = NULL;
-    char guard_byte = 0xCC;
+    uint8_t guard_byte = 0xCC;
     uint32_t guard_length = 32;
     uint8_t * guard;
     int pos_arg = 0;
