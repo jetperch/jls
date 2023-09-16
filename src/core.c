@@ -1040,7 +1040,6 @@ int32_t jls_core_rd_fsr_data0(struct jls_core_s * self, uint16_t signal_id, int6
 int32_t jls_core_fsr(struct jls_core_s * self, uint16_t signal_id, int64_t start_sample_id,
                      void * data, int64_t data_length) {
     // start_sample_id is API zero-based
-    const int64_t data_length_orig = data_length;
     uint8_t * data_u8 = (uint8_t *) data;
     ROE(jls_core_signal_validate_typed(self, signal_id, JLS_SIGNAL_TYPE_FSR));
     int64_t samples = 0;
