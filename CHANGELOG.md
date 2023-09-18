@@ -4,6 +4,13 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.8.1
+
+2023 Sep 18 [in progress]
+
+* Improved python binding Reader.fsr_statistics documentation #9.
+
+
 ## 0.8.0
 
 2023 Sep 16

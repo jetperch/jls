@@ -671,9 +671,22 @@ cdef class Reader:
 
         :param signal_id: The signal id.
         :param start_sample_id: The starting sample id to read.
+            The sample_id of the first recorded sample in a signal is 0.
         :param increment: The number of samples represented per return value.
         :param length: The number of return values to generate.
-        :return: The 2-D array[summary][stat] of np.float32 where the stat column is defined by SummaryFSR.
+        :return: The 2-D array[summary][stat] of np.float32.
+            * Each summary entry represents the statistics computed
+              approximately over increment samples starting
+              from start_sample_id + <index> * increment.
+              It has length given by the length argument.
+            * stat is length 4 with columns defined by SummaryFSR.
+
+        For length 1, the return statistics are sample-accurate.
+        For larger lengths, the external boundaries for index 0 (first)
+        and index -1 (last) are computed exactly.  The internal boundaries
+        are approximated, perfect for waveform display, but perhaps not
+        suitable for other use cases.  If you need sample accurate statistics
+        over multiple increments, call this function repeatedly with length 1.
         """
 
         cdef int32_t rc
