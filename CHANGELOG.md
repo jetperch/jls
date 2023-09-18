@@ -6,9 +6,10 @@ This file contains the list of changes made to the JLS project.
 
 ## 0.8.1
 
-2023 Sep 18 [in progress]
+2023 Sep 18
 
 * Improved python binding Reader.fsr_statistics documentation #9.
+* Fixed occasional missing last byte in jls_rd_fsr for 1-bit signals.
 
 
 ## 0.8.0
