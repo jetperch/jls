@@ -1093,12 +1093,19 @@ int32_t jls_core_fsr(struct jls_core_s * self, uint16_t signal_id, int64_t start
             sz_samples = chunk_sample_count - idx_start;
             u8 += ((idx_start * entry_size_bits) / 8);
             switch (entry_size_bits) {
-                case 1: shift_bits = start_sample_id & 0x07; break;
-                case 4: shift_bits = ((start_sample_id & 0x01) * 4); break;
+                case 1: shift_bits = (uint8_t) (start_sample_id & 0x07); break;
+                case 4: shift_bits = (uint8_t) ((start_sample_id & 0x01) * 4); break;
                 default: break;
             }
             if (shift_bits) {
                 shift_carry = (*u8++) >> shift_bits;
+                uint8_t rem_bits = (uint8_t) ((start_sample_id + data_length - 1) & 0x07) + 1;
+                if ((1 == entry_size_bits) && ((8 - shift_bits + rem_bits) > 8)) {
+                    // write out carry on buffer wrap when carry + end bits exceed a byte
+                    if (data_length > sz_samples) {
+                        data_length += 8;
+                    }
+                }
             }
         }
 

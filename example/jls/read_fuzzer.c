@@ -166,7 +166,10 @@ int on_read_fuzzer(struct app_s * self, int argc, char * argv[]) {
                 break;
             }
             if (*(guard - 1) == guard_byte) {
-                printf("DOH");
+                printf("incomplete: ");
+                for (int32_t i = -guard_length; i < 0; ++i) {
+                    printf(" %02x", guard[i]);
+                }
                 break;
             }
         } else {  // FSR summary
