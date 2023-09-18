@@ -667,9 +667,9 @@ cdef class Reader:
         return data
 
     def fsr_statistics(self, signal_id, start_sample_id, increment, length):
-        """Read FSR statistics.
+        """Read FSR statistics (mean, stdev, min, max).
 
-        :param signal_id: The signal id.
+        :param signal_id: The signal id for a fixed sampling rate (FSR) signal.
         :param start_sample_id: The starting sample id to read.
             The sample_id of the first recorded sample in a signal is 0.
         :param increment: The number of samples represented per return value.
@@ -679,7 +679,9 @@ cdef class Reader:
               approximately over increment samples starting
               from start_sample_id + <index> * increment.
               It has length given by the length argument.
-            * stat is length 4 with columns defined by SummaryFSR.
+            * stat is length 4 with columns defined by SummaryFSR
+              which are mean (average), standard deviation,
+              minimum, and maximum.
 
         For length 1, the return statistics are sample-accurate.
         For larger lengths, the external boundaries for index 0 (first)
