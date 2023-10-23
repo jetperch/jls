@@ -177,20 +177,20 @@ int32_t jls_raw_open(struct jls_raw_s ** instance, const char * path, const char
             if (0 == rc) {
                 self->write_en = 1;
                 rc = read_verify(self);
-                if (rc == JLS_ERROR_TRUNCATED) {
-                    rc = 0;
-                }
             }
-            if ((0 == rc) && (self->version.u32 != JLS_FORMAT_VERSION_U32)) {
-                JLS_LOGE("cannot append, different format versions");
-                rc = JLS_ERROR_UNSUPPORTED_FILE;
+
+            if ((rc == 0) || (rc == JLS_ERROR_TRUNCATED)) {
+                if (self->version.u32 != JLS_FORMAT_VERSION_U32) {
+                    JLS_LOGE("cannot append, different format versions");
+                    rc = JLS_ERROR_UNSUPPORTED_FILE;
+                }
             }
             break;
         default:
             rc = JLS_ERROR_PARAMETER_INVALID;
     }
 
-    if (rc) {
+    if (rc && (rc != JLS_ERROR_TRUNCATED)) {
         jls_bk_fclose(&self->backend);
         free(self);
     } else {

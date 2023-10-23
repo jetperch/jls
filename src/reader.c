@@ -82,7 +82,10 @@ int32_t jls_rd_open(struct jls_rd_s ** instance, const char * path) {
         GOE(JLS_ERROR_NOT_ENOUGH_MEMORY);
     }
 
-    GOE(jls_raw_open(&core->raw, path, "r"));
+    rc = jls_raw_open(&core->raw, path, "r");
+    if (rc && (rc != JLS_ERROR_TRUNCATED)) {
+        goto exit;
+    }
 
     GOE(jls_core_scan_initial(core));
     GOE(jls_core_scan_sources(core));
@@ -96,7 +99,10 @@ int32_t jls_rd_open(struct jls_rd_s ** instance, const char * path) {
     if (self->core.chunk_cur.hdr.tag != JLS_TAG_END) {
         JLS_LOGW("not properly closed");  // indices & summaries may be incomplete
         GOE(jls_raw_close(core->raw));
-        GOE(jls_raw_open(&core->raw, path, "a"));
+        rc = jls_raw_open(&core->raw, path, "a");
+        if (rc && (rc != JLS_ERROR_TRUNCATED)) {
+            goto exit;
+        }
 
         // find last full chunk and truncate remainder
         GOE(jls_raw_chunk_seek(core->raw, pos));
