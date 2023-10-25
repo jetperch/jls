@@ -6,9 +6,9 @@ This file contains the list of changes made to the JLS project.
 
 ## 0.8.2
 
-2023 Oct 23 [in progress]
+2023 Oct 25
 
-* Added file truncation repair for never closed files. [in progress]
+* Added file truncation repair for never closed files.
 
 
 ## 0.8.1

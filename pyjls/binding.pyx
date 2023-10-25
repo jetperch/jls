@@ -745,7 +745,7 @@ cdef class Reader:
         """
         cdef int32_t rc
         rc = c_jls.jls_rd_utc(self._rd, signal_id, sample_id, _utc_cbk_fn, <void *> cbk_fn)
-        _handle_rc('rd_utc', rc)
+        _handle_rc(f'rd_utc({signal_id}, {sample_id})', rc)
 
     def sample_id_to_timestamp(self, signal_id, sample_id):
         """Convert sample_id to UTC timestamp for FSR signals.

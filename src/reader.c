@@ -618,27 +618,39 @@ int32_t jls_core_utc(struct jls_core_s * self, uint16_t signal_id, int64_t sampl
     while (hdr.item_next) {
         ROE(jls_raw_chunk_seek(self->raw, hdr.item_next));
         ROE(jls_raw_rd_header(self->raw, &hdr));
-        if (hdr.tag != JLS_TAG_TRACK_UTC_INDEX) {
-            return JLS_ERROR_NOT_FOUND;
-        }
-        ROE(jls_raw_chunk_next(self->raw));
-        ROE(jls_core_rd_chunk(self));
-        if (self->chunk_cur.hdr.tag != JLS_TAG_TRACK_UTC_SUMMARY) {
-            return JLS_ERROR_NOT_FOUND;
-        }
-        utc = (struct jls_utc_summary_s *) self->buf->start;
-        uint32_t idx = 0;
-        for (; (idx < utc->header.entry_count) && (sample_id > utc->entries[idx].sample_id); ++idx) {
-            // iterate
-        }
-        uint32_t size = utc->header.entry_count - idx;
-        for (uint32_t entry_idx = idx; entry_idx < utc->header.entry_count; ++entry_idx) {
-            utc->entries[entry_idx].sample_id -= sample_id_offset;
-        }
-        if (size) {
-            if (cbk_fn(cbk_user_data, utc->entries + idx, size)) {
+        if (hdr.tag == JLS_TAG_TRACK_UTC_DATA) {
+            ROE(jls_core_rd_chunk(self));
+            struct jls_utc_data_s * utc_data = (struct jls_utc_data_s *) self->buf->start;
+            struct jls_utc_summary_entry_s entry = {
+                .sample_id = utc_data->header.timestamp - sample_id_offset,
+                .timestamp = utc_data->timestamp,
+            };
+            if (cbk_fn(cbk_user_data, &entry, 1)) {
                 return 0;
             }
+            continue;
+        } else if (hdr.tag == JLS_TAG_TRACK_UTC_INDEX) {
+            ROE(jls_raw_chunk_next(self->raw));
+            ROE(jls_core_rd_chunk(self));
+            if (self->chunk_cur.hdr.tag != JLS_TAG_TRACK_UTC_SUMMARY) {
+                return JLS_ERROR_NOT_FOUND;
+            }
+            utc = (struct jls_utc_summary_s *) self->buf->start;
+            uint32_t idx = 0;
+            for (; (idx < utc->header.entry_count) && (sample_id > utc->entries[idx].sample_id); ++idx) {
+                // iterate
+            }
+            uint32_t size = utc->header.entry_count - idx;
+            for (uint32_t entry_idx = idx; entry_idx < utc->header.entry_count; ++entry_idx) {
+                utc->entries[entry_idx].sample_id -= sample_id_offset;
+            }
+            if (size) {
+                if (cbk_fn(cbk_user_data, utc->entries + idx, size)) {
+                    return 0;
+                }
+            }
+        } else {
+            return JLS_ERROR_NOT_FOUND;
         }
     }
     return 0;
