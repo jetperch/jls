@@ -9,6 +9,7 @@ This file contains the list of changes made to the JLS project.
 2023 Oct 25
 
 * Added file truncation repair for never closed files.
+* Added support for python 3.12.
 
 
 ## 0.8.1
