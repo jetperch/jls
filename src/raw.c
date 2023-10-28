@@ -28,7 +28,9 @@
 #include "jls/backend.h"
 
 
-
+#define CRC_SIZE (4)
+#define HEADER_ALIGN (8)            // must be power of 2 and greater than CRC_SIZE
+#define SCAN_SIZE (4096)
 #define CHUNK_BUFFER_SIZE  (1 << 24)
 static const uint8_t FILE_HDR[] = JLS_HEADER_IDENTIFICATION;
 
@@ -64,11 +66,11 @@ static inline uint32_t payload_size_on_disk(uint32_t payload_size) {
     if (!payload_size) {
         return 0;
     }
-    uint8_t pad = (uint8_t) ((payload_size + 4) & 7);
+    uint8_t pad = (uint8_t) ((payload_size + CRC_SIZE) & (HEADER_ALIGN - 1));
     if (pad != 0) {
-        pad = 8 - pad;
+        pad = HEADER_ALIGN - pad;
     }
-    return payload_size + pad + 4;
+    return payload_size + pad + CRC_SIZE;
 }
 
 static int32_t wr_file_header(struct jls_raw_s * self) {
@@ -261,10 +263,11 @@ int32_t jls_raw_wr_payload(struct jls_raw_s * self, uint32_t payload_length, con
         return JLS_ERROR_PARAMETER_INVALID;
     }
 
-    uint8_t footer[11] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
-    uint8_t pad = (uint8_t) ((hdr->payload_length + 4) & 7);
+    uint8_t footer[CRC_SIZE + HEADER_ALIGN];
+    memset(footer, 0, sizeof(footer));
+    uint8_t pad = (uint8_t) ((hdr->payload_length + CRC_SIZE) & (HEADER_ALIGN - 1));
     if (pad != 0) {
-        pad = 8 - pad;
+        pad = HEADER_ALIGN - pad;
     }
     uint32_t crc32 = jls_crc32c(payload, hdr->payload_length);
     footer[pad + 0] = crc32 & 0xff;
@@ -273,7 +276,7 @@ int32_t jls_raw_wr_payload(struct jls_raw_s * self, uint32_t payload_length, con
     footer[pad + 3] = (crc32 >> 24) & 0xff;
 
     RLE(jls_bk_fwrite(&self->backend, payload, hdr->payload_length));
-    RLE(jls_bk_fwrite(&self->backend, footer, pad + 4));
+    RLE(jls_bk_fwrite(&self->backend, footer, pad + CRC_SIZE));
     if (self->backend.fpos >= self->backend.fend) {
         self->last_payload_length = payload_length;
     }
@@ -284,8 +287,6 @@ int32_t jls_raw_rd(struct jls_raw_s * self, struct jls_chunk_header_s * hdr, uin
     RLE(jls_raw_rd_header(self, hdr));
     JLS_LOGD1("rd %" PRId64 " : %d %s", self->offset, (int) hdr->tag, jls_tag_to_name(hdr->tag));
     RLE(jls_raw_rd_payload(self, payload_length_max, payload));
-    invalidate_current_chunk(self);
-    self->offset = self->backend.fpos;
     return 0;
 }
 
@@ -333,7 +334,9 @@ int32_t jls_raw_rd_payload(struct jls_raw_s * self, uint32_t payload_length_max,
     if (hdr->tag == JLS_TAG_INVALID) {
         RLE(jls_raw_rd_header(self, hdr));
     }
-    if (!hdr->payload_length) {
+    if (0 == hdr->payload_length) {
+        invalidate_current_chunk(self);
+        self->offset = self->backend.fpos;
         return 0;
     }
 
@@ -359,6 +362,8 @@ int32_t jls_raw_rd_payload(struct jls_raw_s * self, uint32_t payload_length_max,
         JLS_LOGE("crc32 mismatch: 0x%08x != 0x%08x", crc32_file, crc32_calc);
         return JLS_ERROR_MESSAGE_INTEGRITY;
     }
+    invalidate_current_chunk(self);
+    self->offset = self->backend.fpos;
     return 0;
 }
 
@@ -373,6 +378,44 @@ int32_t jls_raw_chunk_seek(struct jls_raw_s * self, int64_t offset) {
     }
     self->offset = self->backend.fpos;
     return 0;
+}
+
+int32_t jls_raw_chunk_scan(struct jls_raw_s * self) {
+    uint8_t buffer[SCAN_SIZE];
+    uint8_t * b;
+    invalidate_current_chunk(self);
+    int64_t offset = jls_raw_chunk_tell(self);
+    RLE(jls_bk_fseek(&self->backend, 0L, SEEK_END));
+    int64_t offset_end = jls_bk_ftell(&self->backend);
+    if (offset & (HEADER_ALIGN - 1)) {
+        // headers are aligned to 8-byte boundaries.
+        offset += HEADER_ALIGN - (offset & (HEADER_ALIGN - 1));
+    }
+
+    while (offset < offset_end) {
+        if (jls_bk_fseek(&self->backend, offset, SEEK_SET)) {
+            return JLS_ERROR_IO;
+        }
+        b = buffer;
+        size_t sz = sizeof(buffer);
+        if ((offset + (int64_t) sz) > offset_end) {
+            sz = offset_end - offset;
+        }
+        size_t sz_block = sz;
+        jls_bk_fread(&self->backend, buffer, (unsigned const) sz);
+        while (sz >= sizeof(struct jls_chunk_header_s)) {
+            struct jls_chunk_header_s * hdr = (struct jls_chunk_header_s *) b;
+            uint32_t crc32 = jls_crc32c_hdr(hdr);
+            if (crc32 == hdr->crc32) {
+                return jls_raw_chunk_seek(self, offset);
+            }
+            sz -= HEADER_ALIGN;
+            b += HEADER_ALIGN;
+            offset += HEADER_ALIGN;
+        }
+        offset += sz_block - sizeof(struct jls_chunk_header_s) + 8;
+    }
+    return JLS_ERROR_NOT_FOUND;
 }
 
 int32_t jls_raw_seek_end(struct jls_raw_s * self) {

@@ -31,6 +31,7 @@ ADD_EXAMPLE(jls_read)
 
 add_executable(jls_exe
         ${objects}
+        jls/copy.c
         jls/cstr.c
         jls/fsr_statistic.c
         jls/info.c

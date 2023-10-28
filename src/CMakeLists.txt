@@ -18,6 +18,7 @@ set(SOURCES
         bit_shift.c
         buffer.c
         datatype.c
+        copy.c
         core.c
         crc32c.c
         ec.c

@@ -556,7 +556,8 @@ int32_t jls_wr_fsr_data(struct jls_core_fsr_s * self, int64_t sample_id, const v
             }
         }
     } else {
-        JLS_LOGW("fsr skip: in=%" PRIi64 " expect=%" PRIi64 ", skipped=%" PRIi64,
+        JLS_LOGW("fsr %d skip: in=%" PRIi64 " expect=%" PRIi64 ", skipped=%" PRIi64,
+                 self->parent->signal_def.signal_id,
                  sample_id, sample_id_next,
                  sample_id - sample_id_next);
         size_t skip = (size_t) (sample_id - sample_id_next);

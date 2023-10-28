@@ -175,6 +175,17 @@ int32_t jls_raw_seek_end(struct jls_raw_s * self);
 int64_t jls_raw_chunk_tell(struct jls_raw_s * self);
 
 /**
+ * @brief Scan for the next possible valid chunk.
+ *
+ * @param self The JLS raw instance.
+ * @return 0 or error code.
+ *
+ * After a successful scan, use jls_raw_chunk_tell() to
+ * get the position of the found chunk.
+ */
+int32_t jls_raw_chunk_scan(struct jls_raw_s * self);
+
+/**
  * @brief Flush all JLS changes to disk.
  *
  * @param self The JLS raw instance.

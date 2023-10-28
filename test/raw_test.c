@@ -228,6 +228,25 @@ static void test_tag_to_name(void **state) {
     assert_string_equal("invalid", jls_tag_to_name(JLS_TAG_INVALID));
 }
 
+static void test_chunks_scan(void **state) {
+    (void) state;
+
+    struct jls_raw_s *j = NULL;
+    construct_n_chunks();
+
+    assert_int_equal(0, jls_raw_open(&j, filename, "r"));
+    assert_int_equal(0, jls_raw_chunk_next(j));
+    int64_t pos1 = jls_raw_chunk_tell(j);
+    assert_int_equal(0, jls_raw_chunk_next(j));
+    int64_t pos2 = jls_raw_chunk_tell(j);
+    assert_int_equal(0, jls_raw_chunk_seek(j, pos1 + 9));
+    assert_int_equal(0, jls_raw_chunk_scan(j));
+    assert_int_equal(pos2, jls_raw_chunk_tell(j));
+
+    assert_int_equal(0, jls_raw_close(j));
+    remove(filename);
+}
+
 int main(void) {
     const struct CMUnitTest tests[] = {
             cmocka_unit_test(test_invalid_open),
@@ -238,6 +257,7 @@ int main(void) {
             cmocka_unit_test(test_seek),
             cmocka_unit_test(test_items_nav),
             cmocka_unit_test(test_tag_to_name),
+            cmocka_unit_test(test_chunks_scan),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);

@@ -66,6 +66,7 @@ static void on_log_recv(const char * msg) {
 
 const struct command_s COMMANDS[] = {
 //        {"dev",  on_dev,  "Developer tools"},
+        {"copy", on_copy, "Copy and rebuild a JLS file"},
         {"fsr_statistics", on_fsr_statistics, "Extract FSR statistics for a signal"},
         {"info", on_info, "Display JLS file information"},
         {"inspect", on_inspect, "Inspect JLS files"},
