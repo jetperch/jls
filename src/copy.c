@@ -197,7 +197,7 @@ int32_t jls_copy(const char * src, const char * dst,
         offset = jls_raw_chunk_tell(rd);
         if ((offset - offset_progress) >= PROGRESS_INTERVAL_BYTES) {
             if (NULL != progress_fn) {
-                progress_fn(progress_user_data, 1.0);
+                progress_fn(progress_user_data, offset / (double) offset_end);
             }
             offset_progress = offset;
         }

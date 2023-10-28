@@ -31,19 +31,26 @@ static int usage(void) {
 
 int32_t msg_fn(void * user_data, const char * msg) {
     (void) user_data;
-    printf("%s\n", msg);
+    printf("\n%s\n", msg);
     return 0;
 }
 
 int32_t progress_fn(void * user_data, double progress) {
     (void) user_data;
     (void) progress;
+    char line[256];
+    int bar_len = 50;
+    for (int i = 0; i < bar_len; ++i) {
+        line[i] = (progress >= (i / (double) (bar_len - 1))) ? '=' : '-';
+    }
+    line[bar_len] = 0;
+    printf("%s %.1f%%\r", line, progress * 100);
     return 0;
 }
 
 int on_copy(struct app_s * self, int argc, char * argv[]) {
-    char * src;
-    char * dst;
+    char * src = NULL;
+    char * dst = NULL;
     int pos_arg = 0;
     (void) self;
 
@@ -67,6 +74,7 @@ int on_copy(struct app_s * self, int argc, char * argv[]) {
     }
 
     int32_t rc = jls_copy(src, dst, msg_fn, NULL, progress_fn, NULL);
+    printf("\n");
     if (rc) {
         printf("ERROR: %d %s : %s\n", rc, jls_error_code_name(rc), jls_error_code_description(rc));
     }
