@@ -116,7 +116,7 @@ int32_t jls_copy(const char * src, const char * dst,
                 }
                 break;
             }
-            case JLS_TAG_SIGNAL_DEF:
+            case JLS_TAG_SIGNAL_DEF: {
                 struct jls_signal_def_s signal;
                 signal.signal_id = hdr.chunk_meta;
                 ROE(jls_buf_rd_u16(buf, &signal.source_id));
@@ -137,6 +137,7 @@ int32_t jls_copy(const char * src, const char * dst,
                     ROE(jls_wr_signal_def(wr, &signal));
                 }
                 break;
+            }
 
             case JLS_TAG_TRACK_FSR_DEF: break;
             case JLS_TAG_TRACK_FSR_HEAD: break;

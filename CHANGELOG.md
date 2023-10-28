@@ -6,7 +6,7 @@ This file contains the list of changes made to the JLS project.
 
 ## 0.9.0
 
-2023 Oct 27 [in progress]
+2023 Oct 28 [in progress]
 
 * Added jls_copy and "jls copy" command.
 
