@@ -205,7 +205,8 @@ jobs:
           path: dist_windows_latest/
 
       - name: Copy jls.exe
-        run: copy dist_windows_latest/cmake_build_static/example/Release/* dist/
+        shell: bash
+        run: cp dist_windows_latest/cmake_build_static/example/Release/* dist/
 
       - name: Download python wheel artifacts
         uses: actions/download-artifact@v3
