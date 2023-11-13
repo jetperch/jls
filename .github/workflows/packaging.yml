@@ -198,16 +198,6 @@ jobs:
           name: python_sdist
           path: dist/
 
-      - name: Download windows-latest artifact
-        uses: actions/download-artifact@v3
-        with:
-          name: windows-latest
-          path: dist_windows_latest/
-
-      - name: Copy jls.exe
-        shell: bash
-        run: cp dist_windows_latest/cmake_build_static/example/Release/* dist/
-
       - name: Download python wheel artifacts
         uses: actions/download-artifact@v3
         with:
@@ -223,6 +213,16 @@ jobs:
         with:
           verbose: true
           print-hash: true
+
+      - name: Download windows-latest artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: windows-latest
+          path: dist_windows_latest/
+
+      - name: Copy jls.exe
+        shell: bash
+        run: cp dist_windows_latest/cmake_build_static/example/Release/* dist/
 
       - name: Publish release assets
         uses: softprops/action-gh-release@v1
