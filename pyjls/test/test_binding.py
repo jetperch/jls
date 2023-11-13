@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from pyjls.binding import SECOND, Writer, Reader, SummaryFSR, DataType, jls_inject_log
+from pyjls.binding import SECOND, Writer, Reader, SummaryFSR, DataType, jls_inject_log, copy
 import io
 import logging
 from logging import StreamHandler
@@ -234,3 +234,29 @@ class TestBinding(unittest.TestCase):
         jls_inject_log('D', 'debug', 12, 'debug2')
         expect = ['INFO:hello:10:pyjls.c:world', 'DEBUG:debug:11:pyjls.c:debug1', '']
         self.assertEqual('\n'.join(expect), stream.getvalue())
+
+    def test_copy(self):
+        msgs = []
+        progresses = []
+
+        def on_msg(msg):
+            msgs.append(msg)
+
+        def on_progress(progress):
+            progresses.append(progress)
+
+        data = np.arange(110000, dtype=np.float32)
+        with Writer(self._path) as w:
+            w.source_def(source_id=1, name='name', vendor='vendor', model='model',
+                         version='version', serial_number='serial_number')
+            w.signal_def(3, source_id=1, sample_rate=1000000, name='current', units='A')
+            w.fsr(3, 0, data)
+
+        dst = tempfile.NamedTemporaryFile(delete=False, suffix='.jls')
+        dst.close()
+        try:
+            copy(self._path, dst.name, on_msg, on_progress)
+        finally:
+            self.assertTrue(os.path.isfile(dst.name))
+            os.remove(dst.name)
+        self.assertEqual(1.0, progresses[-1])

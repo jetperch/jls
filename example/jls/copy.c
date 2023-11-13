@@ -17,15 +17,17 @@
 #include "jls.h"
 #include "jls/copy.h"
 #include "jls_util_prv.h"
-#include <stdio.h>
 #include <inttypes.h>
+#include <stdio.h>
+#include <stdbool.h>
+#include <string.h>
 
 
 #define PAYLOAD_MAX_SIZE (32U * 1024U * 1024U)
 
 
 static int usage(void) {
-    printf("usage: jls copy <src> <dst>\n");
+    printf("usage: jls copy <src> <dst> [--no-progress]\n");
     return 1;
 }
 
@@ -53,6 +55,7 @@ int on_copy(struct app_s * self, int argc, char * argv[]) {
     char * dst = NULL;
     int pos_arg = 0;
     (void) self;
+    bool no_progress = false;
 
     while (argc) {
         if (argv[0][0] != '-') {
@@ -65,6 +68,9 @@ int on_copy(struct app_s * self, int argc, char * argv[]) {
             }
             ARG_CONSUME();
             ++pos_arg;
+        } else if (0 == strcmp("--no-progress", argv[0])) {
+            no_progress = true;
+            ARG_CONSUME();
         } else {
             return usage();
         }
@@ -73,7 +79,9 @@ int on_copy(struct app_s * self, int argc, char * argv[]) {
         return usage();
     }
 
-    int32_t rc = jls_copy(src, dst, msg_fn, NULL, progress_fn, NULL);
+    int32_t rc = jls_copy(src, dst,
+                          msg_fn, NULL,
+                          no_progress ? NULL : progress_fn, NULL);
     printf("\n");
     if (rc) {
         printf("ERROR: %d %s : %s\n", rc, jls_error_code_name(rc), jls_error_code_description(rc));

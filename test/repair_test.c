@@ -19,6 +19,7 @@
 #include <setjmp.h>
 #include <cmocka.h>
 #include "jls/backend.h"
+#include "jls/core.h"
 #include "jls/ec.h"
 #include "jls/log.h"
 #include "jls/raw.h"
@@ -42,6 +43,12 @@ const uint16_t CHUNK_META_2 = 0x0BEE;
 const uint16_t CHUNK_META_3 = 0x0ABC;
 const char STRING_1[] = "hello world";
 const char JSON_1[] = "{\"hello\": \"world\"}";
+
+
+enum gen_close_e {
+    GEN_CLOSE,
+    GEN_SKIP_CLOSE
+};
 
 
 const struct jls_source_def_s SOURCE_1 = {
@@ -134,7 +141,7 @@ float * gen_triangle(uint32_t period_samples, int64_t length_samples) {
     return y;
 }
 
-static float * gen_truncate(int64_t sample_count, size_t truncate) {
+static float * gen_truncate(int64_t sample_count, size_t truncate, enum gen_close_e gen_close) {
     struct jls_wr_s * wr = NULL;
     float * signal = gen_triangle(1000, sample_count);
     assert_non_null(signal);
@@ -150,7 +157,12 @@ static float * gen_truncate(int64_t sample_count, size_t truncate) {
         assert_int_equal(0, jls_wr_utc(wr, 5, sample_id, utc + JLS_COUNTER_TO_TIME(sample_id, SIGNAL_5.sample_rate)));
     }
 
-    assert_int_equal(0, jls_wr_close(wr));
+    if (gen_close == GEN_CLOSE) {
+        assert_int_equal(0, jls_wr_close(wr));
+    } else {
+        struct jls_core_s * core = (struct jls_core_s *) wr;
+        jls_bk_fclose(jls_raw_backend(core->raw));
+    }
 
     if (truncate > 0) {
         struct jls_raw_s * raw = NULL;
@@ -169,7 +181,7 @@ static float * gen_truncate(int64_t sample_count, size_t truncate) {
 static void test_truncate_end_only(void **state) {
     (void) state;
     int64_t sample_count = WINDOW_SIZE * 1000;
-    gen_truncate(sample_count, sizeof(struct jls_chunk_header_s));
+    gen_truncate(sample_count, sizeof(struct jls_chunk_header_s), GEN_CLOSE);
     struct jls_rd_s * rd = NULL;
     assert_int_equal(0, jls_rd_open(&rd, filename));  // automatically repaired
     int64_t samples = 0;
@@ -183,7 +195,7 @@ static void test_truncate_summary(void **state) {
     int64_t sample_count = WINDOW_SIZE * 1000;
     double signal_mean = 0.0;
 
-    float * signal = gen_truncate(sample_count, 15 * sizeof(struct jls_chunk_header_s));
+    float * signal = gen_truncate(sample_count, 15 * sizeof(struct jls_chunk_header_s), GEN_CLOSE);
     for (int64_t i = 0; i < sample_count; ++i) {
         signal_mean += signal[i];
     }
@@ -206,7 +218,30 @@ static void test_truncate_samples(void **state) {
     int64_t sample_count_truncated = 0x1e780;
     double signal_mean = 0.0;
 
-    float * signal = gen_truncate(sample_count, 3500000);
+    float * signal = gen_truncate(sample_count, 3500000, GEN_CLOSE);
+    for (int64_t i = 0; i < sample_count_truncated; ++i) {
+        signal_mean += signal[i];
+    }
+    signal_mean = signal_mean / sample_count_truncated;
+
+    struct jls_rd_s * rd = NULL;
+    double data[4];
+    assert_int_equal(0, jls_rd_open(&rd, filename));  // automatically repaired
+    int64_t samples = 0;
+    assert_int_equal(0, jls_rd_fsr_length(rd, 5, &samples));
+    assert_int_equal(sample_count_truncated, samples);
+    assert_int_equal(0, jls_rd_fsr_statistics(rd, 5, 0, sample_count_truncated, data, 1));
+    assert_float_equal(signal_mean, data[0], 1e-9);
+    remove(filename);
+}
+
+static void test_truncate_samples_unclosed(void **state) {
+    (void) state;
+    int64_t sample_count = WINDOW_SIZE * 1000;
+    int64_t sample_count_truncated = 0xe4840;
+    double signal_mean = 0.0;
+
+    float * signal = gen_truncate(sample_count, 0, GEN_SKIP_CLOSE);
     for (int64_t i = 0; i < sample_count_truncated; ++i) {
         signal_mean += signal[i];
     }
@@ -233,6 +268,7 @@ int main(void) {
             cmocka_unit_test(test_truncate_end_only),
             cmocka_unit_test(test_truncate_summary),
             cmocka_unit_test(test_truncate_samples),
+            cmocka_unit_test(test_truncate_samples_unclosed),
     };
 
     jls_log_register(on_log_recv);

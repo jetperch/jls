@@ -6,9 +6,10 @@ This file contains the list of changes made to the JLS project.
 
 ## 0.9.0
 
-2023 Oct 28 [in progress]
+2023 Nov 13
 
-* Added jls_copy and "jls copy" command.
+* Added jls_copy with "jls copy" command and pyjls "copy" entry point.
+* Publish release assets including "jls.exe".
 
 
 ## 0.8.2

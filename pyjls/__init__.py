@@ -13,6 +13,7 @@
 # limitations under the License.
 
 from .binding import DataType, AnnotationType, SignalType, Writer, Reader, SummaryFSR, \
+    copy, \
     data_type_as_enum, data_type_as_str, \
     utc_to_jls, jls_to_utc
 from .structs import SourceDef, SignalDef
@@ -20,6 +21,7 @@ from .version import *
 
 __all__ = ['Writer', 'Reader', 'DataType', 'AnnotationType',
            'SignalType', 'SourceDef', 'SignalDef', 'SummaryFSR',
+           'copy',
            'data_type_as_enum', 'data_type_as_str',
            'utc_to_jls', 'jls_to_utc',
            '__version__', '__title__', '__description__', '__url__',

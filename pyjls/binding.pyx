@@ -36,6 +36,7 @@ from .structs import SourceDef, SignalDef
 
 __all__ = ['DataType', 'AnnotationType', 'SignalType', 'Writer', 'Reader',
            'SourceDef', 'SignalDef', 'SummaryFSR', 'jls_inject_log',
+           'copy',
            'data_type_as_enum', 'data_type_as_str']
 
 
@@ -808,3 +809,44 @@ cdef int32_t _utc_cbk_fn(void * user_data, const c_jls.jls_utc_summary_entry_s *
         entries[idx, 1] = utc[idx].timestamp
     rc = cbk_fn(entries)
     return 1 if bool(rc) else 0
+
+
+cdef int32_t _copy_msg_fn(void * user_data, const char * msg) noexcept:
+    cdef uint32_t idx
+    try:
+        cbk_fn = <object> user_data
+        if callable(cbk_fn):
+            return cbk_fn(msg)
+        return 0
+    except:
+        return 1
+
+
+cdef int32_t _copy_progress_fn(void * user_data, double progress) noexcept:
+    cdef uint32_t idx
+    try:
+        cbk_fn = <object> user_data
+        if callable(cbk_fn):
+            return cbk_fn(progress)
+        return 0
+    except:
+        return 1
+
+
+def copy(src, dst, msg_fn=None, progress_fn=None):
+    """Copy a JLS file.
+
+    :param src: The source path.
+    :param dst: The destination path.
+    :param msg_fn: The optional function to call with status messages.
+    :param progress_fn: The optional function to call with progress from 0.0 to 1.0.
+    """
+    cdef const char * c_src
+    cdef const char * c_dst
+    src_encode = src.encode('utf-8')
+    dst_encode = dst.encode('utf-8')
+    c_src = src_encode
+    c_dst = dst_encode
+    rc = c_jls.jls_copy(c_src, c_dst, _copy_msg_fn, <void *> msg_fn, _copy_progress_fn, <void *> progress_fn)
+    if rc:
+        raise RuntimeError(f'Could not copy: {rc}')

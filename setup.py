@@ -75,6 +75,7 @@ extensions = [
             'pyjls/binding' + ext,
             'src/bit_shift.c',
             'src/buffer.c',
+            'src/copy.c',
             'src/core.c',
             'src/crc32c.c',
             'src/datatype.c',

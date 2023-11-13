@@ -205,6 +205,7 @@ int32_t jls_copy(const char * src, const char * dst,
     if (NULL != progress_fn) {
         progress_fn(progress_user_data, 1.0);
     }
+    jls_raw_close(rd);
     jls_wr_close(wr);
     return 0;
 }
