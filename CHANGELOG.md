@@ -4,6 +4,13 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.9.1
+
+2023 Nov 13
+
+* Bumped rev to fix publish to pypi.
+
+
 ## 0.9.0
 
 2023 Nov 13
