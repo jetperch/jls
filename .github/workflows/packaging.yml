@@ -190,6 +190,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       id-token: write
+      contents: write
 
     steps:
       - name: Download python sdist artifact
