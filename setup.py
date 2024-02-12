@@ -60,7 +60,7 @@ else:
     if platform.system() == 'Darwin':
         extra_compile_args = ['-msse4.2', '-mcrc']  # universal2
     elif platform.system() == 'Linux':
-        if platform.processor() == 'x86_64':
+        if platform.machine() == 'x86_64':
             extra_compile_args = ['-msse4.2']
         else:
             # Raspberry Pi 4 does not support CRC acceleration
