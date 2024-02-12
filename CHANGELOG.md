@@ -4,6 +4,13 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.9.2
+
+2024 Feb 12 [in progress]
+
+* Fixed index error in file repair operation.
+
+
 ## 0.9.1
 
 2023 Nov 13

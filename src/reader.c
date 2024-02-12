@@ -113,20 +113,20 @@ int32_t jls_rd_open(struct jls_rd_s ** instance, const char * path) {
         GOE(jls_raw_chunk_seek(core->raw, pos));
         GOE(jls_raw_wr(core->raw, &core->chunk_cur.hdr, core->buf->cur));
 
-        for (uint16_t i = 0; i < JLS_SIGNAL_COUNT; ++i) {
-            struct jls_core_signal_s * signal_info = &core->signal_info[i];
-            if (signal_info->signal_def.signal_id != i) {
+        for (uint16_t signal_idx = 0; signal_idx < JLS_SIGNAL_COUNT; ++signal_idx) {
+            struct jls_core_signal_s * signal_info = &core->signal_info[signal_idx];
+            if (signal_info->signal_def.signal_id != signal_idx) {
                 continue;
             }
             JLS_LOGI("repair signal %d", (int) signal_info->signal_def.signal_id);
-            for (int i = 0; i < JLS_TRACK_TYPE_COUNT; ++i) {
-                if (NULL != signal_info->tracks[i].parent) {
-                    jls_track_repair_pointers(&signal_info->tracks[i]);
+            for (int track_idx = 0; track_idx < JLS_TRACK_TYPE_COUNT; ++track_idx) {
+                if (NULL != signal_info->tracks[track_idx].parent) {
+                    jls_track_repair_pointers(&signal_info->tracks[track_idx]);
                 }
             }
 
             if (signal_info->signal_def.signal_type == JLS_SIGNAL_TYPE_FSR) {
-                GOE(jls_core_repair_fsr(core, i));
+                GOE(jls_core_repair_fsr(core, signal_idx));
                 // todo repair annotation
                 // todo repair UTC
             } else {
