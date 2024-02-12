@@ -171,6 +171,7 @@ jobs:
           CIBW_BUILD: '${{ matrix.python_version }}-*'
           CIBW_TEST_REQUIRES: pytest
           CIBW_TEST_COMMAND: pytest --pyargs pyjls
+          CIBW_TEST_SKIP: "*-macosx_universal2:arm64"  # cannot test arm64 on x86_64
         with:
           package-dir: ${{ steps.find_sdist_filename.outputs.filename }}
 
@@ -203,6 +204,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: python_wheel-*
+          merge-multiple: true
           path: dist/
 
       - name: Display artifacts
