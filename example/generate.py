@@ -39,6 +39,8 @@ def parser():
     p.add_argument('--sample_decimate_factor', type=int, default=1000, help='The samples per summary entry.')
     p.add_argument('--entries_per_summary', type=int, default=20000, help='The entries per summary chunk.')
     p.add_argument('--summary_decimate_factor', type=int, default=100, help='The summaries per summary entry.')
+    p.add_argument('--skip_close', action='store_true', help='Skip cleanly closing the file to test recovery.')
+    p.add_argument('--sample_id_offset', type=int, default=0, help='The starting sample_id offset.')
     p.add_argument('--add',
                    action='append',
                    help='The waveform definition to add, which is one of:'
@@ -118,8 +120,9 @@ def run():
 
     # Write to file
     y_len = len(x)
-    sample_id = 0
-    with Writer(args.filename) as wr:
+    sample_id = args.sample_id_offset
+    wr = Writer(args.filename)
+    try:
         wr.source_def_from_struct(source)
         wr.signal_def_from_struct(signal)
         wr.user_data(0, 'string user data at start')
@@ -135,6 +138,9 @@ def run():
             x += 1.0  # increment
         wr.user_data(42, b'binary data')
         wr.user_data(43, {'my': 'data', 'json': [1, 2, 3]})
+    finally:
+        if not args.skip_close:
+            wr.close()
 
 
 if __name__ == "__main__":

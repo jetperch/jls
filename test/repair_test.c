@@ -209,13 +209,14 @@ static void test_truncate_summary(void **state) {
     assert_int_equal(sample_count, samples);
     assert_int_equal(0, jls_rd_fsr_statistics(rd, 5, 0, sample_count, data, 1));
     assert_float_equal(signal_mean, data[0], 1e-9);
+    jls_rd_close(rd);
     remove(filename);
 }
 
 static void test_truncate_samples(void **state) {
     (void) state;
     int64_t sample_count = WINDOW_SIZE * 1000;
-    int64_t sample_count_truncated = 0x1e780;
+    int64_t sample_count_truncated = 127920;
     double signal_mean = 0.0;
 
     float * signal = gen_truncate(sample_count, 3500000, GEN_CLOSE);
@@ -231,6 +232,7 @@ static void test_truncate_samples(void **state) {
     assert_int_equal(0, jls_rd_fsr_length(rd, 5, &samples));
     assert_int_equal(sample_count_truncated, samples);
     assert_int_equal(0, jls_rd_fsr_statistics(rd, 5, 0, sample_count_truncated, data, 1));
+    jls_rd_close(rd);
     assert_float_equal(signal_mean, data[0], 1e-9);
     remove(filename);
 }
@@ -255,6 +257,7 @@ static void test_truncate_samples_unclosed(void **state) {
     assert_int_equal(sample_count_truncated, samples);
     assert_int_equal(0, jls_rd_fsr_statistics(rd, 5, 0, sample_count_truncated, data, 1));
     assert_float_equal(signal_mean, data[0], 1e-9);
+    jls_rd_close(rd);
     remove(filename);
 }
 

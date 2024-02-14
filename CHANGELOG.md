@@ -6,9 +6,10 @@ This file contains the list of changes made to the JLS project.
 
 ## 0.9.2
 
-2024 Feb 12 [in progress]
+2024 Feb 14
 
 * Fixed index error in file repair operation.
+* Fixed FSR summary reconstruction on truncation  #10
 
 
 ## 0.9.1

@@ -81,88 +81,92 @@ int32_t jls_track_repair_pointers(struct jls_core_track_s * track) {
     int signal_id = (int) signal->signal_def.signal_id;
 
     JLS_LOGI("repair signal %d, track %d", signal_id, (int) track->track_type);
-    struct jls_core_chunk_s index_chunk;
-    struct jls_core_chunk_s summary_chunk;
+    struct jls_core_chunk_s index_chunk = {.offset=0};
+    struct jls_core_chunk_s index_chunk_next = {.offset=0};
+    struct jls_core_chunk_s summary_chunk = {.offset=0};
 
     // find first non-empty level
     int64_t * offsets = track->head_offsets;
     int level = JLS_SUMMARY_LEVEL_COUNT - 1;
     for (; (level > 0); --level) {
         if (offsets[level]) {
-            break;
+            if (0 == jls_raw_chunk_seek(raw, offsets[level])) {
+                break;
+            } else {
+                offsets[level] = 0;
+                track->index_head[level].offset = 0;
+                track->summary_head[level].offset = 0;
+                track->head_offsets[level] = 0;
+            }
         }
     }
 
-    int64_t offset_next = 0;
-    int64_t offset = 0;
-    bool skip_this = false;
-    bool skip_next = false;
+    int64_t offset = offsets[level];
+    int64_t offset_descend_next = 0;
+    int64_t offset_descend = 0;
 
-    for (; level > 0; --level) {
-        JLS_LOGI("repair signal %d, track %d, level %d", signal_id, (int) track->track_type, level);
-        offset = offset_next ? offset_next : offsets[level];
-        skip_next = offset_next;
-        offset_next = 0;
-        index_chunk.offset = 0;
-        summary_chunk.offset = 0;
-        int counter = 0;
-
-        while (offset) {
-            skip_this = skip_next;
-            skip_next = false;
-            JLS_LOGI("repair signal_id %d, level %d, offset %" PRIi64 " %s",
-                     (int) signal_id, (int) level, offset, skip_this ? "skip" : "");
-            // read index and summary chunks
-            if (jls_raw_chunk_seek(raw, offset)) {
-                break;
-            }
-            if (jls_core_rd_chunk(core)) {
-                break;
-            }
-            track->index_head[level] = core->chunk_cur;
-            offset = core->chunk_cur.hdr.item_next;
-            int64_t offset_next_tmp = offset_next;
-
+    while (level > 0) {
+        JLS_LOGI("repair signal_id %d track %d, level %d, offset %" PRIi64,
+                 (int) signal_id, (int) track->track_type, (int) level, offset);
+        bool descend = false;
+        if (jls_raw_chunk_seek(raw, offset) || jls_core_rd_chunk(core)) {  // index
+            descend = true;
+        } else {
+            index_chunk_next = core->chunk_cur;
+            offset_descend_next = 0;
             if (JLS_TRACK_TYPE_FSR == track->track_type) {
                 struct jls_fsr_index_s * r = (struct jls_fsr_index_s *) core->buf->start;
                 if (r->header.entry_count > 0) {
-                    offset_next_tmp = r->offsets[r->header.entry_count - 1];
+                    offset_descend_next = r->offsets[r->header.entry_count - 1];
                 }
             } else {
                 struct jls_index_s * r = (struct jls_index_s *) core->buf->start;
                 if (r->header.entry_count > 0) {
-                    offset_next_tmp = r->entries[r->header.entry_count - 1].offset;
+                    offset_descend_next = r->entries[r->header.entry_count - 1].offset;
                 }
             }
-
             if (jls_core_rd_chunk(core)) {
-                break;
+                descend = true;
+            } else {
+                index_chunk = index_chunk_next;
+                summary_chunk = core->chunk_cur;
+                offset = index_chunk.hdr.item_next;  // next index
+                offset_descend = offset_descend_next;
+                track->index_head[level].offset = index_chunk.offset;
+                track->summary_head[level].offset = summary_chunk.offset;
             }
-            track->summary_head[level] = core->chunk_cur;
-
-            index_chunk = track->index_head[level];
-            summary_chunk = track->summary_head[level];
-            offset_next = offset_next_tmp;
-            ++counter;
         }
 
-        if (counter == 0) {
-            offsets[level] = 0;
-            track->index_head[level].offset = 0;
-            track->summary_head[level].offset = 0;
-        } else {
-            index_chunk.hdr.item_next = 0;
-            jls_core_update_chunk_header(core, &index_chunk);
-            summary_chunk.hdr.item_next = 0;
-            jls_core_update_chunk_header(core, &summary_chunk);
+        if (descend || (0 == offset)) {
+            if (offset_descend && index_chunk.offset && summary_chunk.offset) {
+                JLS_LOGI("descend signal_id %d track %d, level %d, offset %" PRIi64,
+                         (int) signal_id, (int) track->track_type, (int) level, offset_descend);
+                index_chunk.hdr.item_next = 0;
+                summary_chunk.hdr.item_next = 0;
+                jls_core_update_chunk_header(core, &index_chunk);
+                jls_core_update_chunk_header(core, &summary_chunk);
+                offset = offset_descend;
+            } else {
+                JLS_LOGI("restart signal_id %d track %d, level %d, offset %" PRIi64,
+                         (int) signal_id, (int) track->track_type, (int) level, offsets[level - 1]);
+                track->index_head[level].offset = 0;
+                track->summary_head[level].offset = 0;
+                track->head_offsets[level] = 0;
+                offset = offsets[level - 1];
+            }
+            index_chunk.offset = 0;
+            summary_chunk.offset = 0;
+            offset_descend = 0;
+            --level;
         }
     }
 
     // update level 0 (data)
-    offset = offset_next ? offset_next : offsets[0];
     struct jls_core_chunk_s data_chunk = {.offset=0};
     while (offset) {
-        if (jls_core_rd_chunk(core)) {
+        JLS_LOGI("repair signal_id %d track %d, level %d, offset %" PRIi64,
+                 (int) signal_id, (int) track->track_type, (int) level, offset);
+        if (jls_raw_chunk_seek(raw, offset) || jls_core_rd_chunk(core)) {
             if (data_chunk.offset) {
                 data_chunk.hdr.item_next = 0;
                 jls_core_update_chunk_header(core, &summary_chunk);

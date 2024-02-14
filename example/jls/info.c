@@ -120,9 +120,12 @@ int on_info(struct app_s * self, int argc, char * argv[]) {
 
     if (chunks) {
         struct jls_raw_s * raw;
-        ROE(jls_raw_open(&raw, path, "r"));
+        int32_t rc = jls_raw_open(&raw, path, "r");
+        if (rc && (rc != JLS_ERROR_TRUNCATED)) {
+            printf("Could not open for reading chunks\n");
+            return rc;
+        }
 
-        int32_t rc = 0;
         struct jls_chunk_header_s hdr;
 
         /*

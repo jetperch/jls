@@ -46,7 +46,7 @@ static inline uint8_t summary_entry_size(struct jls_core_fsr_s * self) {
     }
 }
 
-static int32_t sample_buffer_alloc(struct jls_core_fsr_s * self) {
+int32_t jls_core_fsr_sample_buffer_alloc(struct jls_core_fsr_s * self) {
     size_t sample_buffer_sz = sizeof(struct jls_payload_header_s) + (sample_size_bits(self) * self->parent->signal_def.samples_per_data) / 8;
     self->data = malloc(sample_buffer_sz);
     if (!self->data) {
@@ -67,7 +67,7 @@ static int32_t sample_buffer_alloc(struct jls_core_fsr_s * self) {
     return 0;
 }
 
-static void sample_buffer_free(struct jls_core_fsr_s * self) {
+void jls_core_fsr_sample_buffer_free(struct jls_core_fsr_s * self) {
     if (self->data) {
         free(self->data);
         self->data = NULL;
@@ -221,14 +221,7 @@ static int32_t wr_summary(struct jls_core_fsr_s * self, uint8_t level) {
                             p_start, payload_len));
     ROE(jls_core_fsr_summaryN(self, level + 1, pos_next));
 
-    // compute new timestamp for that level
-    int64_t skip = dst->summary_entries * self->parent->signal_def.sample_decimate_factor;
-    for (uint8_t lvl = 2; lvl <= level; ++lvl) {
-        skip *= self->parent->signal_def.summary_decimate_factor;
-    }
-    dst->index->header.timestamp += skip;
     dst->index->header.entry_count = 0;
-    dst->summary->header.timestamp += skip;
     dst->summary->header.entry_count = 0;
     return 0;
 }
@@ -264,7 +257,7 @@ int32_t jls_fsr_close(struct jls_core_fsr_s * self) {
                 JLS_LOGE("wr_data returned %" PRIi32, rc);
             }
             JLS_LOGD1("%d sample_buffer free %p", (int) self->parent->signal_def.signal_id, (void *) self->data);
-            sample_buffer_free(self);
+            jls_core_fsr_sample_buffer_free(self);
         }
 
         for (size_t i = 1; i < JLS_SUMMARY_LEVEL_COUNT; ++i) {
@@ -356,7 +349,12 @@ int32_t jls_core_fsr_summaryN(struct jls_core_fsr_s * self, uint8_t level, int64
         dst = self->level[level];
     }
 
-    JLS_LOGD2("jls_core_fsr_summaryN %d: %" PRIu32 " %" PRIi64, (int) level, dst->index->header.entry_count, pos);
+    JLS_LOGD2("jls_core_fsr_summaryN %d: entries=%" PRIu32 ", offset=%" PRIi64 ", sample_id=%" PRIi64,
+              (int) level, dst->index->header.entry_count, pos, dst->index->header.timestamp);
+    if (0 == dst->index->header.entry_count) {
+        dst->index->header.timestamp = src->index->header.timestamp;
+        dst->summary->header.timestamp = src->summary->header.timestamp;
+    }
     dst->index->offsets[dst->index->header.entry_count++] = pos;
 
     uint32_t summaries_per = (uint32_t) (src->summary->header.entry_count / self->parent->signal_def.summary_decimate_factor);
@@ -392,6 +390,10 @@ int32_t jls_core_fsr_summary1(struct jls_core_fsr_s * self, int64_t pos) {
 
     double * data = self->data_f64;
     // JLS_LOGI("1 add %" PRIi64 " @ %" PRIi64 " %p", pos, dst->index->offset, &dst->index->data[dst->index->offset]);
+    if (0 == dst->index->header.entry_count) {
+        dst->index->header.timestamp = self->data->header.timestamp;
+        dst->summary->header.timestamp = self->data->header.timestamp;
+    }
     dst->index->offsets[dst->index->header.entry_count++] = pos;
 
     uint32_t summaries_per = (uint32_t) (self->data->header.entry_count / self->parent->signal_def.sample_decimate_factor);
@@ -502,7 +504,7 @@ int32_t jls_wr_fsr_data(struct jls_core_fsr_s * self, int64_t sample_id, const v
     }
 
     if (!self->data) {
-        ROE(sample_buffer_alloc(self));
+        ROE(jls_core_fsr_sample_buffer_alloc(self));
         self->sample_id_offset = sample_id;  // can be nonzero
         self->data->header.timestamp = sample_id;
     }

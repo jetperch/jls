@@ -124,6 +124,15 @@ int32_t jls_rd_open(struct jls_rd_s ** instance, const char * path) {
                     jls_track_repair_pointers(&signal_info->tracks[track_idx]);
                 }
             }
+        }
+
+        GOE(jls_core_scan_fsr_sample_id(core));
+
+        for (uint16_t signal_idx = 0; signal_idx < JLS_SIGNAL_COUNT; ++signal_idx) {
+            struct jls_core_signal_s * signal_info = &core->signal_info[signal_idx];
+            if (signal_info->signal_def.signal_id != signal_idx) {
+                continue;
+            }
 
             if (signal_info->signal_def.signal_type == JLS_SIGNAL_TYPE_FSR) {
                 GOE(jls_core_repair_fsr(core, signal_idx));
@@ -238,7 +247,7 @@ static inline void f64_to_stats(struct jls_statistics_s * stats, const double * 
 static int32_t rd_stats_chunk(struct jls_core_s * self, uint16_t signal_id, uint8_t level) {
     ROE(jls_core_rd_chunk(self));
     if (JLS_TAG_TRACK_FSR_SUMMARY != self->chunk_cur.hdr.tag) {
-        JLS_LOGW("unexpected chunk tag %d", (int) self->chunk_cur.hdr.tag);
+        JLS_LOGW("unexpected chunk tag %d at %" PRIi64, (int) self->chunk_cur.hdr.tag, self->chunk_cur.offset);
         return JLS_ERROR_IO;
     }
     uint16_t metadata = (signal_id & SIGNAL_MASK) | (((uint16_t) level) << 12);

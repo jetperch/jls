@@ -237,6 +237,8 @@ int32_t jls_core_scan_initial(struct jls_core_s * self);
 int32_t jls_core_sources(struct jls_core_s * self, struct jls_source_def_s ** sources, uint16_t * count);
 int32_t jls_core_signals(struct jls_core_s * self, struct jls_signal_def_s ** signals, uint16_t * count);
 int32_t jls_core_signal(struct jls_core_s * self, uint16_t signal_id, struct jls_signal_def_s * signal);
+int32_t jls_core_fsr_sample_buffer_alloc(struct jls_core_fsr_s * self);
+void jls_core_fsr_sample_buffer_free(struct jls_core_fsr_s * self);
 int32_t jls_core_fsr_seek(struct jls_core_s * self, uint16_t signal_id, uint8_t level, int64_t sample_id);
 int32_t jls_core_fsr_length(struct jls_core_s * self, uint16_t signal_id, int64_t * samples);
 int32_t jls_core_fsr(struct jls_core_s * self, uint16_t signal_id, int64_t start_sample_id,
