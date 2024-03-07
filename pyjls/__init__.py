@@ -17,6 +17,7 @@ from .binding import DataType, AnnotationType, SignalType, Writer, Reader, Summa
     data_type_as_enum, data_type_as_str, \
     utc_to_jls, jls_to_utc
 from .structs import SourceDef, SignalDef
+from . import time64
 from .version import *
 
 __all__ = ['Writer', 'Reader', 'DataType', 'AnnotationType',
@@ -24,6 +25,7 @@ __all__ = ['Writer', 'Reader', 'DataType', 'AnnotationType',
            'copy',
            'data_type_as_enum', 'data_type_as_str',
            'utc_to_jls', 'jls_to_utc',
+           'time64',
            '__version__', '__title__', '__description__', '__url__',
            '__author__', '__author_email__', '__license__',
            '__copyright__']

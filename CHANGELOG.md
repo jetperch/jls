@@ -4,6 +4,13 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.9.3
+
+2024 Mar 7
+
+* Added "export" python subcommand.
+
+
 ## 0.9.2
 
 2024 Feb 14

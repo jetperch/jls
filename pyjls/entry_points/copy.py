@@ -53,7 +53,7 @@ def _on_progress(fract, message=None):
 
 
 def parser_config(p):
-    """Plot JLS file data contents for FSR signals."""
+    """Copy a JLS file by replaying the data.  May recover corrupted files."""
     p.add_argument('src',
                    help='JLS input filename')
     p.add_argument('dst',
