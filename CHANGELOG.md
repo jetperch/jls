@@ -4,6 +4,13 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.9.4
+
+2024 May 10
+
+* Fixed unicode filename support on Windows  #12
+
+
 ## 0.9.3
 
 2024 Mar 7

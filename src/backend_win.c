@@ -15,6 +15,7 @@
  */
 
 #include "jls/backend.h"
+#include "jls/cdef.h"
 #include "jls/wr_prv.h"
 #include "jls/ec.h"
 #include "jls/log.h"
@@ -42,6 +43,8 @@ struct jls_twr_s {
 // https://docs.microsoft.com/en-us/cpp/c-runtime-library/low-level-i-o?view=msvc-160
 // The C standard library only gets in the way for JLS.
 int32_t jls_bk_fopen(struct jls_bkf_s * self, const char * filename, const char * mode) {
+    // https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation?tabs=registry
+    wchar_t filename_wide[32768];
     int oflag;
     int shflag;
 
@@ -61,7 +64,10 @@ int32_t jls_bk_fopen(struct jls_bkf_s * self, const char * filename, const char 
         default:
             return JLS_ERROR_PARAMETER_INVALID;
     }
-    errno_t err = _sopen_s(&self->fd, filename, oflag, shflag, _S_IREAD | _S_IWRITE);
+    if (!MultiByteToWideChar(CP_UTF8, 0, filename, -1, filename_wide, JLS_ARRAY_SIZE(filename_wide))) {
+        return JLS_ERROR_IO;
+    }
+    errno_t err = _wsopen_s(&self->fd, filename_wide, oflag, shflag, _S_IREAD | _S_IWRITE);
     if (err != 0) {
         JLS_LOGW("open failed with %d: filename=%s, mode=%s", err, filename, mode);
         return JLS_ERROR_IO;
