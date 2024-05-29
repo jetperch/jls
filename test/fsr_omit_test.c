@@ -228,7 +228,7 @@ static void test_u4(void **state) {
     memset(u4_fsr, 0, sizeof(u4_fsr));
     assert_int_equal(0, jls_rd_fsr(rd, 3, 65535, u4_fsr, 16));
     for (int64_t i = 0; i < 8; ++i) {
-        printf("%lld 0x%02x\n", 65534 + i * 2, u4_fsr[i]);
+        // printf("%lld 0x%02x\n", 65534 + i * 2, u4_fsr[i]);
         assert_true((u4_fsr[i] & 0x0f) >= 3);
     }
 
