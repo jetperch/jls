@@ -17,6 +17,6 @@
 
 check-manifest>=0.37
 Cython>=0.29.3                          # C native build
-numpy>=1.23
+numpy>=1.23,<2
 pywin32; platform_system=='Windows'
 wheel
