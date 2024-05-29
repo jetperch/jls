@@ -954,7 +954,7 @@ static int32_t reconstruct_omitted_chunk(struct jls_core_s * self, uint16_t sign
             uint8_t value = (uint8_t) roundf(mu32);
             memset(d, value, sz_bytes);
         } else if (signal_def->data_type == JLS_DATATYPE_U4) {
-            uint8_t value = ((uint8_t) roundf(mu32)) & 0x04;
+            uint8_t value = ((uint8_t) roundf(mu32)) & 0x0F;
             value |= (value << 4);
             memset(d, value, sz_bytes);
         } else if (signal_def->data_type == JLS_DATATYPE_U1) {

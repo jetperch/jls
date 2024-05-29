@@ -61,6 +61,21 @@ const struct jls_signal_def_s SIGNAL_1 = {
         .units = "A",
 };
 
+const struct jls_signal_def_s SIGNAL_3 = {
+        .signal_id = 3,
+        .source_id = 1,
+        .signal_type = JLS_SIGNAL_TYPE_FSR,
+        .data_type = JLS_DATATYPE_U4,
+        .sample_rate = 2000000,
+        .samples_per_data = 65536,
+        .sample_decimate_factor = 1024,
+        .entries_per_summary = 1280,
+        .summary_decimate_factor = 20,
+        .annotation_decimate_factor = 100,
+        .utc_decimate_factor = 100,
+        .name = "current_range",
+        .units = "",
+};
 #define WINDOW_SIZE (937)
 
 
@@ -179,6 +194,43 @@ static void test_summary(void **state) {
     // remove(filename);
 }
 
+static void test_u4(void **state) {
+    (void) state;
+    struct jls_wr_s * wr = NULL;
+    size_t sz_samples = 6000000;
+    size_t sz_bytes = sz_samples / 2;
+    uint8_t * data = malloc(sz_bytes);
+    data = memset(data, 0x33, sz_bytes);
+    for (size_t i = 1000000; i < 1010000; ++i) {
+        data[i] = 0x44;
+    }
+    for (size_t i = 2000000; i < 2010000; ++i) {
+        data[i] = 0x44;
+    }
+
+    assert_int_equal(0, jls_wr_open(&wr, filename));
+    assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_1));
+    assert_int_equal(0, jls_wr_signal_def(wr, &SIGNAL_3));
+    assert_int_equal(0, jls_wr_fsr(wr, 3, 0, data, sz_samples));
+    assert_int_equal(0, jls_wr_close(wr));
+
+    struct jls_rd_s * rd = NULL;
+    assert_int_equal(0, jls_rd_open(&rd, filename));
+
+    uint8_t *u4_fsr = malloc(100000);
+    assert_int_equal(0, jls_rd_fsr(rd, 3, 65534, u4_fsr, 4));
+    for (int64_t i = 0; i < 4; ++i) {
+        assert_true((u4_fsr[i] & 0x0f) >= 3);
+    }
+
+    int64_t len = 2200;
+    double * f64_stats = malloc(len * 4 * sizeof(double));
+    assert_int_equal(0, jls_rd_fsr_statistics(rd, 3, 0, 1000, f64_stats, len));
+    for (int64_t i = 0; i < len; ++i) {
+        assert_true(f64_stats[4 * i] > 2.5);
+    }
+}
+
 static void on_log_recv(const char * msg) {
     printf("%s", msg);
 }
@@ -187,6 +239,7 @@ int main(void) {
     const struct CMUnitTest tests[] = {
             cmocka_unit_test(test_samples),
             cmocka_unit_test(test_summary),
+            cmocka_unit_test(test_u4),
     };
 
     jls_log_register(on_log_recv);

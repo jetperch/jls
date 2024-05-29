@@ -4,6 +4,13 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.9.5
+
+2024 May 29
+
+* Fixed u4 data type reconstruction when omitted for compression  #13
+
+
 ## 0.9.4
 
 2024 May 10
