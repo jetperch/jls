@@ -1116,6 +1116,10 @@ int32_t jls_core_fsr(struct jls_core_s * self, uint16_t signal_id, int64_t start
                     if (data_length > sz_samples) {
                         data_length += 8;
                     }
+                } else if ((4 == entry_size_bits) && (sz_samples == 1)) {
+                    data_length -= sz_samples;
+                    start_sample_id += sz_samples;
+                    continue;
                 }
             }
         }

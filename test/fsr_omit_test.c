@@ -217,9 +217,18 @@ static void test_u4(void **state) {
     struct jls_rd_s * rd = NULL;
     assert_int_equal(0, jls_rd_open(&rd, filename));
 
-    uint8_t *u4_fsr = malloc(100000);
-    assert_int_equal(0, jls_rd_fsr(rd, 3, 65534, u4_fsr, 4));
-    for (int64_t i = 0; i < 4; ++i) {
+    uint8_t u4_fsr[16];
+    memset(u4_fsr, 0, sizeof(u4_fsr));
+    assert_int_equal(0, jls_rd_fsr(rd, 3, 65534, u4_fsr, 16));
+    for (int64_t i = 0; i < 8; ++i) {
+        // printf("%lld 0x%02x\n", 65534 + i * 2, u4_fsr[i]);
+        assert_true((u4_fsr[i] & 0x0f) >= 3);
+    }
+
+    memset(u4_fsr, 0, sizeof(u4_fsr));
+    assert_int_equal(0, jls_rd_fsr(rd, 3, 65535, u4_fsr, 16));
+    for (int64_t i = 0; i < 8; ++i) {
+        printf("%lld 0x%02x\n", 65534 + i * 2, u4_fsr[i]);
         assert_true((u4_fsr[i] & 0x0f) >= 3);
     }
 
