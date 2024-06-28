@@ -9,6 +9,7 @@ This file contains the list of changes made to the JLS project.
 2024 Jun 28
 
 * Fixed issue with stop time in extract entry point.
+* Pinned numpy < 2 for build environment.
 
 
 ## 0.9.5
