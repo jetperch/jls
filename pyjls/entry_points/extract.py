@@ -120,9 +120,9 @@ def on_cmd(args):
         try:
             t64_stop = time64.as_time64(datetime.fromisoformat(args.stop))
         except Exception:
-            t64_stop = time64.duration_to_seconds(args.stop)
+            t64_stop = t64_start_limit + int(time64.duration_to_seconds(args.stop) * time64.SECOND)
     t64_start_limit_str = time64.as_datetime(t64_start_limit).isoformat()
-    t64_stop_limit_str = time64.as_datetime(t64_start_limit).isoformat()
+    t64_stop_limit_str = time64.as_datetime(t64_stop).isoformat()
     t_start_str = time64.as_datetime(t64_start).isoformat()
     t_stop_str = time64.as_datetime(t64_stop).isoformat()
     if not t64_start_limit <= t64_start < t64_stop_limit:

@@ -4,6 +4,13 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.9.6
+
+2024 Jun 28
+
+* Fixed issue with stop time in extract entry point.
+
+
 ## 0.9.5
 
 2024 May 29
