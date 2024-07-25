@@ -1,4 +1,4 @@
-# Copyright 2021-2022 Jetperch LLC
+# Copyright 2021-2024 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from pyjls import Reader, SignalType, SummaryFSR
+from pyjls import Reader, SignalType, SummaryFSR, time64
 import logging
 import numpy as np
 import sys
@@ -57,6 +57,10 @@ def on_cmd(args):
             signals = [s for s in r.signals.values()]
         signals = [s for s in signals if s.signal_type == SignalType.FSR]
         ax1, ax = None, None
+
+        # find the earliest starting time for any signal (time64)
+        t_plot_start = min([r.sample_id_to_timestamp(signal.signal_id, 0) for signal in signals])
+
         for idx, signal in enumerate(signals):
             ax = f.add_subplot(len(signals), 1, idx + 1, sharex=ax1)
             if ax1 is None:
@@ -67,7 +71,13 @@ def on_cmd(args):
             incr = signal.length // args.sample_count
             length = signal.length // incr
             data = r.fsr_statistics(signal.signal_id, 0, incr, length)
-            x = np.arange(0, length, dtype=np.float64) * (incr / signal.sample_rate)
+
+            # compute each sample's time relative to t_plot_start (float seconds)
+            t_start = (r.sample_id_to_timestamp(signal.signal_id, 0) - t_plot_start) / time64.SECOND
+            s_end = (length - 1) * incr
+            t_end = (r.sample_id_to_timestamp(signal.signal_id, s_end) - t_plot_start) / time64.SECOND
+            x = np.linspace(t_start, t_end, length, dtype=np.float64)
+
             if not args.hide_min_max:
                 ax.fill_between(x, data[:, SummaryFSR.MAX], data[:, SummaryFSR.MIN], alpha=0.2)
             ax.plot(x, data[:, SummaryFSR.MEAN])
