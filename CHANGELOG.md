@@ -6,7 +6,7 @@ This file contains the list of changes made to the JLS project.
 
 ## 0.9.7
 
-2024 Jul 24
+2024 Jul 25
 
 * Fixed plot entry point to time align signals.
 
