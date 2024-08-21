@@ -35,6 +35,9 @@ def parser_config(p):
     p.add_argument('--length',
                    type=int,
                    help='The number of samples to export.')
+    p.add_argument('--timestamp',
+                   action='store_true',
+                   help='Include a timestamp column (valid for csv, ignored otherwise).')
     p.add_argument('outfile',
                    help='The output filename.  Supported extensions are bin, csv')
     return on_cmd
@@ -43,9 +46,9 @@ def parser_config(p):
 def on_cmd(args):
     _, outfile_extension = os.path.splitext(args.outfile)
     if args.outfile.endswith('.csv'):
-        outfile_sep = '\n'
+        filetype = 'csv'
     elif args.outfile.endswith('.bin'):
-        outfile_sep = ''
+        filetype = 'bin'
     else:
         print(f'Unsupported outfile extension: {outfile_extension}')
         return 1
@@ -66,12 +69,23 @@ def on_cmd(args):
             length = new_length
 
         nan_count = 0
+        offset = 0
         with open(args.outfile, 'wb') as f:
             while length > 0:
                 k = _BLOCK_SIZE if length > _BLOCK_SIZE else length
                 data = r.fsr(signal.signal_id, start, k)
                 nan_count += np.count_nonzero(np.isnan(data))
-                data.tofile(f, sep=outfile_sep)
+                if filetype == 'csv':
+                    if args.timestamp:
+                        t = np.arange(offset, offset + k, dtype=float)
+                        t *= 1 / signal.sample_rate
+                        data = np.concatenate((t.reshape(-1, 1), data.reshape(-1, 1)), axis=1)
+                        np.savetxt(f, data, delimiter=',')
+                    else:
+                        np.savetxt(f, data.reshape((-1, 1)))
+                else:
+                    data.tofile(f)
                 start += k
                 length -= k
+                offset += k
         print(f'nan count = {nan_count}')

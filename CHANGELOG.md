@@ -11,6 +11,7 @@ This file contains the list of changes made to the JLS project.
 * Improved Python binding to simplify finding sources and signals.
   * Added pyjls.source_lookup.
   * Improved pyjls.signal_lookup to support '<source_name>.<signal_name>' format.
+* Added "--timestamp" option to export to add relative time to CSV output.
 
 
 ## 0.9.7
