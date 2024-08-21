@@ -418,7 +418,20 @@ struct jls_signal_def_s {       // 0 reserved for VSR annotations
     uint32_t utc_decimate_factor;       ///< The UTC decimate factor for summaries.
     int64_t sample_id_offset;           ///< The sample id offset for the first sample.  (FSR only)
     // on disk: reserve 64 bytes as 0 for future use
-    const char * name;                  ///< The signal name
+
+    /**
+     * @brief The signal name.
+     *
+     * While C supports all possible names, language bindings
+     * may simplify signal lookup.  The Python pyjls package
+     * allows lookup by "source_name.signal_name" and "signal_id".
+     *
+     * For full compatibility:
+     * 1. Avoid names convertable to integers
+     * 2. Avoid names with '.' characters
+     * 3. Use ASCII or valid UTF-8 encoding
+     */
+    const char * name;
     const char * units;                 ///< The units string, normally as SI with no scale prefix.
 };
 

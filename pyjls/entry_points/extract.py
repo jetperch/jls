@@ -87,15 +87,14 @@ def on_cmd(args):
     t_start = []
     t_stop = []
     signals = {}
-    valid_signals = None if args.signals is None else set(args.signals.split(','))
+    if args.signals is None:
+        valid_signal_ids = None
+    else:
+        valid_signal_ids = [r.signal_lookup(s).signal_id for s in set(args.signals.split(','))]
     for signal in r.signals.values():
         if signal.source_id not in sources:
             continue
-        source_name = sources[signal.source_id].name
-        variations = [signal.name, str(signal.signal_id),
-                      f'{signal.source_id}.{signal.name}', f'{signal.source_id}.{signal.signal_id}',
-                      f'{source_name}.{signal.name}', f'{source_name}.{signal.signal_id}']
-        if valid_signals is None or not valid_signals.isdisjoint(variations):
+        if valid_signal_ids is None or not signal.signal_id not in valid_signal_ids:
             signals[signal.signal_id] = signal
             t_start.append(r.sample_id_to_timestamp(signal.signal_id, 0))
             t_stop.append(r.sample_id_to_timestamp(signal.signal_id, signal.length - 1))

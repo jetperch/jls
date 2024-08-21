@@ -605,19 +605,70 @@ cdef class Reader:
         """Return the dict mapping signal_id to SignalDef."""
         return self._signals
 
-    def signal_lookup(self, spec) -> SignalDef:
-        """Look up a signal.
+    def source_lookup(self, spec) -> SourceDef:
+        """Look up a source.
 
-        :param spec: The signal id or name.
-        :return: The signal definition:
+        :param spec: The source specification as one of:
+            * source name (str).
+            * source id (numeric or str convertable using int())
+        :return: The source definition:
         :raise ValueError: If not found.
         """
         try:
-            return self._signals[int(spec)]
-        except ValueError:
-            for s in self._signals.values():
+            for s in self._sources.values():
                 if s.name == spec:
                     return s
+        except Exception:
+            pass
+        try:
+            return self._sources[int(spec)]
+        except Exception:
+            pass
+        raise ValueError(f'signal_lookup failed for {spec}')
+
+    def _signal_lookup_parts(self, source_spec, signal_spec) -> SignalDef:
+        try:
+            signal_id = int(signal_spec)
+        except Exception:
+            signal_id = None
+        source = self.source_lookup(source_spec)
+        for s in self._signals.values():
+            if s.source_id == source.source_id and (s.name == signal_spec or s.signal_id == signal_id):
+                return s
+        raise ValueError(f'_signal_lookup_parts({source_spec}, {signal_spec}) failed')
+
+    def _signal_lookup_str(self, spec: str) -> SignalDef:
+        for s in self._signals.values():
+            if s.name == spec:
+                return s
+        parts = spec.split('.')
+        if len(parts) != 2:
+            raise ValueError('_signal_lookup_str({spec}) could not split')
+        return self._signal_lookup_parts(*parts)
+
+    def signal_lookup(self, spec) -> SignalDef:
+        """Look up a signal.
+
+        :param spec: The signal specification as one of:
+            * signal name (str)
+            * signal id (numeric or str convertable using int())
+            * '<source_name>.<signal_name>'
+            * [<source_spec>, '<signal_name>']
+        :return: The signal definition.
+        :raise ValueError: If not found.
+        """
+        try:
+            return self._signal_lookup_str(spec)
+        except Exception:
+            pass
+        try:
+            return self._signals[int(spec)]
+        except Exception:
+            pass
+        try:
+            return self._signal_lookup_parts(*spec)
+        except Exception:
+            pass
         raise ValueError(f'signal_lookup failed for {spec}')
 
     def fsr(self, signal_id, start_sample_id, length):

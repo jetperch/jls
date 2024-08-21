@@ -1,4 +1,4 @@
-# Copyright 2021-2022 Jetperch LLC
+# Copyright 2021-2024 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the 'License');
 # you may not use this file except in compliance with the License.
@@ -260,3 +260,30 @@ class TestBinding(unittest.TestCase):
             self.assertTrue(os.path.isfile(dst.name))
             os.remove(dst.name)
         self.assertEqual(1.0, progresses[-1])
+
+    def test_signal_lookup(self):
+        with Writer(self._path) as w:
+            w.source_def(source_id=1, name='src1', vendor='vendor', model='model',
+                         version='version', serial_number='serial_number')
+            w.source_def(source_id=2, name='src2', vendor='vendor', model='model',
+                         version='version', serial_number='serial_number')
+            w.signal_def(3, source_id=1, sample_rate=1000000, name='current', units='A')
+            w.signal_def(4, source_id=2, sample_rate=1000000, name='current', units='A')
+            # be unfriendly/confusing and give string name as another signal_id
+            w.signal_def(5, source_id=2, sample_rate=1000000, name='4', units='A')
+
+        with Reader(self._path) as r:
+            self.assertEqual(1, r.source_lookup(1).source_id)
+            self.assertEqual(1, r.source_lookup('1').source_id)
+            self.assertEqual(1, r.source_lookup('src1').source_id)
+
+            signal = r.signal_lookup('current')
+            self.assertEqual(3, signal.signal_id)
+            self.assertEqual(3, r.signal_lookup(3).signal_id)
+            self.assertEqual(3, r.signal_lookup('3').signal_id)
+            self.assertEqual(3, r.signal_lookup('src1.current').signal_id)
+            self.assertEqual(4, r.signal_lookup('src2.current').signal_id)
+            self.assertEqual(4, r.signal_lookup(['src2', 'current']).signal_id)
+            self.assertEqual(4, r.signal_lookup([2, 'current']).signal_id)
+            self.assertEqual(4, r.signal_lookup([2, 4]).signal_id)
+            self.assertEqual(5, r.signal_lookup('4').signal_id)
