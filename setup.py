@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2018-2022 Jetperch LLC
+# Copyright 2018-2024 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -173,6 +173,7 @@ setuptools.setup(
         'Programming Language :: Python :: 3.10',
         'Programming Language :: Python :: 3.11',
         'Programming Language :: Python :: 3.12',
+        'Programming Language :: Python :: 3.13',
         'Programming Language :: Python :: Implementation :: CPython',
         
         # Topics
@@ -197,7 +198,7 @@ setuptools.setup(
 
     # See https://packaging.python.org/en/latest/requirements.html
     install_requires=[
-        'numpy>=1.23,<2',
+        'numpy>=2.1.0,<3',
         "pywin32; platform_system=='Windows'",
     ],
 

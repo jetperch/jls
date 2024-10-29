@@ -1,4 +1,4 @@
-# Copyright 2018-2022 Jetperch LLC
+# Copyright 2018-2024 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 # https://pip.pypa.io/en/latest/reference/requirements-file-format/#requirements-file-format
 
 check-manifest>=0.37
-Cython>=0.29.3                          # C native build
-numpy>=1.23,<2
+Cython>=3.0                          # C native build
+numpy>=2.1.0,<3
 pywin32; platform_system=='Windows'
 wheel

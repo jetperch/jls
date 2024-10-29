@@ -4,6 +4,14 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.11.0
+
+2024 Oct 29
+
+* Migrated to numpy 2.
+* Added Python 3.13 support.
+
+
 ## 0.10.0
 
 2024 Aug 21
