@@ -1,4 +1,4 @@
-# Copyright 2021-2022 Jetperch LLC
+# Copyright 2021-2024 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -471,6 +471,7 @@ cdef class Writer:
         :param timestamp: The x-axis timestamp in sample_id for FSR and UTC for VSR.
         :param y: The y-axis value or NAN to automatically position.
         :param annotation_type: The annotation type.
+        :param group_id: The optional group identifier.  If unused, set to 0.
         :param data: The data for the annotation.
         :raise: On error.
         """

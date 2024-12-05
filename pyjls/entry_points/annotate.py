@@ -1,4 +1,4 @@
-# Copyright 2021-2022 Jetperch LLC
+# Copyright 2021-2024 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -46,6 +46,9 @@ def on_cmd(args):
             for signal in signals:
                 if signal.signal_id:
                     w.signal_def_from_struct(signal)
+                    for sample_id in [0, signal.length - 1]:
+                        t_utc = r.sample_id_to_timestamp(signal.signal_id, sample_id)
+                        w.utc(signal.signal_id, sample_id, t_utc)
         signal = signals[1]  # for now
         generator = np.random.default_rng()
         timestamps = generator.integers(0, signal.length, 12)
@@ -56,11 +59,11 @@ def on_cmd(args):
             anno_type = idx % 4
             if anno_type <= 1:
                 event_str = np.random.choice(event_strs)
-                w.annotation(signal.signal_id, timestamp, AnnotationType.TEXT, 0, None, event_str)
+                w.annotation(signal.signal_id, timestamp, 0, AnnotationType.TEXT, 0, event_str)
             elif anno_type == 2:
-                w.annotation(signal.signal_id, timestamp, AnnotationType.MARKER, 0, None, str(marker_idx))
+                w.annotation(signal.signal_id, timestamp, 0, AnnotationType.VMARKER, 0, str(marker_idx))
                 marker_idx += 1
             elif anno_type == 3:
-                w.annotation(signal.signal_id, timestamp, AnnotationType.MARKER, 0, None, f'{marker_idx}a')
-                w.annotation(signal.signal_id, timestamp + 100, AnnotationType.MARKER, 0, None, f'{marker_idx}b')
+                w.annotation(signal.signal_id, timestamp, 0, AnnotationType.VMARKER, 0, f'{marker_idx}a')
+                w.annotation(signal.signal_id, timestamp + 100, np.nan, AnnotationType.VMARKER, 0, f'{marker_idx}b')
                 marker_idx += 1

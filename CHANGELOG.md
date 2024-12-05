@@ -4,6 +4,14 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.11.1
+
+2024 Dec 5
+
+* Added "group_id" documentation to pyjls.Writer.annotate.
+* Fixed annotate entry point.
+
+
 ## 0.11.0
 
 2024 Oct 29
