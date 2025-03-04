@@ -185,8 +185,11 @@ enum jls_annotation_type_e {
      *
      * Marker names can be arbitrary, but the convention is:
      * - Number strings, like "1", represent a single marker.
-     * - Alpha + number string, like "A1" and "A2", represent
+     * - Number + a/b string, like "1a" and "1b", represent
      *   a marker pair (dual markers).
+     * The name should be UTF-8 encoded.
+     * The marker name can be followed by file separator ASCII 28 (0x1C)
+     * and then followed by application-specific JSON-formatted metadata.
      * The jls_storage_type_e must be STRING.
      */
     JLS_ANNOTATION_TYPE_VERTICAL_MARKER = 2,
@@ -196,7 +199,7 @@ enum jls_annotation_type_e {
      *
      * Marker names can be arbitrary, but the convention is:
      * - Number strings, like "1", represent a single marker.
-     * - Alpha + number string, like "A1" and "A2", represent
+     * - Number string + a/b string, like "1a" and "1b", represent
      *   a marker pair (dual markers).
      * The jls_storage_type_e must be STRING.
      */
