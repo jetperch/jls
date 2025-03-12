@@ -1,4 +1,4 @@
-# Copyright 2021-2024 Jetperch LLC
+# Copyright 2021-2025 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -30,8 +30,12 @@ env:
 jobs:
 
   build_native_win:
-    name: Build native on windows-latest
-    runs-on: windows-latest
+    name: Build native on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ["windows-latest", "windows-arm-latest"]
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -55,7 +59,7 @@ jobs:
       - name: Upload binaries
         uses: actions/upload-artifact@v4
         with:
-          name: windows-latest
+          name: ${{ matrix.os }}
           path: |
             cmake_build_static/example/Release/jls.exe
             cmake_build_dyn/src/Release/jls.*
@@ -66,7 +70,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ["ubuntu-latest", "macos-latest"]
+        os: ["ubuntu-latest", "ubuntu-arm-latest", "macos-latest"]
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -144,7 +148,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ["ubuntu-latest", "windows-latest", "macos-latest"]
+        os: ["ubuntu-latest", "windows-latest", "macos-latest", "ubuntu-arm-latest", "windows-arm-latest"]
         python_version: ["cp310", "cp311", "cp312", "cp313"]
 
     steps:
@@ -160,11 +164,11 @@ jobs:
         run: echo "filename=$(ls dist/*.tar.gz)" >> $GITHUB_OUTPUT
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v2.21.3
+        uses: pypa/cibuildwheel@v2.23.0
         env:
           CIBW_ARCHS_MACOS: universal2
           CIBW_ARCHS_WINDOWS: native
-          CIBW_ARCHS_LINUX: x86_64
+          CIBW_ARCHS_LINUX: native
           # skip PyPy: Cython only supports CPython
           # skip musllinux: build takes too long with default os images.
           CIBW_SKIP: 'pp* *musllinux*'
