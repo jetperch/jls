@@ -4,7 +4,7 @@
 This file contains the list of changes made to the JLS project.
 
 
-## 0.12.0
+## 0.12.1
 
 2025 Mar 27
 
