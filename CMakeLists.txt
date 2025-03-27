@@ -47,7 +47,7 @@ message(STATUS "CMAKE_C_COMPILER_ID = ${CMAKE_C_COMPILER_ID}")
 
 if (NOT JLS_OPTIMIZE_CRC)
     message(STATUS "skip crc optimizations")
-    add_definitions(JLS_OPTIMIZE_CRC_DISABLE=1)
+    add_definitions(-DJLS_OPTIMIZE_CRC_DISABLE=1)
 elseif (WIN32)
     message(STATUS "windows")
     # msse4.2 always enabled
@@ -63,7 +63,7 @@ elseif (UNIX)
     elseif (FEATURE_CRC_SUPPORTED)
         add_definitions(-mcrc)
     else()
-        add_definitions(JLS_OPTIMIZE_CRC_DISABLE=1)
+        add_definitions(-DJLS_OPTIMIZE_CRC_DISABLE=1)
     endif()
 endif()
 
