@@ -8,7 +8,7 @@ This file contains the list of changes made to the JLS project.
 
 2025 Mar 27
 
-* Added Windows and Linux ARM64 builds.
+* Added Linux ARM64 builds.
 
 
 ## 0.11.1
