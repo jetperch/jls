@@ -1,4 +1,4 @@
-# Copyright 2021-2022 Jetperch LLC
+# Copyright 2021-2025 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -145,14 +145,16 @@ cdef extern from "jls/reader.h":
     ctypedef int32_t (*jls_rd_utc_cbk_fn)(void * user_data, const jls_utc_summary_entry_s * utc, uint32_t size)
     int32_t jls_rd_utc(jls_rd_s * self, uint16_t signal_id, int64_t sample_id,
                        jls_rd_utc_cbk_fn cbk_fn, void * cbk_user_data) nogil
+    size_t jls_rd_tmap_length(jls_rd_s * self, uint16_t signal_id)
     int32_t jls_rd_sample_id_to_timestamp(jls_rd_s * self, uint16_t signal_id,
                                           int64_t sample_id, int64_t * timestamp)
     int32_t jls_rd_timestamp_to_sample_id(jls_rd_s * self, uint16_t signal_id,
                                           int64_t timestamp, int64_t * sample_id)
+    int32_t jls_rd_tmap_get(jls_rd_s * self, uint16_t signal_id, size_t index, jls_utc_summary_entry_s * entry)
 
 cdef extern from "jls/copy.h":
-    ctypedef int32_t (*jls_copy_msg_fn)(void * user_data, const char * msg);
-    ctypedef int32_t (*jls_copy_progress_fn)(void * user_data, double progress);
+    ctypedef int32_t (*jls_copy_msg_fn)(void * user_data, const char * msg)
+    ctypedef int32_t (*jls_copy_progress_fn)(void * user_data, double progress)
     int32_t jls_copy(const char * src, const char * dst,
                      jls_copy_msg_fn msg_fn, void * msg_user_data,
-                     jls_copy_progress_fn progress_fn, void * progress_user_data);
+                     jls_copy_progress_fn progress_fn, void * progress_user_data)

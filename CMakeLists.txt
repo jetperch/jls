@@ -1,4 +1,4 @@
-# Copyright 2014-2022 Jetperch LLC
+# Copyright 2014-2025 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@ cmake_minimum_required (VERSION 3.10)
 set(PARENT_PROJECT_DIR ${PROJECT_SOURCE_DIR})
 set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "" FORCE)  # universal2
 project(JLS
-        VERSION 0.12.1
+        VERSION 0.13.0
         LANGUAGES C)
 SET(PROJECT_PREFIX JLS)
 SET(VERSION_STRING "${PROJECT_VERSION}")

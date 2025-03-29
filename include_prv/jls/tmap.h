@@ -1,5 +1,5 @@
 /*
- * Copyright 2023 Jetperch LLC
+ * Copyright 2023-2025 Jetperch LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -52,9 +52,18 @@ void jls_tmap_free(struct jls_tmap_s * self);
 
 int32_t jls_tmap_add_cbk(void * user_data, const struct jls_utc_summary_entry_s * utc, uint32_t size);
 int32_t jls_tmap_add(struct jls_tmap_s * self, int64_t sample_id, int64_t timestamp);
+
+/**
+ * @brief Get the current number of entries in the time map.
+ *
+ * @param self The instance
+ * @return The number of entries in this instance.
+ */
+size_t jls_tmap_length(struct jls_tmap_s * self);
+
 int32_t jls_tmap_sample_id_to_timestamp(struct jls_tmap_s * self, int64_t sample_id, int64_t * timestamp);
 int32_t jls_tmap_timestamp_to_sample_id(struct jls_tmap_s * self, int64_t timestamp, int64_t * sample_id);
-
+int32_t jls_tmap_get(struct jls_tmap_s * self, size_t index, struct jls_utc_summary_entry_s * entry);
 
 /** @} */
 

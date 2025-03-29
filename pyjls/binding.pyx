@@ -1,4 +1,4 @@
-# Copyright 2021-2024 Jetperch LLC
+# Copyright 2021-2025 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ from libc.stdint cimport uint8_t, uint16_t, uint32_t, uint64_t, int32_t, int64_t
 from libc.float cimport DBL_MAX
 from libc.math cimport isfinite, NAN
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 import json
 import logging
 import numpy as np
@@ -35,6 +35,7 @@ from .structs import SourceDef, SignalDef
 
 
 __all__ = ['DataType', 'AnnotationType', 'SignalType', 'Writer', 'Reader',
+           'TimeMap',
            'SourceDef', 'SignalDef', 'SummaryFSR', 'jls_inject_log',
            'copy',
            'data_type_as_enum', 'data_type_as_str']
@@ -529,6 +530,12 @@ cdef class AnnotationCallback:
         self.cbk_fn = cbk_fn
 
 
+_TIME_MAP_GET_DTYPE = np.dtype({
+    'names': ['sample_id', 'timestamp'],
+    'formats': ['u8', 'i8']
+})
+
+
 cdef class Reader:
     """Open a JLS v2 file for reading.
 
@@ -800,18 +807,30 @@ cdef class Reader:
         rc = c_jls.jls_rd_utc(self._rd, signal_id, sample_id, _utc_cbk_fn, <void *> cbk_fn)
         _handle_rc(f'rd_utc({signal_id}, {sample_id})', rc)
 
+    def time_map_length(self, signal_id):
+        return c_jls.jls_rd_tmap_length(self._rd, signal_id)
+
     def sample_id_to_timestamp(self, signal_id, sample_id):
         """Convert sample_id to UTC timestamp for FSR signals.
 
         :param signal_id: The signal id.
-        :param sample_id: The sample_id to convert.
+        :param sample_id: The sample_id or iterable of sample_ids to convert.
         :return: The JLS timestamp corresponding to sample_id.
         :raise RuntimeError: on error.
         """
         cdef int64_t utc_timestamp
-        rc = c_jls.jls_rd_sample_id_to_timestamp(self._rd, signal_id, sample_id, &utc_timestamp)
-        _handle_rc('sample_id_to_timestamp', rc)
-        return utc_timestamp
+        if isinstance(sample_id, Iterable):
+            sz = len(sample_id)
+            result = np.empty(sz, dtype=np.int64)
+            for idx, s in enumerate(sample_id):
+                rc = c_jls.jls_rd_sample_id_to_timestamp(self._rd, signal_id, s, &utc_timestamp)
+                _handle_rc('sample_id_to_timestamp', rc)
+                result[idx] = utc_timestamp
+            return result
+        else:
+            rc = c_jls.jls_rd_sample_id_to_timestamp(self._rd, signal_id, sample_id, &utc_timestamp)
+            _handle_rc('sample_id_to_timestamp', rc)
+            return utc_timestamp
 
     def timestamp_to_sample_id(self, signal_id, utc_timestamp):
         """Convert UTC timestamp to sample_id for FSR signals.
@@ -822,9 +841,86 @@ cdef class Reader:
         :raise RuntimeError: on error.
         """
         cdef int64_t sample_id
-        rc = c_jls.jls_rd_timestamp_to_sample_id(self._rd, signal_id, utc_timestamp, &sample_id)
-        _handle_rc('timestamp_to_sample_id', rc)
-        return sample_id
+        if isinstance(utc_timestamp, Iterable):
+            sz = len(utc_timestamp)
+            result = np.empty(sz, dtype=np.uint64)
+            for idx, t in enumerate(utc_timestamp):
+                rc = c_jls.jls_rd_timestamp_to_sample_id(self._rd, signal_id, t, &sample_id)
+                _handle_rc('jls_rd_timestamp_to_sample_id', rc)
+                result[idx] = sample_id
+            return result
+        else:
+            rc = c_jls.jls_rd_timestamp_to_sample_id(self._rd, signal_id, utc_timestamp, &sample_id)
+            _handle_rc('timestamp_to_sample_id', rc)
+            return sample_id
+
+    def time_map_get(self, signal_id, index=None):
+        """Get the time map data.
+
+        :param signal_id: The signal id.
+        :param index: The index for the time map which is one of:
+            - None: return all time maps in the instance.
+            - int index: Return only this index.
+            - (int start_index, int end_index): Return this range.
+              start_index is inclusive, end_index is exclusive.
+
+        :return: Return an np.ndarray with the the named columns
+            ['sample_id', 'timestamp'].
+            Access as either a[0]['timestamp'] or a[0][1].
+        """
+        cdef c_jls.jls_utc_summary_entry_s time_map
+        n = self.time_map_length(signal_id)
+        if index is None:
+            index = 0, n
+        elif isinstance(index, Iterable):
+            index = int(index[0]), int(index[1])
+        else:
+            index = int(index)
+            if index < 0:
+                index = n + index
+            index = index, index + 1
+        i0, i1 = index
+        if i0 < 0:
+            i0 = n + i0
+        if i1 < 0:
+            i1 = n + i1
+        if i0 > i1:
+            i0, i1 = 0, 0
+        elif i1 > n:
+            raise ValueError(f'index out of range: {index}')
+        k = i1 - i0
+        out = np.empty(k, dtype=_TIME_MAP_GET_DTYPE)
+        for i in range(k):
+            c_jls.jls_rd_tmap_get(self._rd, signal_id, i + i0, &time_map)
+            out[i][0] = time_map.sample_id
+            out[i][1] = time_map.timestamp
+        return out
+
+
+class TimeMap:
+    """A time map class compatible with pyjoulescope_driver.TimeMap."""
+
+    def __init__(self, reader, signal_id):
+        self._reader = reader
+        self._signal_id = signal_id
+
+    def __len__(self):
+        return self._reader.time_map_length(self._signal_id)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, type, value, traceback):
+        pass
+
+    def sample_id_to_timestamp(self, sample_id):
+        return self._reader.sample_id_to_timestamp(self._signal_id, sample_id)
+
+    def timestamp_to_sample_id(self, timestamp):
+        return self._reader.timestamp_to_sample_id(self._signal_id, timestamp)
+
+    def time_map_get(self, signal_id, index=None):
+        return self._reader.time_map_get(signal_id, index)
 
 
 cdef int32_t _annotation_cbk_fn(void * user_data, const c_jls.jls_annotation_s * annotation) noexcept:

@@ -4,6 +4,19 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.13.0
+
+2025 Mar 29
+
+* Improved Reader time_map API.
+  * Added jls_rd_tmap_length and jls_rd_tmap_get
+  * Added jls_tmap_length and jls_tmap_get
+  * Added Python Reader methods time_map_length and time_map_get
+  * Added Iterable support to Python Reader 
+    sample_id_to_timestamp and timestamp_to_sample_id.
+  * Improved unit test coverage.
+
+
 ## 0.12.1
 
 2025 Mar 27

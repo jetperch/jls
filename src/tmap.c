@@ -1,5 +1,5 @@
 /*
- * Copyright 2023 Jetperch LLC
+ * Copyright 2023-2025 Jetperch LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -116,6 +116,10 @@ int32_t jls_tmap_add_cbk(void * user_data, const struct jls_utc_summary_entry_s 
     return 0;
 }
 
+size_t jls_tmap_length(struct jls_tmap_s * self) {
+    return self->entries_length;
+}
+
 int64_t interp_i64(struct jls_tmap_s * self, int64_t x0, int64_t const * x, int64_t const * y) {
     // binary search for x index with value less than or equal to x0
     size_t low = 0;
@@ -175,5 +179,14 @@ int32_t jls_tmap_timestamp_to_sample_id(struct jls_tmap_s * self, int64_t timest
     } else {
         *sample_id = interp_i64(self, timestamp, self->utc, self->sample_id);
     }
+    return 0;
+}
+
+int32_t jls_tmap_get(struct jls_tmap_s * self, size_t index, struct jls_utc_summary_entry_s * entry) {
+    if (index >= self->entries_length) {
+        return JLS_ERROR_UNAVAILABLE;
+    }
+    entry->sample_id = self->sample_id[index];
+    entry->timestamp = self->utc[index];
     return 0;
 }

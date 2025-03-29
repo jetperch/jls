@@ -1,5 +1,5 @@
 /*
- * Copyright 2023 Jetperch LLC
+ * Copyright 2023-2025 Jetperch LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,22 +32,31 @@
 static void test_empty(void **state) {
     (void) state;
     int64_t v;
+    struct jls_utc_summary_entry_s entry;
     struct jls_tmap_s * s = jls_tmap_alloc(1000.0);
+    assert_int_equal(0, jls_tmap_length(s));
     assert_int_equal(JLS_ERROR_UNAVAILABLE, jls_tmap_sample_id_to_timestamp(s, 1000, &v));
     assert_int_equal(JLS_ERROR_UNAVAILABLE, jls_tmap_timestamp_to_sample_id(s, YEAR, &v));
+    assert_int_equal(JLS_ERROR_UNAVAILABLE, jls_tmap_get(s, 0, &entry));
     jls_tmap_free(s);
 }
 
 static void test_single(void **state) {
     (void) state;
     int64_t v;
+    struct jls_utc_summary_entry_s entry;
     struct jls_tmap_s * s = jls_tmap_alloc(1000.0);
     jls_tmap_add(s, 1000, YEAR);
+    assert_int_equal(1, jls_tmap_length(s));
     assert_int_equal(0, jls_tmap_sample_id_to_timestamp(s, 1000, &v)); assert_int_equal(YEAR, v);
     assert_int_equal(0, jls_tmap_sample_id_to_timestamp(s, 2000, &v)); assert_int_equal(YEAR + SECOND, v);
 
     assert_int_equal(0, jls_tmap_timestamp_to_sample_id(s, YEAR, &v)); assert_int_equal(1000, v);
     assert_int_equal(0, jls_tmap_timestamp_to_sample_id(s, YEAR + SECOND, &v)); assert_int_equal(2000, v);
+
+    assert_int_equal(0, jls_tmap_get(s, 0, &entry));
+    assert_int_equal(1000, entry.sample_id);
+    assert_int_equal(YEAR, entry.timestamp);
 
     jls_tmap_free(s);
 }

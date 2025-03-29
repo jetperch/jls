@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .binding import DataType, AnnotationType, SignalType, Writer, Reader, SummaryFSR, \
+from .binding import DataType, AnnotationType, SignalType, \
+    Writer, Reader, SummaryFSR, TimeMap, \
     copy, \
     data_type_as_enum, data_type_as_str, \
     utc_to_jls, jls_to_utc
@@ -20,7 +21,7 @@ from .structs import SourceDef, SignalDef
 from . import time64
 from .version import *
 
-__all__ = ['Writer', 'Reader', 'DataType', 'AnnotationType',
+__all__ = ['Writer', 'Reader', 'DataType', 'AnnotationType', 'TimeMap',
            'SignalType', 'SourceDef', 'SignalDef', 'SummaryFSR',
            'copy',
            'data_type_as_enum', 'data_type_as_str',

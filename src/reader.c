@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2022 Jetperch LLC
+ * Copyright 2021-2025 Jetperch LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -687,16 +687,29 @@ static int32_t utc_load(struct jls_core_s * self, uint16_t signal_id) {
     return jls_core_utc(self, signal_id, sample_start, jls_tmap_add_cbk, signal->track_fsr->tmap);
 }
 
-JLS_API int32_t jls_rd_sample_id_to_timestamp(struct jls_rd_s * self, uint16_t signal_id,
+#define fsr_tmap() \
+    ROE(utc_load(&self->core, signal_id)); \
+    struct jls_tmap_s * fsr = self->core.signal_info[signal_id].track_fsr->tmap
+
+
+size_t jls_rd_tmap_length(struct jls_rd_s * self, uint16_t signal_id) {
+    fsr_tmap();
+    return jls_tmap_length(fsr);
+}
+
+int32_t jls_rd_sample_id_to_timestamp(struct jls_rd_s * self, uint16_t signal_id,
                                                int64_t sample_id, int64_t * timestamp) {
-    ROE(utc_load(&self->core, signal_id));
-    struct jls_tmap_s * fsr = self->core.signal_info[signal_id].track_fsr->tmap;
+    fsr_tmap();
     return jls_tmap_sample_id_to_timestamp(fsr, sample_id, timestamp);
 }
 
-JLS_API int32_t jls_rd_timestamp_to_sample_id(struct jls_rd_s * self, uint16_t signal_id,
+int32_t jls_rd_timestamp_to_sample_id(struct jls_rd_s * self, uint16_t signal_id,
                                               int64_t timestamp, int64_t * sample_id) {
-    ROE(utc_load(&self->core, signal_id));
-    struct jls_tmap_s * fsr = self->core.signal_info[signal_id].track_fsr->tmap;
+    fsr_tmap();
     return jls_tmap_timestamp_to_sample_id(fsr, timestamp, sample_id);
+}
+
+int32_t jls_rd_tmap_get(struct jls_rd_s * self, uint16_t signal_id, size_t index, struct jls_utc_summary_entry_s * entry) {
+    fsr_tmap();
+    return jls_tmap_get(fsr, index, entry);
 }

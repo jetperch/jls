@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2022 Jetperch LLC
+ * Copyright 2014-2025 Jetperch LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -39,8 +39,8 @@ JLS_CPP_GUARD_START
 
 // Use version_update.py to update.
 #define JLS_VERSION_MAJOR 0
-#define JLS_VERSION_MINOR 12
-#define JLS_VERSION_PATCH 1
+#define JLS_VERSION_MINOR 13
+#define JLS_VERSION_PATCH 0
 
 /**
  * \brief Macro to encode version to uint32_t.

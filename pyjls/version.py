@@ -1,4 +1,4 @@
-# Copyright 2021-2022 Jetperch LLC
+# Copyright 2021-2025 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-__version__ = "0.12.1"
+__version__ = "0.13.0"
 
 __title__ = "pyjls"
 __description__ = 'Joulescope™ file format'

@@ -1,5 +1,5 @@
 /*
- * Copyright 2021-2022 Jetperch LLC
+ * Copyright 2021-2025 Jetperch LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -247,6 +247,15 @@ JLS_API int32_t jls_rd_utc(struct jls_rd_s * self, uint16_t signal_id, int64_t s
                            jls_rd_utc_cbk_fn cbk_fn, void * cbk_user_data);
 
 /**
+ * @brief Get the current number of entries in the FSR time map.
+ *
+ * @param self The instance
+ * @param signal_id The signal id.
+ * @return The number of entries in this instance.
+ */
+JLS_API size_t jls_rd_tmap_length(struct jls_rd_s * self, uint16_t signal_id);
+
+/**
  * @brief Convert from sample_id to timestamp for FSR signals.
  *
  * @param self The reader instance.
@@ -269,6 +278,17 @@ JLS_API int32_t jls_rd_sample_id_to_timestamp(struct jls_rd_s * self, uint16_t s
  */
 JLS_API int32_t jls_rd_timestamp_to_sample_id(struct jls_rd_s * self, uint16_t signal_id,
         int64_t timestamp, int64_t * sample_id);
+
+/**
+ * @brief Get a time map entry from the JLS reader instance.
+ *
+ * @param self The reader instance.
+ * @param signal_id The signal id.
+ * @param index The index
+ * @param entry[out] The time map entry.
+ * @return 0 or error code.
+ */
+JLS_API int32_t jls_rd_tmap_get(struct jls_rd_s * self, uint16_t signal_id, size_t index, struct jls_utc_summary_entry_s * entry);
 
 JLS_CPP_GUARD_END
 

@@ -1,4 +1,4 @@
-# Copyright 2021-2024 Jetperch LLC
+# Copyright 2021-2025 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the 'License');
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from pyjls.binding import SECOND, Writer, Reader, SummaryFSR, DataType, jls_inject_log, copy
+from pyjls.binding import Writer, Reader, SummaryFSR, DataType, jls_inject_log, copy
+from pyjls.time64 import SECOND, YEAR
 import io
 import logging
 from logging import StreamHandler
@@ -191,7 +192,7 @@ class TestBinding(unittest.TestCase):
             w.fsr_f32(3, sample_id_offset, np.array([1, 2, 3, 4], dtype=np.float32))
             for entry in range(100):
                 sample_id = entry * fs
-                timestamp = entry + 60 * 60 * 24 * 365  # in seconds
+                timestamp = entry * SECOND + YEAR
                 data.append([sample_id, timestamp])
                 w.utc(signal_id, sample_id + sample_id_offset, timestamp)
         return np.array(data, dtype=np.int64)
@@ -207,8 +208,13 @@ class TestBinding(unittest.TestCase):
             with Reader(self._path) as r:
                 self.assertEqual(sample_id_offset, r.signals[signal_id].sample_id_offset)
                 r.utc(signal_id, 0, self._on_utc)
-                self.assertEqual(60 * 60 * 24 * 365, r.sample_id_to_timestamp(signal_id, 0))
-                self.assertEqual(0, r.timestamp_to_sample_id(signal_id, 60 * 60 * 24 * 365))
+                self.assertEqual(YEAR, r.sample_id_to_timestamp(signal_id, 0))
+                self.assertEqual(0, r.timestamp_to_sample_id(signal_id, YEAR))
+                t = r.sample_id_to_timestamp(signal_id, (0, 1000000))
+                np.testing.assert_equal([YEAR, YEAR + SECOND], t)
+                s = r.timestamp_to_sample_id(signal_id, t)
+                np.testing.assert_equal([0, 1000000], s)
+
             np.testing.assert_equal(expected, self.utc)
             os.remove(self._path)
             self._utc = []
@@ -220,6 +226,23 @@ class TestBinding(unittest.TestCase):
         with Reader(self._path) as r:
             r.utc(signal_id, expected[0, 0], self._on_utc)
         np.testing.assert_equal(expected, self.utc)
+
+    def test_utc_timemap(self):
+        signal_id = 3
+        expected = self._utc_gen(signal_id)
+        with Reader(self._path) as r:
+            self.assertEqual(100, r.time_map_length(signal_id))
+            tm = r.time_map_get(signal_id)
+            np.testing.assert_equal(expected[:, 0], tm[:]['sample_id'])
+            np.testing.assert_equal(expected[:, 1], tm[:]['timestamp'])
+            self.assertEqual(100, len(tm))
+            self.assertEqual(1, len(r.time_map_get(signal_id, 5)))
+            for index in [(90, 95), (90, -5), (-10, -5), (-10, 95)]:
+                d = r.time_map_get(signal_id, index)
+                self.assertEqual(5, len(d))
+                np.testing.assert_equal(tm[90:95], d)
+            d = r.time_map_get(signal_id, (3, 2))
+            self.assertEqual(0, len(d))
 
     def test_log(self):
         log = logging.getLogger('pyjls.c')
