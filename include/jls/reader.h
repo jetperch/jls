@@ -25,6 +25,7 @@
 #define JLS_READER_H__
 
 #include <stdint.h>
+#include <stddef.h>
 #include "jls/cmacro.h"
 #include "jls/format.h"
 
