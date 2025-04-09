@@ -4,6 +4,13 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.13.1
+
+2025 Apr 9
+
+* Fixed TimeMap.time_map_get in Python binding.  Expanded unit test coverage.
+
+
 ## 0.13.0
 
 2025 Mar 29

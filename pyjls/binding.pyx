@@ -919,8 +919,8 @@ class TimeMap:
     def timestamp_to_sample_id(self, timestamp):
         return self._reader.timestamp_to_sample_id(self._signal_id, timestamp)
 
-    def time_map_get(self, signal_id, index=None):
-        return self._reader.time_map_get(signal_id, index)
+    def time_map_get(self, index=None):
+        return self._reader.time_map_get(self._signal_id, index)
 
 
 cdef int32_t _annotation_cbk_fn(void * user_data, const c_jls.jls_annotation_s * annotation) noexcept:

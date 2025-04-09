@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from pyjls.binding import Writer, Reader, SummaryFSR, DataType, jls_inject_log, copy
+from pyjls.binding import Writer, Reader, SummaryFSR, DataType, jls_inject_log, copy, TimeMap
 from pyjls.time64 import SECOND, YEAR
 import io
 import logging
@@ -242,6 +242,30 @@ class TestBinding(unittest.TestCase):
                 self.assertEqual(5, len(d))
                 np.testing.assert_equal(tm[90:95], d)
             d = r.time_map_get(signal_id, (3, 2))
+            self.assertEqual(0, len(d))
+
+    def test_tmap(self):
+        signal_id = 3
+        expected = self._utc_gen(signal_id)
+        with Reader(self._path) as r:
+            tmap = TimeMap(r, signal_id)
+            self.assertEqual(100, len(tmap))
+            with tmap:
+                self.assertEqual(100, len(tmap))
+            tm = tmap.time_map_get()
+            np.testing.assert_equal(expected[:, 0], tm[:]['sample_id'])
+            np.testing.assert_equal(expected[:, 1], tm[:]['timestamp'])
+            self.assertEqual(expected[5, 1], tmap.sample_id_to_timestamp(expected[5, 0]))
+            np.testing.assert_equal(expected[:, 1], tmap.sample_id_to_timestamp(expected[:, 0]))
+            self.assertEqual(expected[5, 0], tmap.timestamp_to_sample_id(expected[5, 1]))
+            np.testing.assert_equal(expected[:, 0], tmap.timestamp_to_sample_id(expected[:, 1]))
+            self.assertEqual(100, len(tm))
+            self.assertEqual(1, len(tmap.time_map_get(5)))
+            for index in [(90, 95), (90, -5), (-10, -5), (-10, 95)]:
+                d = tmap.time_map_get(index)
+                self.assertEqual(5, len(d))
+                np.testing.assert_equal(tm[90:95], d)
+            d = tmap.time_map_get((3, 2))
             self.assertEqual(0, len(d))
 
     def test_log(self):
