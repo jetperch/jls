@@ -6,10 +6,11 @@ This file contains the list of changes made to the JLS project.
 
 ## 0.13.2
 
-2025 Apr 10 [in progress]
+2025 Apr 10
 
 * Fixed FSR read when no summaries exist.
-* Fixed FSR to write remaining potentially omitted 1 & 4 bit data when closing file. 
+* Fixed FSR to write remaining potentially omitted 1 & 4 bit data when closing file.
+* Fixed jls_rd_fsr for 1 bit and 4 bit data when sample_id is unaligned.
 
 
 ## 0.13.1

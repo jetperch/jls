@@ -24,7 +24,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <inttypes.h>
 
 
 #define SKIP_BASIC 0
@@ -1055,7 +1054,6 @@ static void test_fsr_u1_ones(void **state) {
     memset(expect, 0xff, data_sz);
     memset(data, 0x00, data_sz);
     for (int64_t sample_id = 0; sample_id < (data_sz - 2) * 8; ++sample_id) {
-        printf("sample_id = %" PRIi64 "\n", sample_id);
         assert_int_equal(0, jls_rd_fsr(rd, 9, sample_id, data, 8));
         assert_int_equal(0xff, data[0]);
     }
@@ -1170,7 +1168,7 @@ int main(void) {
             cmocka_unit_test(test_fsr_f32_sample_skip),
             cmocka_unit_test(test_fsr_u1_sample_skip),
             cmocka_unit_test(test_fsr_u1_len_1),
-            // todo cmocka_unit_test(test_fsr_u1_ones),
+            cmocka_unit_test(test_fsr_u1_ones),
             cmocka_unit_test(test_fsr_u1_auto_def),
 
 #if !SKIP_REALWORLD

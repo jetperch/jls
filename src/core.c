@@ -1092,6 +1092,7 @@ int32_t jls_core_fsr(struct jls_core_s * self, uint16_t signal_id, int64_t start
     int64_t chunk_sample_id;
     int64_t chunk_sample_count;
     uint8_t * u8;
+    uint8_t * u8_end;
     uint8_t shift_bits = 0;
     uint8_t shift_carry = 0;
 
@@ -1102,6 +1103,7 @@ int32_t jls_core_fsr(struct jls_core_s * self, uint16_t signal_id, int64_t start
         chunk_sample_id = r->header.timestamp;
         chunk_sample_count = r->header.entry_count;
         u8 = (uint8_t *) &r->data[0];
+        u8_end = u8 + (chunk_sample_count * entry_size_bits) / 8;
         if (r->header.entry_size_bits != entry_size_bits) {
             JLS_LOGE("fsr entry size mismatch");
             return JLS_ERROR_UNSPECIFIED;
@@ -1139,6 +1141,9 @@ int32_t jls_core_fsr(struct jls_core_s * self, uint16_t signal_id, int64_t start
         }
 
         size_t sz_bytes = (size_t) (sz_samples * entry_size_bits + 7) / 8;
+        if ((u8 + sz_bytes) > u8_end) {
+            sz_bytes = (size_t) (u8_end - u8);
+        }
         if (shift_bits) {
             for (size_t i = 0; i < sz_bytes; ++i) {
                 data_u8[i] = (u8[i] << (8 - shift_bits)) | shift_carry;
