@@ -996,6 +996,11 @@ int32_t jls_core_rd_fsr_level1(struct jls_core_s * self, uint16_t signal_id, int
     }
     ROE(jls_core_rd_chunk(self));  // index
     jls_buf_copy(self->rd_index, self->buf);
+    if (self->chunk_cur.hdr.tag == JLS_TAG_TRACK_FSR_DATA) {
+        self->rd_index_chunk.offset = 0;
+        self->rd_summary_chunk.offset = 0;
+        return 0;
+    }
     self->rd_index_chunk = self->chunk_cur;
 
     ROE(jls_core_rd_chunk(self));  // summary
@@ -1005,12 +1010,17 @@ int32_t jls_core_rd_fsr_level1(struct jls_core_s * self, uint16_t signal_id, int
 }
 
 int32_t jls_core_rd_fsr_data0(struct jls_core_s * self, uint16_t signal_id, int64_t start_sample_id) {
+    int64_t offset = 0;
     int64_t chunk_sample_id;
     struct jls_signal_def_s * signal_def = &self->signal_info[signal_id].signal_def;
     ROE(jls_core_rd_fsr_level1(self, signal_id, start_sample_id));
-    struct jls_fsr_index_s * idx = (struct jls_fsr_index_s *) self->rd_index->start;
-    int64_t idx_entry = (start_sample_id - idx->header.timestamp) / signal_def->samples_per_data;
-    int64_t offset = idx->offsets[idx_entry];
+    if ((self->rd_index_chunk.offset == 0) && (self->chunk_cur.hdr.tag == JLS_TAG_TRACK_FSR_DATA)) {
+        offset = self->chunk_cur.offset;
+    } else {
+        struct jls_fsr_index_s * idx = (struct jls_fsr_index_s *) self->rd_index->start;
+        int64_t idx_entry = (start_sample_id - idx->header.timestamp) / signal_def->samples_per_data;
+        offset = idx->offsets[idx_entry];
+    }
     struct jls_fsr_data_s * r;
 
     if (0 == offset) {

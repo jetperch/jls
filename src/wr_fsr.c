@@ -154,10 +154,10 @@ static int32_t wr_data(struct jls_core_fsr_s * self) {
     }
     uint32_t data_length = (self->data->header.entry_count * sample_size_bits(self) + 7) / 8;
     uint32_t payload_length = sizeof(struct jls_fsr_data_s) + data_length;
-    bool omit_data = (self->write_omit_data > 1);
     struct jls_core_track_s * track = &self->parent->tracks[JLS_TRACK_TYPE_FSR];
+    bool omit_data = (sample_size_bits(self) <= 8) & (self->write_omit_data > 1) & (0 != track->data_head.offset);
 
-    if (sample_size_bits(self) <= 8) {
+    if (omit_data) {
         // Automatically omit constant value data for data sizes 8 bits or less.
         uint8_t data_const = *((uint8_t *) self->data->data);
         if (sample_size_bits(self) == 1) {
@@ -166,11 +166,8 @@ static int32_t wr_data(struct jls_core_fsr_s * self) {
             data_const = (data_const & 0x0f);
             data_const |= (data_const << 4);
         }
-        omit_data = is_mem_const(self->data->data, data_length, data_const);
+        omit_data &= is_mem_const(self->data->data, data_length, data_const);
     }
-
-    // cannot omit first chunk, which stores the sample_id offset.
-    omit_data &= (0 != track->data_head.offset);
 
     uint8_t * p_start = (uint8_t *) self->data;
     int64_t pos = jls_raw_chunk_tell(self->parent->parent->raw);
@@ -252,6 +249,7 @@ int32_t jls_fsr_close(struct jls_core_fsr_s * self) {
     int32_t rc;
     if (self) {
         if (self->data) {
+            self->write_omit_data = 0;  // disable omit for last data chunk
             rc = wr_data(self);  // write remaining sample data
             if (rc) {
                 JLS_LOGE("wr_data returned %" PRIi32, rc);

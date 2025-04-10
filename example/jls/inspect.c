@@ -51,7 +51,7 @@ static int32_t chunk_printf(struct jls_raw_s * raw, int64_t offset) {
     offset_display("offset", offset);
     offset_display("prev", hdr.item_prev);
     offset_display("next", hdr.item_next);
-    printf("length=0x%08" PRIu64 " %d\n", (uint64_t) hdr.payload_length, (int) hdr.payload_length);
+    printf("length=0x%08" PRIx64 " %" PRId32 "\n", (uint64_t) hdr.payload_length, (int) hdr.payload_length);
     printf("tag=%s %d\n", jls_tag_to_name(hdr.tag), (int) hdr.tag);
     printf("chunk_meta=0x%04x %d.%d\n", hdr.chunk_meta,
            (int) (hdr.chunk_meta & 0x0ff), (int) ((hdr.chunk_meta >> 12) & 0x0f));

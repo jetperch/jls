@@ -142,7 +142,6 @@ static void test_samples(void **state) {
     int64_t sample_count = 4 * ((int64_t) SIGNAL_1.sample_rate);
     float * signal = gen_jls(sample_count);
     assert_non_null(signal);
-    sample_count = 0x61a70;  // partial summary drops a few samples
 
     float * y = malloc(sizeof(float) * (size_t) sample_count);
     assert_non_null(y);
@@ -174,7 +173,6 @@ static void test_summary(void **state) {
     int64_t sample_count = 4 * ((int64_t) SIGNAL_1.sample_rate);
     float * signal = gen_jls(sample_count);
     assert_non_null(signal);
-    sample_count = 0x61a70;  // partial summary drops a few samples
 
     float * y = malloc(sizeof(float) * (size_t) sample_count);
     assert_non_null(y);

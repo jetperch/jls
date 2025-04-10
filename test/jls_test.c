@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <inttypes.h>
 
 
 #define SKIP_BASIC 0
@@ -575,6 +576,65 @@ static void test_fsr_f32(void **state) {
     remove(filename);
 }
 
+static void test_fsr_f32_len_1(void **state) {
+    (void) state;
+    struct jls_wr_s * wr = NULL;
+
+    assert_int_equal(0, jls_wr_open(&wr, filename));
+    assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_3));
+    assert_int_equal(0, jls_wr_signal_def(wr, &SIGNAL_5));
+    float data[1] = {1.75f};
+    assert_int_equal(0, jls_wr_fsr(wr, 5, 0, data, 1));
+    assert_int_equal(0, jls_wr_close(wr));
+
+    struct jls_rd_s * rd = NULL;
+    assert_int_equal(0, jls_rd_open(&rd, filename));
+    int64_t samples = 0;
+    assert_int_equal(0, jls_rd_fsr_length(rd, 5, &samples));
+    assert_int_equal(1, samples);
+
+    data[0] = 0.0f;
+    assert_int_equal(0, jls_rd_fsr(rd, 5, 0, data, 1));
+
+    jls_rd_close(rd);
+    remove(filename);
+}
+
+static void test_fsr_f32_len_N(void **state) {
+    (void) state;
+    struct jls_wr_s * wr = NULL;
+    uint32_t sample_count = 1041;  // samples_per_data is 1040
+
+    assert_int_equal(0, jls_wr_open(&wr, filename));
+    assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_3));
+    assert_int_equal(0, jls_wr_signal_def(wr, &SIGNAL_5));
+    float * data = malloc(sample_count * sizeof(float));
+    float * expect = malloc(sample_count * sizeof(float));
+    for (uint32_t i = 0; i < sample_count; ++i) {
+        data[i] = 1.75f + i;
+        expect[i] = 1.75f + i;
+    }
+    assert_int_equal(0, jls_wr_fsr(wr, 5, 0, data, sample_count));
+    assert_int_equal(0, jls_wr_close(wr));
+
+    struct jls_rd_s * rd = NULL;
+    assert_int_equal(0, jls_rd_open(&rd, filename));
+    int64_t samples = 0;
+    assert_int_equal(0, jls_rd_fsr_length(rd, 5, &samples));
+    assert_int_equal(sample_count, samples);
+
+    for (uint32_t i = 0; i < sample_count; ++i) {
+        data[0] = 0.0f;
+    }
+    assert_int_equal(0, jls_rd_fsr(rd, 5, 0, data, 1));
+    for (uint32_t i = 0; i < sample_count; ++i) {
+        assert_float_equal(expect[i], data[i], 1e-7f);
+    }
+
+    jls_rd_close(rd);
+    remove(filename);
+}
+
 static void test_fsr_f32_sample_id_offset(void **state) {
     (void) state;
     struct jls_wr_s * wr = NULL;
@@ -948,6 +1008,62 @@ static void test_fsr_u1_sample_skip(void **state) {
     remove(filename);
 }
 
+static void test_fsr_u1_len_1(void **state) {
+    (void) state;
+    struct jls_wr_s * wr = NULL;
+
+    assert_int_equal(0, jls_wr_open(&wr, filename));
+    assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_3));
+    assert_int_equal(0, jls_wr_signal_def(wr, &SIGNAL_9_U1));
+    uint8_t data[2] = {0xff, 0x00};
+    assert_int_equal(0, jls_wr_fsr(wr, 9, 0, data, 1));
+    assert_int_equal(0, jls_wr_close(wr));
+
+    struct jls_rd_s * rd = NULL;
+    assert_int_equal(0, jls_rd_open(&rd, filename));
+    int64_t samples = 0;
+    assert_int_equal(0, jls_rd_fsr_length(rd, 9, &samples));
+    assert_int_equal(1, samples);
+
+    data[0] = 0x00;
+    assert_int_equal(0, jls_rd_fsr(rd, 9, 0, data, 1));
+
+    jls_rd_close(rd);
+    remove(filename);
+}
+
+static void test_fsr_u1_ones(void **state) {
+    (void) state;
+    struct jls_wr_s * wr = NULL;
+    uint32_t data_sz = 1024 / 8 + 2;  // samples_per_data = 1024
+
+    assert_int_equal(0, jls_wr_open(&wr, filename));
+    assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_3));
+    assert_int_equal(0, jls_wr_signal_def(wr, &SIGNAL_9_U1));
+    uint8_t * data = malloc(data_sz + 1);
+    memset(data, 0xff, data_sz);
+    assert_int_equal(0, jls_wr_fsr(wr, 9, 0, data, data_sz * 8));
+    assert_int_equal(0, jls_wr_close(wr));
+
+    struct jls_rd_s * rd = NULL;
+    assert_int_equal(0, jls_rd_open(&rd, filename));
+    int64_t samples = 0;
+    assert_int_equal(0, jls_rd_fsr_length(rd, 9, &samples));
+    assert_int_equal(data_sz * 8, samples);
+
+    uint8_t * expect = malloc(data_sz + 1);
+    memset(expect, 0xff, data_sz);
+    memset(data, 0x00, data_sz);
+    for (int64_t sample_id = 0; sample_id < (data_sz - 2) * 8; ++sample_id) {
+        printf("sample_id = %" PRIi64 "\n", sample_id);
+        assert_int_equal(0, jls_rd_fsr(rd, 9, sample_id, data, 8));
+        assert_int_equal(0xff, data[0]);
+    }
+
+    jls_rd_close(rd);
+    remove(filename);
+}
+
 static void test_fsr_u1_auto_def(void **state) {
     (void) state;
     struct jls_wr_s *wr = NULL;
@@ -1042,6 +1158,8 @@ int main(void) {
             cmocka_unit_test(test_wr_signal_duplicate),
 #endif
             cmocka_unit_test(test_fsr_f32),
+            cmocka_unit_test(test_fsr_f32_len_1),
+            cmocka_unit_test(test_fsr_f32_len_N),
             cmocka_unit_test(test_fsr_f32_sample_id_offset),
             cmocka_unit_test(test_fsr_f32_statistics),
             cmocka_unit_test(test_fsr_f64),
@@ -1051,6 +1169,8 @@ int main(void) {
 
             cmocka_unit_test(test_fsr_f32_sample_skip),
             cmocka_unit_test(test_fsr_u1_sample_skip),
+            cmocka_unit_test(test_fsr_u1_len_1),
+            // todo cmocka_unit_test(test_fsr_u1_ones),
             cmocka_unit_test(test_fsr_u1_auto_def),
 
 #if !SKIP_REALWORLD
