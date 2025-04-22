@@ -76,14 +76,15 @@ int32_t jls_copy(const char * src, const char * dst,
             rc = jls_raw_chunk_scan(rd);
             if (rc) {
                 MSG_ERROR("jls_raw_chunk_scan", rc);
-                return rc;
+                break;
             }
         }
         // printf("%" PRIi64 " %d %" PRIu32 "\n", offset, hdr.tag, hdr.payload_length);
         rc = jls_buf_realloc(buf, hdr.payload_length);
         if (rc) {
             MSG_ERROR("jls_buf_realloc", rc);
-            return JLS_ERROR_NOT_ENOUGH_MEMORY;
+            rc = JLS_ERROR_NOT_ENOUGH_MEMORY;
+            break;
         }
         rc = jls_raw_rd_payload(rd, (uint32_t) buf->alloc_size, buf->start);
         if (rc) {
@@ -91,7 +92,8 @@ int32_t jls_copy(const char * src, const char * dst,
             rc = jls_raw_chunk_next(rd);
             if (rc) {
                 MSG_ERROR("jls_raw_chunk_next", rc);
-                return JLS_ERROR_IO;
+                rc = JLS_ERROR_IO;
+                break;
             }
             offset = jls_raw_chunk_tell(rd);
             continue;
@@ -207,5 +209,5 @@ int32_t jls_copy(const char * src, const char * dst,
     }
     jls_raw_close(rd);
     jls_wr_close(wr);
-    return 0;
+    return rc;
 }

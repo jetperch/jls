@@ -101,14 +101,15 @@ static int32_t rd_file_header(struct jls_raw_s * self, struct jls_file_header_s 
         JLS_LOGE("could not read file header");
         return JLS_ERROR_UNSUPPORTED_FILE;
     }
-    uint32_t crc32 = jls_crc32c((uint8_t *) hdr, sizeof(*hdr) - 4);
-    if (crc32 != hdr->crc32) {
-        JLS_LOGE("file header crc mismatch: 0x%08x != 0x%08x", crc32, hdr->crc32);
+
+    if (0 != memcmp(FILE_HDR, hdr->identification, sizeof(FILE_HDR))) {
+        JLS_LOGE("invalid file header identification: is this a JLS v2 file?");
         return JLS_ERROR_UNSUPPORTED_FILE;
     }
 
-    if (0 != memcmp(FILE_HDR, hdr->identification, sizeof(FILE_HDR))) {
-        JLS_LOGE("invalid file header identification");
+    uint32_t crc32 = jls_crc32c((uint8_t *) hdr, sizeof(*hdr) - 4);
+    if (crc32 != hdr->crc32) {
+        JLS_LOGE("file header crc mismatch: 0x%08x != 0x%08x", crc32, hdr->crc32);
         return JLS_ERROR_UNSUPPORTED_FILE;
     }
 

@@ -4,6 +4,14 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.13.3
+
+2025 Apr 22
+
+* Improved "copy" to properly close output file on error.
+* Modified read to check header magic before checksum.
+
+
 ## 0.13.2
 
 2025 Apr 10
