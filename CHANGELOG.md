@@ -4,6 +4,15 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.14.0
+
+2025 May 6
+
+* Fixed Reader to use 2018-01-01T00:00:00.0000000Z (time64 0) when UTC not found #15 
+* Added ISO 8601 support to time64.
+* Added timestamp_patch entry point.
+
+
 ## 0.13.3
 
 2025 Apr 22

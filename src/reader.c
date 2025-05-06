@@ -684,7 +684,12 @@ static int32_t utc_load(struct jls_core_s * self, uint16_t signal_id) {
     }
     int64_t sample_rate = signal_def->sample_rate;
     int64_t sample_start = -3600 * sample_rate;  // within the last hour
-    return jls_core_utc(self, signal_id, sample_start, jls_tmap_add_cbk, signal->track_fsr->tmap);
+    ROE(jls_core_utc(self, signal_id, sample_start, jls_tmap_add_cbk, signal->track_fsr->tmap));
+    if (0 == jls_tmap_length(signal->track_fsr->tmap)) {
+        // no UTC entries found, force sample_id 0 to utc 0.
+        jls_tmap_add(signal->track_fsr->tmap, 0, 0);
+    }
+    return 0;
 }
 
 #define fsr_tmap() \

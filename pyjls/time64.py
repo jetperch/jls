@@ -1,4 +1,4 @@
-# Copyright 2018-2024 Jetperch LLC
+# Copyright 2018-2025 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -67,6 +67,8 @@ def as_time64(t):
     """
     if isinstance(t, int) or isinstance(t, np.int64):
         return t
+    if isinstance(t, str):
+        t = datetime.datetime.fromisoformat(t)
     if isinstance(t, datetime.datetime):
         t = t.timestamp()
     else:
@@ -96,6 +98,18 @@ def as_datetime(t):
     """
     t = as_timestamp(t)
     return datetime.datetime.fromtimestamp(t, tz=datetime.timezone.utc)
+
+
+def as_isostr(t):
+    """Convert a time to an ISO 8601 string.
+
+    :param t: The time in any format.
+    :return: The time string.
+
+    @see https://en.wikipedia.org/wiki/ISO_8601
+    """
+    t = as_datetime(t)
+    return t.isoformat(timespec='microseconds').replace('+00:00', 'Z')
 
 
 def filename(extension=None, t=None):
@@ -147,7 +161,6 @@ def _local_offset():
     now = datetime.datetime.now()
     local_now = now.astimezone()
     local_tz = local_now.tzinfo
-    print('hi')
     print(local_tz)
 
 

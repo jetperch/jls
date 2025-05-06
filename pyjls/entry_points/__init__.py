@@ -1,4 +1,4 @@
-# Copyright 2018-2022 Jetperch LLC
+# Copyright 2018-2025 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from . import annotate, copy, export, extract, info, plot
+from . import annotate, copy, export, extract, info, plot, timestamp_patch
 
-__all__ = [annotate, copy, export, extract, info, plot]
+__all__ = [annotate, copy, export, extract, info, plot, timestamp_patch]
 """This list of available command modules.  Each module must contain a 
 parser_config(subparser) function.  The function must return the callable(args)
 that will be executed for the command."""
