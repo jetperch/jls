@@ -68,6 +68,8 @@ def as_time64(t):
     if isinstance(t, int) or isinstance(t, np.int64):
         return t
     if isinstance(t, str):
+        if t[-1] == 'Z':  # "Z" support added in python 3.11
+            t = t[:-1] + '+00:00'
         t = datetime.datetime.fromisoformat(t)
     if isinstance(t, datetime.datetime):
         t = t.timestamp()
