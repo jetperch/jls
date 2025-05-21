@@ -4,6 +4,15 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.14.1
+
+2025 May 21
+
+* Improved timestamp_patch entry point.
+  * Allow integer timestamp
+  * Read/write in chunks
+
+
 ## 0.14.0
 
 2025 May 6
