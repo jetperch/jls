@@ -4,6 +4,13 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.15.0
+
+2025 Jun 13
+
+* Added "csv" entry point.
+
+
 ## 0.14.1
 
 2025 May 21
