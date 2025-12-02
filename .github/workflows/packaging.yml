@@ -38,7 +38,7 @@ jobs:
         os: ["windows-latest"]  # "windows-arm-latest"
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Display CMake version
         run: cmake --version
@@ -57,7 +57,7 @@ jobs:
           cmake --build cmake_build_dyn --config Release --target jls
 
       - name: Upload binaries
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ matrix.os }}
           path: |
@@ -73,7 +73,7 @@ jobs:
         os: ["ubuntu-latest", "ubuntu-arm-latest", "macos-latest"]
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Display CMake version
         run: cmake --version
@@ -87,7 +87,7 @@ jobs:
         run: cmake --build cmake_build_static --target test
 
       - name: Upload binaries
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ matrix.os }}
           path: |
@@ -106,10 +106,10 @@ jobs:
           echo "runner.arch=$RUNNER_ARCH"
 
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -132,7 +132,7 @@ jobs:
         working-directory: pyjls/test
 
       - name: Upload python source package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: python_sdist
           path: dist/*.tar.gz
@@ -148,12 +148,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ["ubuntu-latest", "windows-latest", "macos-latest", "ubuntu-arm-latest"]  # , "windows-arm-latest"
-        python_version: ["cp310", "cp311", "cp312", "cp313"]
+        os: ["ubuntu-latest", "windows-latest", "macos-latest", "ubuntu-24.04-arm", "windows-11-arm"]
+        python_version: ["cp311", "cp312", "cp313", "cp314"]
 
     steps:
       - name: Download sdist
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: python_sdist
           path: dist/
@@ -162,6 +162,10 @@ jobs:
         shell: bash
         id: find_sdist_filename
         run: echo "filename=$(ls dist/*.tar.gz)" >> $GITHUB_OUTPUT
+
+      - name: Install C++ build tools
+        if: matrix.os == 'windows-11-arm'
+        run: winget install -e --id Microsoft.VisualStudio.2022.BuildTools --override "--passive --wait --add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Component.VC.ARM64 --add Microsoft.VisualStudio.Component.Windows10SDK.19041 --includeRecommended"
 
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.23.2
@@ -180,7 +184,7 @@ jobs:
           package-dir: ${{ steps.find_sdist_filename.outputs.filename }}
 
       - name: Upload python wheels
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: python_wheel-${{ matrix.os }}-${{ matrix.python_version }}
           path: wheelhouse/*.whl
@@ -199,13 +203,13 @@ jobs:
 
     steps:
       - name: Download python sdist artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: python_sdist
           path: dist/
 
       - name: Download python wheel artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           pattern: python_wheel-*
           merge-multiple: true
@@ -222,7 +226,7 @@ jobs:
           print-hash: true
 
       - name: Download windows-latest artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: windows-latest
           path: dist_windows_latest/
@@ -232,7 +236,7 @@ jobs:
         run: cp dist_windows_latest/cmake_build_static/example/Release/* dist/
 
       - name: Publish release assets
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           files: |
             dist/*

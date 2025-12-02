@@ -39,7 +39,7 @@ JLS_CPP_GUARD_START
 
 // Use version_update.py to update.
 #define JLS_VERSION_MAJOR 0
-#define JLS_VERSION_MINOR 15
+#define JLS_VERSION_MINOR 16
 #define JLS_VERSION_PATCH 0
 
 /**

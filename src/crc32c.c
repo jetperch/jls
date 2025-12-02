@@ -28,7 +28,9 @@
 #include "crc32c_sw.c"
 
 #elif defined(WIN32) || defined(_WIN32) || defined(__WIN32__) || defined(__NT__)
-#if defined(_M_X64) || defined(__x86_64__)
+#if defined(_M_ARM64) || defined(__aarch64__) || defined(__arm64__)
+#include "crc32c_arm_neon.c"
+#elif defined(_M_X64) || defined(__x86_64__)
 #include "crc32c_intel_sse4.c"
 #else
 #include "crc32c_sw.c"

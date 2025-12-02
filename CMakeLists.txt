@@ -16,7 +16,7 @@ cmake_minimum_required (VERSION 3.10)
 set(PARENT_PROJECT_DIR ${PROJECT_SOURCE_DIR})
 set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "" FORCE)  # universal2
 project(JLS
-        VERSION 0.15.0
+        VERSION 0.16.0
         LANGUAGES C)
 SET(PROJECT_PREFIX JLS)
 SET(VERSION_STRING "${PROJECT_VERSION}")
@@ -50,7 +50,7 @@ if (NOT JLS_OPTIMIZE_CRC)
     add_definitions(-DJLS_OPTIMIZE_CRC_DISABLE=1)
 elseif (WIN32)
     message(STATUS "windows")
-    # msse4.2 always enabled
+    # msse4.2 or mcrc always enabled
 elseif (APPLE)
     message(STATUS "macOS universal2")
     add_definitions(-msse4.2 -mcrc)

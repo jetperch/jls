@@ -4,6 +4,15 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.16.0
+
+2025 Dec 2
+
+* Added win11-arm64 support.
+* Dropped python 3.10 support and added python 3.14 support.
+* Bumped packaging versions.
+
+
 ## 0.15.0
 
 2025 Jun 13

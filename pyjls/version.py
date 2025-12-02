@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-__version__ = "0.15.0"
+__version__ = "0.16.0"
 
 __title__ = "pyjls"
 __description__ = 'Joulescope™ file format'
@@ -21,7 +21,7 @@ __url__ = 'https://joulescope.readthedocs.io'
 __author__ = 'Jetperch LLC'
 __author_email__ = 'joulescope-dev@jetperch.com'
 __license__ = 'Apache 2.0'
-__copyright__ = 'Copyright 2021-2022 Jetperch LLC'
+__copyright__ = 'Copyright 2021-2025 Jetperch LLC'
 
 __all__ = ['__version__', '__title__', '__description__', '__url__',
            '__author__', '__author_email__', '__license__',

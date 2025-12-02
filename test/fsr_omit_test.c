@@ -209,7 +209,7 @@ static void test_u4(void **state) {
     assert_int_equal(0, jls_wr_open(&wr, filename));
     assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_1));
     assert_int_equal(0, jls_wr_signal_def(wr, &SIGNAL_3));
-    assert_int_equal(0, jls_wr_fsr(wr, 3, 0, data, sz_samples));
+    assert_int_equal(0, jls_wr_fsr(wr, 3, 0, data, (uint32_t) sz_samples));
     assert_int_equal(0, jls_wr_close(wr));
 
     struct jls_rd_s * rd = NULL;
