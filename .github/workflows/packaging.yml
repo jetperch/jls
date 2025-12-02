@@ -35,7 +35,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ["windows-latest"]  # "windows-arm-latest"
+        os: ["windows-latest"]  #, "windows-11-arm"]
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
@@ -70,7 +70,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ["ubuntu-latest", "ubuntu-arm-latest", "macos-latest"]
+        os: ["ubuntu-latest", "ubuntu-24.04-arm", "macos-latest"]
     steps:
       - name: Checkout repo
         uses: actions/checkout@v6
@@ -148,7 +148,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ["ubuntu-latest", "windows-latest", "macos-latest", "ubuntu-24.04-arm", "windows-11-arm"]
+        os: ["ubuntu-latest", "windows-latest", "macos-latest", "ubuntu-24.04-arm"]  # , "windows-11-arm"]
         python_version: ["cp311", "cp312", "cp313", "cp314"]
 
     steps:
@@ -163,12 +163,8 @@ jobs:
         id: find_sdist_filename
         run: echo "filename=$(ls dist/*.tar.gz)" >> $GITHUB_OUTPUT
 
-      - name: Install C++ build tools
-        if: matrix.os == 'windows-11-arm'
-        run: winget install -e --id Microsoft.VisualStudio.2022.BuildTools --override "--passive --wait --add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Component.VC.ARM64 --add Microsoft.VisualStudio.Component.Windows10SDK.19041 --includeRecommended"
-
       - name: Build wheels
-        uses: pypa/cibuildwheel@v2.23.2
+        uses: pypa/cibuildwheel@v3.3
         env:
           CIBW_ARCHS_MACOS: universal2
           CIBW_ARCHS_WINDOWS: native

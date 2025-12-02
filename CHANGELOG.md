@@ -8,9 +8,9 @@ This file contains the list of changes made to the JLS project.
 
 2025 Dec 2
 
-* Added win11-arm64 support.
 * Dropped python 3.10 support and added python 3.14 support.
 * Bumped packaging versions.
+* Attempted win11-arm64 support, but GitHub runners do not support C++.
 
 
 ## 0.15.0
