@@ -15,8 +15,14 @@
  */
 
 #include "jls/crc32c.h"
+#if defined(_MSC_VER)
+// MSVC on ARM64: __crc32cb/cw/cd are exposed through <intrin.h>, not ACLE.
+// See https://learn.microsoft.com/en-us/cpp/intrinsics/arm64-intrinsics
+#include <intrin.h>
+#else
 #include <arm_acle.h>
 #include <arm_neon.h>
+#endif
 #include <assert.h>
 
 // Used by Raspberry Pi 4 and new M1 Macs.
