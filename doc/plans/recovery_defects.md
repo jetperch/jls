@@ -251,6 +251,29 @@ write_prefix (400 cases): failures are exclusively utc_count — the
 cleanest F3 repro, no byte corruption.  bitflip (400 cases): no strict
 failures (graceful-error-only mode), memory-safety still enforced.
 
+ASan/UBSan build, per-mode (child-isolated, halt_on_error=0):
+
+| mode         | cases | strict fails | ASan child reports |
+|--------------|-------|--------------|--------------------|
+| truncate     | 400   | 235          | overflow @core.c:1329 |
+| zero_tail    | 200   | 119          | overflow @core.c:1329 |
+| zero_hole    | 200   | 168          | overflow @core.c:1329 |
+| torn_update  | 200   | 138          | overflow @core.c:1329 |
+| bitflip      | 300   | 0            | none |
+| write_prefix | 300   | 58 (utc)     | none |
+
+15 ASan child reports, all F8 (heap-buffer-overflow at
+jls_core_repair_fsr core.c:1329).  No new memory-safety sites.
+
+Harness note (NOT a library defect): LeakSanitizer also reports leaks
+rooted at jls_wr_open (writer.c:67) via fz_generate_mode's crash path.
+This is the fuzzer intentionally abandoning the writer instance to
+model a process crash (the same idiom as test/repair_test.c's
+GEN_SKIP_CLOSE).  It is a harness artifact in the *generation* (parent)
+path; the real library leak is F9, in the *reader* path.  Run
+campaigns with a LSan suppression for jls_wr_open, or generate crash
+files in a forked child, if LSan noise obscures real reader leaks.
+
 
 ## Classification and fix policy
 
