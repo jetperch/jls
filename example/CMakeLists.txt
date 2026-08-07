@@ -40,5 +40,6 @@ add_executable(jls_exe
         jls.c
 )
 add_dependencies(jls_exe ${dependencies})
+target_include_directories(jls_exe PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../include_prv)
 target_link_libraries(jls_exe ${JLS_LIBS})
 set_target_properties(jls_exe PROPERTIES OUTPUT_NAME jls)
