@@ -84,6 +84,9 @@ int32_t jls_bk_fclose(struct jls_bkf_s * self) {
 }
 
 int32_t jls_bk_fwrite(struct jls_bkf_s * self, const void * buffer, unsigned int count) {
+    if (jls_bk_write_limit_consume(count)) {
+        return JLS_ERROR_IO;  // test-only fault injection
+    }
     int sz = _write(self->fd, buffer, count);
     if (sz < 0) {
         JLS_LOGE("write failed %d", errno);

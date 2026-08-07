@@ -82,8 +82,8 @@ static int usage(void) {
             "  --max-length  The maximum FSR read length in entries\n"
             "\n"
             "Corruption fuzz mode:\n"
-            "  --corrupt <mode>   Corruption mode, one of:\n"
-            "                     truncate, zero_tail, zero_hole, torn_update, bitflip\n"
+            "  --corrupt <mode>   Corruption mode, one of: truncate, zero_tail,\n"
+            "                     zero_hole, torn_update, bitflip, write_prefix\n"
             "  --random <seed>    The 64-bit random number seed\n"
             "  --iterations <n>   The number of cases, 0 for unlimited [1000]\n"
             "  --workdir <dir>    The working directory [read_fuzzer_work]\n"
@@ -167,12 +167,14 @@ enum fz_mode_e {
     FZ_MODE_TORN_UPDATE,    // corrupt an in-place-updated metadata chunk
                             // payload, then truncate the tail
     FZ_MODE_BITFLIP,        // flip random bits; graceful errors only
+    FZ_MODE_WRITE_PREFIX,   // stop the writer after N bytes (exact crash)
 };
 
 static const char * FZ_MODE_NAMES[] = {
     "truncate", "zero_tail", "zero_hole", "torn_update", "bitflip",
+    "write_prefix",
 };
-#define FZ_MODE_COUNT (5)
+#define FZ_MODE_COUNT (6)
 
 struct fz_chunk_s {
     int64_t offset;
@@ -190,6 +192,7 @@ struct fz_scan_s {
     int64_t fend;
     int64_t defs_end;       // end of the initial defs region; damage below
                             // this offset makes open failure acceptable
+    int64_t write_total;    // total backend bytes written to produce the file
 };
 
 struct fz_cfg_s {
@@ -298,40 +301,58 @@ static void fz_ref_fill(struct fz_s * fz, const struct fz_cfg_s * cfg) {
     }
 }
 
-static int32_t fz_generate(struct fz_s * fz, const struct fz_cfg_s * cfg, const char * path) {
+// Generate a JLS file from cfg.  When crash is true, writer API errors
+// (from an injected write-budget cutoff) are ignored and the file
+// descriptor is closed abruptly to model a process crash mid-write.
+static int32_t fz_generate_mode(struct fz_s * fz, const struct fz_cfg_s * cfg,
+                                const char * path, bool crash) {
     struct jls_wr_s * wr = NULL;
     char buf[128];
     remove(path);
-    ROE(jls_wr_open(&wr, path));
-    ROE(jls_wr_source_def(wr, &FZ_SOURCE));
-    ROE(jls_wr_signal_def(wr, &FZ_SIGNAL_F32));
+
+    // any write API may fail once the budget is exhausted; in crash mode
+    // stop issuing writes but still close the fd, else propagate the error
+    #define WR(x) do {                          \
+        int32_t rc__ = (x);                     \
+        if (rc__) {                             \
+            if (crash) { goto crash_exit; }     \
+            jls_wr_close(wr);                   \
+            return rc__;                        \
+        }                                       \
+    } while (0)
+
+    if (jls_wr_open(&wr, path)) {
+        return crash ? 0 : JLS_ERROR_IO;
+    }
+    WR(jls_wr_source_def(wr, &FZ_SOURCE));
+    WR(jls_wr_signal_def(wr, &FZ_SIGNAL_F32));
     if (cfg->secondary) {
         struct jls_signal_def_s sec = FZ_SIGNAL_F32;
         sec.signal_id = FZ_SIGNAL_ID_SEC;
         sec.data_type = cfg->sec_datatype;
         sec.name = "aux";
         sec.units = "";
-        ROE(jls_wr_signal_def(wr, &sec));
+        WR(jls_wr_signal_def(wr, &sec));
     }
 
     int64_t utc = JLS_TIME_YEAR;
     int64_t sec_pos = 0;
     int64_t w = 0;
     for (int64_t sample_id = 0; sample_id < cfg->samples; sample_id += FZ_WINDOW, ++w) {
-        ROE(jls_wr_fsr_f32(wr, FZ_SIGNAL_ID_F32, sample_id, fz->ref_f32 + sample_id, FZ_WINDOW));
+        WR(jls_wr_fsr_f32(wr, FZ_SIGNAL_ID_F32, sample_id, fz->ref_f32 + sample_id, FZ_WINDOW));
         if (cfg->ts_en) {
-            ROE(jls_wr_utc(wr, FZ_SIGNAL_ID_F32, sample_id,
-                           utc + JLS_COUNTER_TO_TIME(sample_id, FZ_SIGNAL_F32.sample_rate)));
+            WR(jls_wr_utc(wr, FZ_SIGNAL_ID_F32, sample_id,
+                          utc + JLS_COUNTER_TO_TIME(sample_id, FZ_SIGNAL_F32.sample_rate)));
             if ((w % 10) == 0) {
                 snprintf(buf, sizeof(buf), "annotation %" PRIi64, w);
-                ROE(jls_wr_annotation(wr, FZ_SIGNAL_ID_F32, sample_id, 1.0f,
-                                      JLS_ANNOTATION_TYPE_TEXT, 0, JLS_STORAGE_TYPE_STRING,
-                                      (const uint8_t *) buf, 0));
+                WR(jls_wr_annotation(wr, FZ_SIGNAL_ID_F32, sample_id, 1.0f,
+                                     JLS_ANNOTATION_TYPE_TEXT, 0, JLS_STORAGE_TYPE_STRING,
+                                     (const uint8_t *) buf, 0));
             }
             if ((w % 25) == 0) {
                 snprintf(buf, sizeof(buf), "{\"window\": %" PRIi64 "}", w);
-                ROE(jls_wr_user_data(wr, (uint16_t) (0x100 + (w / 25)), JLS_STORAGE_TYPE_JSON,
-                                     (const uint8_t *) buf, 0));
+                WR(jls_wr_user_data(wr, (uint16_t) (0x100 + (w / 25)), JLS_STORAGE_TYPE_JSON,
+                                    (const uint8_t *) buf, 0));
             }
         }
         int64_t sec_limit = sample_id + FZ_WINDOW;
@@ -340,11 +361,15 @@ static int32_t fz_generate(struct fz_s * fz, const struct fz_cfg_s * cfg, const 
         }
         while ((sec_pos + 1024) <= sec_limit) {
             const uint8_t * p = fz->ref_sec + ((sec_pos * cfg->sec_entry_bits) / 8);
-            ROE(jls_wr_fsr(wr, FZ_SIGNAL_ID_SEC, sec_pos, p, 1024));
+            WR(jls_wr_fsr(wr, FZ_SIGNAL_ID_SEC, sec_pos, p, 1024));
             sec_pos += 1024;
         }
     }
+    #undef WR
 
+    if (crash) {
+        goto crash_exit;
+    }
     if (cfg->closed) {
         ROE(jls_wr_close(wr));
     } else {
@@ -355,6 +380,21 @@ static int32_t fz_generate(struct fz_s * fz, const struct fz_cfg_s * cfg, const 
         jls_bk_fclose(jls_raw_backend(core->raw));
     }
     return 0;
+
+crash_exit: {
+        // abrupt close: the writer state (heads, indices) is whatever the
+        // partial writes left on disk, exactly as after a process crash
+        struct jls_core_s * core = (struct jls_core_s *) wr;
+        struct jls_bkf_s * bk = jls_raw_backend(core->raw);
+        if (bk) {
+            jls_bk_fclose(bk);
+        }
+    }
+    return 0;
+}
+
+static int32_t fz_generate(struct fz_s * fz, const struct fz_cfg_s * cfg, const char * path) {
+    return fz_generate_mode(fz, cfg, path, false);
 }
 
 static int64_t fz_psod(uint32_t payload_length) {
@@ -410,13 +450,15 @@ static int32_t fz_scan(const char * path, struct fz_scan_s * scan) {
         return JLS_ERROR_NOT_ENOUGH_MEMORY;
     }
 
+    // Walk physically-present chunks by offset.  A read failure on the
+    // final chunk (truncated/torn tail) is the normal end of a crashed
+    // file, not an error; only an allocation failure aborts the scan.
+    rc = 0;
     while (1) {
         struct jls_chunk_header_s hdr;
         int64_t offset = jls_raw_chunk_tell(raw);
-        rc = jls_raw_rd_header(raw, &hdr);
-        if (rc) {
-            rc = 0;  // end of walk
-            break;
+        if (jls_raw_rd_header(raw, &hdr)) {
+            break;  // no more complete chunks
         }
         struct fz_chunk_s c = {
                 .offset = offset,
@@ -426,26 +468,25 @@ static int32_t fz_scan(const char * path, struct fz_scan_s * scan) {
                 .chunk_meta = hdr.chunk_meta,
                 .payload_length = hdr.payload_length,
         };
+        bool last = false;
         if ((hdr.tag == JLS_TAG_TRACK_FSR_DATA) && hdr.payload_length) {
-            rc = jls_raw_rd_payload(raw, 1 << 20, payload);
-            if (rc) {
-                break;
+            if (jls_raw_rd_payload(raw, 1 << 20, payload)) {
+                break;  // incomplete final data chunk: exclude it
             }
             struct jls_payload_header_s * ph = (struct jls_payload_header_s *) payload;
             c.sample_end = ph->timestamp + ph->entry_count;
         } else if (jls_raw_chunk_next(raw)) {
-            rc = fz_scan_push(scan, &c);
-            break;
+            last = true;  // header valid but no room for a following chunk
         }
         rc = fz_scan_push(scan, &c);
-        if (rc) {
+        if (rc || last) {
             break;
         }
     }
     free(payload);
     jls_raw_close(raw);
     if (rc) {
-        return rc;
+        return rc;  // allocation failure only
     }
 
     scan->defs_end = 0;
@@ -955,6 +996,8 @@ static int32_t fz_ensure_pristine(struct fz_s * fz, const struct fz_cfg_s * cfg)
     if (fz->generated[cfg->id]) {
         return 0;
     }
+    jls_bk_write_limit_set(-1);
+    int64_t writes_before = jls_bk_write_total();
     int32_t rc = fz_generate(fz, cfg, path);
     if (rc) {
         printf("generate cfg=%u failed rc=%" PRIi32 " %s\n", cfg->id, rc, jls_error_code_name(rc));
@@ -965,6 +1008,7 @@ static int32_t fz_ensure_pristine(struct fz_s * fz, const struct fz_cfg_s * cfg)
         printf("scan cfg=%u failed rc=%" PRIi32 " %s\n", cfg->id, rc, jls_error_code_name(rc));
         return rc;
     }
+    fz->scans[cfg->id].write_total = jls_bk_write_total() - writes_before;
     fz->generated[cfg->id] = 1;
 
     if (cfg->closed) {
@@ -1029,16 +1073,58 @@ static int64_t fz_pick_offset(struct fz_s * fz, const struct fz_cfg_s * cfg,
     return off;
 }
 
-// Create the corrupted case file from the pristine file.
+// Create the corrupted case file.  For most modes this corrupts a copy
+// of the pristine file, and the pristine scan describes it.  For
+// write_prefix the writer is stopped mid-run, producing a distinct byte
+// layout; case_scan is then filled from the produced file and the
+// caller must verify against it instead of the pristine scan.
 static int32_t fz_make_case(struct fz_s * fz, const struct fz_cfg_s * cfg,
                             const struct fz_scan_s * scan, const char * pristine_path,
-                            const char * case_path, struct fz_case_s * cs) {
+                            const char * case_path, struct fz_case_s * cs,
+                            struct fz_scan_s * case_scan) {
     uint8_t buf[4096];
     memset(cs, 0, sizeof(*cs));
     cs->mode = fz->mode;
     cs->strict = (fz->mode != FZ_MODE_BITFLIP);
     cs->offset = scan->fend;
     cs->defs_ok = true;
+
+    if (fz->mode == FZ_MODE_WRITE_PREFIX) {
+        int64_t budget = (fz->offset_forced >= 0)
+                ? fz->offset_forced
+                : random_range_i64(1, scan->write_total + 1);
+        jls_bk_write_limit_set(budget);
+        int32_t rc = fz_generate_mode(fz, cfg, case_path, true);
+        jls_bk_write_limit_set(-1);
+        if (rc) {
+            return rc;
+        }
+        // the produced file's own layout is authoritative
+        rc = fz_scan(case_path, case_scan);
+        if (rc) {
+            // too small to even scan (e.g. no file header): treat as
+            // defs-damaged so a graceful open failure is acceptable
+            case_scan->fend = 0;
+            case_scan->defs_end = 0;
+            case_scan->length = 0;
+        }
+        cs->offset = case_scan->fend;
+        // signals are only expected once their SIGNAL_DEF chunk is fully
+        // written; a shorter prefix may legitimately lack them
+        bool has_def5 = false;
+        bool has_def9 = false;
+        for (size_t i = 0; i < case_scan->length; ++i) {
+            if (case_scan->chunks[i].tag == JLS_TAG_SIGNAL_DEF) {
+                if (case_scan->chunks[i].chunk_meta == FZ_SIGNAL_ID_F32) {
+                    has_def5 = true;
+                } else if (case_scan->chunks[i].chunk_meta == FZ_SIGNAL_ID_SEC) {
+                    has_def9 = true;
+                }
+            }
+        }
+        cs->defs_ok = has_def5 && (!cfg->secondary || has_def9);
+        return 0;
+    }
 
     switch (fz->mode) {
         case FZ_MODE_TRUNCATE:
@@ -1329,21 +1415,26 @@ static int32_t fz_run_case(struct fz_s * fz, uint64_t case_seed) {
 
     snprintf(case_path, sizeof(case_path), "%s/case.jls", fz->workdir);
     snprintf(ro_path, sizeof(ro_path), "%s/case_ro.jls", fz->workdir);
-    if (fz_make_case(fz, &cfg, scan, pristine_path, case_path, &cs)) {
+    struct fz_scan_s case_scan = {0};
+    if (fz_make_case(fz, &cfg, scan, pristine_path, case_path, &cs, &case_scan)) {
         printf("case create failed\n");
+        fz_scan_free(&case_scan);
         return JLS_ERROR_IO;
     }
+    // write_prefix produces a distinct layout; verify against its own scan
+    const struct fz_scan_s * vscan = (cs.mode == FZ_MODE_WRITE_PREFIX) ? &case_scan : scan;
     if (fz_copy_truncate(case_path, ro_path, INT64_MAX)) {
         printf("case copy failed\n");
+        fz_scan_free(&case_scan);
         return JLS_ERROR_IO;
     }
 
     if (fz->verbose) {
         printf("%20" PRIu64 " cfg=%2u %s @%9" PRIi64 "/%" PRIi64 " : ",
-               case_seed, cfg_id, FZ_MODE_NAMES[cs.mode], cs.offset, scan->fend);
+               case_seed, cfg_id, FZ_MODE_NAMES[cs.mode], cs.offset, vscan->fend);
         fflush(stdout);
     }
-    fz_case_run(fz, &cfg, scan, case_path, ro_path, &cs, case_seed, &result);
+    fz_case_run(fz, &cfg, vscan, case_path, ro_path, &cs, case_seed, &result);
     uint32_t fails = result.fails;
 
     ++fz->case_count;
@@ -1356,7 +1447,7 @@ static int32_t fz_run_case(struct fz_s * fz, uint64_t case_seed) {
         }
         if (!fz->verbose) {
             printf("%20" PRIu64 " cfg=%2u %s @%9" PRIi64 "/%" PRIi64 " : ",
-                   case_seed, cfg_id, FZ_MODE_NAMES[cs.mode], cs.offset, scan->fend);
+                   case_seed, cfg_id, FZ_MODE_NAMES[cs.mode], cs.offset, vscan->fend);
         }
         printf("FAIL [");
         for (uint32_t bit = 0; bit < FZ_FAIL_COUNT; ++bit) {
@@ -1387,6 +1478,7 @@ static int32_t fz_run_case(struct fz_s * fz, uint64_t case_seed) {
     } else if (fz->verbose) {
         printf("PASS %s\n", result.detail);
     }
+    fz_scan_free(&case_scan);
     remove(case_path);
     remove(ro_path);
     return 0;

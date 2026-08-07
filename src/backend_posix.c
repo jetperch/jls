@@ -119,6 +119,9 @@ int32_t jls_bk_fclose(struct jls_bkf_s * self) {
 }
 
 int32_t jls_bk_fwrite(struct jls_bkf_s * self, const void * buffer, unsigned int count) {
+    if (jls_bk_write_limit_consume(count)) {
+        return JLS_ERROR_IO;  // test-only fault injection
+    }
     ssize_t sz = write(self->fd, buffer, count);
     if (sz < 0) {
         JLS_LOGE("write failed %d", errno);
@@ -143,7 +146,7 @@ int32_t jls_bk_fread(struct jls_bkf_s * self, void * const buffer, unsigned cons
     }
     self->fpos += sz;
     if ((unsigned int) sz != buffer_size) {
-        JLS_LOGE("write mismatch %d != %d", sz, buffer_size);
+        JLS_LOGE("read mismatch %d != %d", sz, buffer_size);
         return JLS_ERROR_IO;
     }
     return 0;

@@ -62,6 +62,31 @@ static inline void invalidate_current_chunk(struct jls_raw_s * self) {
     self->hdr.tag = JLS_TAG_INVALID;
 }
 
+// Test-only write fault injection; see jls/backend.h.
+static int64_t bk_write_limit = -1;    // -1: unlimited
+static int64_t bk_write_total = 0;
+
+void jls_bk_write_limit_set(int64_t remaining_bytes) {
+    bk_write_limit = remaining_bytes;
+}
+
+int64_t jls_bk_write_total(void) {
+    return bk_write_total;
+}
+
+int32_t jls_bk_write_limit_consume(uint32_t count) {
+    bk_write_total += count;
+    if (bk_write_limit < 0) {
+        return 0;  // unlimited
+    }
+    if ((int64_t) count > bk_write_limit) {
+        bk_write_limit = 0;  // budget exhausted; simulate crash mid-write
+        return JLS_ERROR_IO;
+    }
+    bk_write_limit -= count;
+    return 0;
+}
+
 static inline uint32_t payload_size_on_disk(uint32_t payload_size) {
     if (!payload_size) {
         return 0;

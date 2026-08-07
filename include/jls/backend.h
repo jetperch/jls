@@ -62,6 +62,25 @@ int64_t jls_bk_ftell(struct jls_bkf_s * self);
 int32_t jls_bk_fflush(struct jls_bkf_s * self);
 int32_t jls_bk_truncate(struct jls_bkf_s * self);
 
+/**
+ * @brief Test-only write fault injection: fail writes after a byte budget.
+ *
+ * @param remaining_bytes The number of bytes that future jls_bk_fwrite
+ *      calls may write before failing, or -1 to disable (default).
+ *
+ * Used by the read_fuzzer write_prefix mode to create the exact file
+ * states left behind by a writer process crash.  Writes are
+ * all-or-nothing: a write that would exceed the budget fails without
+ * writing and zeroes the remaining budget.
+ */
+JLS_API void jls_bk_write_limit_set(int64_t remaining_bytes);
+
+/// The total bytes written by jls_bk_fwrite in this process.
+JLS_API int64_t jls_bk_write_total(void);
+
+/// Internal: returns 0 to allow a write of count bytes, else error.
+int32_t jls_bk_write_limit_consume(uint32_t count);
+
 // forward declaration for "threaded_writer.h"
 struct jls_twr_s;
 struct jls_bkt_s * jls_bkt_initialize(struct jls_twr_s * wr);

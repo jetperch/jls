@@ -62,9 +62,18 @@ Format, one entry per unique defect:
 - Root cause (partial): annotation/UTC/VSR chains are never repaired
   (`todo` at src/reader.c:139-144), so item_next pointers dangle past
   EOF or into rewritten chunks; iteration follows them and errors out.
+- write_prefix confirmation (cleanest repro, no byte corruption):
+  the write_prefix campaign fails ONLY with utc_count, always at a
+  round multiple of utc_decimate_factor (reader returns 100/200/300...
+  when 113/246/399 UTC entries are actually present).  The reader
+  surfaces only entries already folded into a UTC summary; the tail
+  UTC data chunks written after the last summary are lost because the
+  UTC index/summary chain is not rebuilt on repair.  Same mechanism
+  applies to annotations.
 - Regression test: TODO (stage 5)
-- Fix: repair ts-track chains like FSR, and/or make iteration stop
-  gracefully at a dangling/invalid chunk.  Status: OPEN
+- Fix: repair ts-track (UTC/annotation) chains like FSR — rebuild the
+  index/summary from the surviving data chunks — and/or make iteration
+  stop gracefully at a dangling/invalid chunk.  Status: OPEN
 
 ### F4: recovery discards intact samples (primary tail chunk; secondary
     signal near-total loss)
@@ -144,6 +153,36 @@ Format, one entry per unique defect:
 - Fix: read the trailing byte only when `(length * bits) & 7` is
   nonzero.  Status: FIXED (2026-08-07, fuzz-blocker; needed to run
   ASan campaigns)
+
+### F8: heap-buffer-overflow in jls_core_repair_fsr (memcpy)
+- Discovered: 2026-08-07, ASan campaigns (truncate, zero_tail,
+  torn_update all abort here)
+- Class: 1 (memory safety)
+- Symptom: AddressSanitizer heap-buffer-overflow WRITE in
+  `jls_core_repair_fsr` (src/core.c:1329),
+  `memcpy(track_fsr->data, buf->start, buf->length)`.  The data buffer
+  is sized for one data chunk (samples_per_data * dt), but the chunk
+  read at the walked offset can be larger (a summary/foreign chunk
+  reached via a dangling item_next, per F4/F6).
+- Root cause: same dangling-pointer re-binding as F4/F6, plus no
+  tag/meta/size validation before the memcpy.
+- Regression test: TODO (stage 5)
+- Fix: validate the chunk (tag == TRACK_FSR_DATA, chunk_meta ==
+  signal, payload_length <= data buffer size) before copying, and
+  bound the memcpy.  Shares the F4/F6 fix.  Status: OPEN
+
+### F9: reader instance leaked on failed open
+- Discovered: 2026-08-07, ASan LeakSanitizer (cfg=26 seed
+  10223456587216945989 and any early-EMPTY open)
+- Class: 1 (resource leak; C2 confirmed)
+- Symptom: 21 allocations (~3.7 MB in that case) leaked when
+  `jls_rd_open` returns without freeing `self`.
+- Root cause: `jls_rd_open` early `return JLS_ERROR_EMPTY`
+  (src/reader.c:94-95) and possibly other non-`goto exit` returns skip
+  `jls_rd_close(self)`.
+- Regression test: TODO (stage 5); run under LSan.
+- Fix: route all failure returns in jls_rd_open through the exit
+  cleanup.  Status: OPEN
 
 ### O2: open performs no repair for mid-file damage in closed files
 - Discovered: 2026-08-07, torn_update + zero_hole smoke runs
