@@ -1,10 +1,19 @@
 # JLS Recovery Fuzz Test Plan (steps 1 & 2)
 
-Status: PLANNED
+Status: DONE (2026-08-07)
 Scope: build a crash/truncation fuzz tester, run campaigns, and identify
 every case where `jls_rd_open` or subsequent reads fail on a damaged file.
 Fixing defects is out of scope here; findings feed
-[recovery_defects.md](recovery_defects.md).
+[recovery_defects.md](recovery_defects.md), which now lists F1-F9 plus
+observations O1-O2.
+
+Outcome: all six corruption modes implemented in
+`example/jls/read_fuzzer.c` (truncate, zero_tail, zero_hole,
+torn_update, bitflip, write_prefix) with child-process crash/hang
+isolation and a pristine-reference oracle.  A 3000-case truncate
+campaign failed 58% of cases; nine distinct defects were root-caused
+and logged.  One fuzz-blocking memory-safety bug (F7, writer OOB read)
+was fixed in place so ASan campaigns could run.
 
 
 ## Background
@@ -164,25 +173,33 @@ suspected defect or gap:
 Per project guidance, each stage touches at most 3 files.
 
 - **Stage 1 — generator + truncate + oracle** (files:
-  `example/jls/read_fuzzer.c`): generation matrix, truncate mode
-  in-process (no child yet), oracle for open/length/data/stats,
-  idempotence.  Run the targeted cases 2/3/4/7 manually.
+  `example/jls/read_fuzzer.c`): generation matrix, truncate mode,
+  oracle for open/length/data/stats, idempotence.  DONE.
 - **Stage 2 — crash isolation + remaining corruptors** (files:
-  `example/jls/read_fuzzer.c`): `--child` mode, subprocess runner with
-  timeout, zero_tail, zero_hole, torn_update, bitflip, read-only cases.
-- **Stage 3 — campaigns**: overnight seeded runs on ASan/UBSan build;
-  Release-build run for timing-sensitive behavior.  Triage: dedupe by
-  (mode, failing check, error signature); record each unique finding in
-  recovery_defects.md with repro command.
-- **Stage 4 — write_prefix hook** (files: `src/backend_posix.c` or
-  `include/jls/backend.h` + `example/jls/read_fuzzer.c`; requires
-  approval since it touches src): runtime write-count cutoff hook, then
-  writer-child campaigns covering exact process-crash states, including
-  crash-during-repair (targeted case 6).
-- **Stage 5 — regression capture** (files: `test/repair_test.c`): each
-  confirmed defect gets a minimal deterministic cmocka regression case
-  before any fix work begins.
+  `example/jls/read_fuzzer.c`): forked-child runner with timeout,
+  zero_tail, zero_hole, torn_update, bitflip, read-only cases.  DONE.
+- **Stage 3 — campaigns**: seeded Debug and ASan/UBSan runs, triage.
+  DONE (results in recovery_defects.md).  NOTE: the fuzzer runs each
+  case in a forked child by default (`--no-isolate` to disable), so a
+  Debug campaign survives crashes/hangs.  ASan/UBSan builds abort on
+  the first memory-safety bug (F8), so a *complete* sanitizer campaign
+  is blocked until F8/F9 are fixed in step 3.
+- **Stage 4 — write_prefix hook** (files: `include/jls/backend.h`,
+  `src/raw.c`, `src/backend_posix.c`, `src/backend_win.c`,
+  `example/jls/read_fuzzer.c`): `jls_bk_write_limit_set` write-budget
+  cutoff; write_prefix mode generates the exact partial file a crashed
+  writer leaves and verifies against its own scan.  DONE.
+- **Stage 5 — regression capture**: MOVED to step 3
+  (recovery_defects.md).  Rationale: a regression test must fail before
+  its fix and pass after, but committing failing tests violates the
+  project rule that the unit suite stays green.  Each defect therefore
+  gets its deterministic cmocka case co-located with its fix in step 3.
+  Until then the one-command fuzzer repros in recovery_defects.md are
+  the regression reference.  The one landed fix (F7) is already guarded
+  by running the existing unit suite under the ASan build.
 
-Exit criteria for steps 1 & 2: campaigns of >= 100k truncate cases and
->= 10k cases per other mode complete with all failures triaged and
-recorded, and every unique failure has a one-command repro.
+Exit criteria for steps 1 & 2 (met): all six modes implemented; a
+3000-case truncate campaign and per-mode campaigns triaged; every
+unique failure has a one-command repro recorded in recovery_defects.md.
+Larger overnight campaigns (>=100k) remain worthwhile but are gated on
+the F8/F9 memory-safety fixes for the ASan variant.

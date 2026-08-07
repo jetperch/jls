@@ -223,6 +223,35 @@ fuzzer before promoting to findings:
 - C5: repair is not atomic; crash during repair may lose more data.
 
 
+## Campaign results (2026-08-07)
+
+Debug build, 3000 truncate cases (seed 31337), child-isolated:
+
+| category         | count | finding |
+|------------------|-------|---------|
+| ann_error        | 906   | F3 |
+| user_data_error  | 855   | F3 |
+| utc_error        | 739   | F3 |
+| excess_loss      | 529   | F4 |
+| utc_count        | 510   | F3 |
+| open_fail        | 113   | F1 |
+| crash            | 34    | F8 (repair memcpy overflow) |
+| data_mismatch    | 32    | F5 |
+| not_idempotent   | 32    | F5 |
+| hang             | 14    | F6 (repair index loop) |
+
+1741/3000 cases failed (58%).  Child isolation recorded all 34 crashes
+and 14 hangs without aborting the campaign.  Dominant category is the
+unrepaired ts-track chains (F3: ann + utc + user_data ≈ 3010 hits
+across cases).  ASan/UBSan builds abort on the first F8 overflow, so
+memory-safety fixes (F7 done, F8/F9 open) must precede a full
+sanitizer campaign.
+
+write_prefix (400 cases): failures are exclusively utc_count — the
+cleanest F3 repro, no byte corruption.  bitflip (400 cases): no strict
+failures (graceful-error-only mode), memory-safety still enforced.
+
+
 ## Classification and fix policy
 
 Ordered by severity; fix in this order:
