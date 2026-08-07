@@ -80,11 +80,23 @@ Format, one entry per unique defect:
   truncation point.  Two magnitudes: exactly one trailing chunk
   (suspect src/track.c:170-173 updating `summary_chunk` where
   `data_chunk` was modified), and near-total collapse of the second
-  FSR signal (n=1..40 with hundreds of thousands intact; root cause
-  not yet isolated).
+  FSR signal (n=1..40 with hundreds of thousands intact).
+- Root cause (secondary collapse, verified on repro cfg=10 seed
+  14242569707943863013): dangling pointer re-binding.  Truncation
+  leaves stale item_next/index offsets pointing past EOF.  Repair
+  processes signals in order and *appends* rebuilt index/summary/END
+  chunks at exactly those offsets, so a later signal's stale pointers
+  now reference valid but foreign chunks (e.g. signal 9's data chain
+  ends at signal 5's rebuilt level-2 index).  Repair walks
+  (`jls_core_repair_fsr` level-0 loop) and `jls_core_fsr_length` never
+  validate chunk tag/chunk_meta, so the foreign chunk is consumed as
+  signal-9 data: its header (timestamp=0, entry_count=1) yields
+  length 1.  The same mechanism produces the F6 infinite loop.
 - Regression test: TODO (stage 5)
-- Fix: TBD after root-cause of the secondary-signal collapse.
-  Status: OPEN
+- Fix direction: invalidate dangling pointers (zero item_next of each
+  chain tail) BEFORE appending any repair chunks, and validate
+  tag/meta on every chain/index hop in repair and read paths.
+  Status: OPEN (root-caused)
 
 ### F5: fsr_length errors and non-idempotent reopen on some truncations
 - Discovered: 2026-08-07, fuzz mode truncate, campaign seed 12345

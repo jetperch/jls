@@ -1365,9 +1365,17 @@ static int32_t fz_run_case(struct fz_s * fz, uint64_t case_seed) {
             }
         }
         printf(" ] %s\n", result.detail);
-        printf("    repro: jls read_fuzzer --corrupt %s --random %" PRIu64
-               " --cfg %u --iterations 1 --workdir %s\n",
-               FZ_MODE_NAMES[fz->mode], case_seed, cfg_id, fz->workdir);
+        // the seed fully reproduces the case, but forced --cfg/--offset
+        // change the random draw sequence so they must match this run
+        printf("    repro: jls read_fuzzer --corrupt %s --random %" PRIu64,
+               FZ_MODE_NAMES[fz->mode], case_seed);
+        if (fz->cfg_forced >= 0) {
+            printf(" --cfg %" PRIi32, fz->cfg_forced);
+        }
+        if (fz->offset_forced >= 0) {
+            printf(" --offset %" PRIi64, fz->offset_forced);
+        }
+        printf(" --iterations 1 --workdir %s\n", fz->workdir);
         if (fz->keep) {
             char keep_path[700];
             snprintf(keep_path, sizeof(keep_path), "%s/fail_%" PRIu64 ".jls",
