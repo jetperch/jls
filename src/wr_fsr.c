@@ -481,7 +481,10 @@ static int32_t wr_data_inner(struct jls_core_fsr_s * self, const void * data, ui
             if (byte_length) {
                 memcpy(dst_u8, src_u8, byte_length);
             }
-            self->shift_buffer = src_u8[byte_length];
+            if ((length * sample_size_bits) & 7) {
+                // partial trailing byte, only present for sub-byte types
+                self->shift_buffer = src_u8[byte_length];
+            }
             src_u8 += byte_length;
         }
         b->header.entry_count += length;

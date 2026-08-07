@@ -117,6 +117,33 @@ Format, one entry per unique defect:
   read loops must fail on no-progress; separately fix the repair that
   produced the bad index.  Status: OPEN
 
+### F7: writer out-of-bounds read on every byte-aligned FSR write
+- Discovered: 2026-08-07, ASan build, during pristine file generation
+  (not corruption-dependent; affects every producer)
+- Class: 1 (memory safety)
+- Symptom: AddressSanitizer heap-buffer-overflow READ of 1 byte in
+  `wr_data_inner` (src/wr_fsr.c:484) via jls_wr_fsr_f32.
+- Root cause: the byte-aligned path unconditionally saved
+  `src_u8[byte_length]` into shift_buffer, reading one byte past the
+  caller's buffer whenever the written span ends on a byte boundary.
+  The saved byte is only meaningful for sub-byte data types with a
+  trailing partial byte.
+- Regression test: existing unit suite under ASan now covers it.
+- Fix: read the trailing byte only when `(length * bits) & 7` is
+  nonzero.  Status: FIXED (2026-08-07, fuzz-blocker; needed to run
+  ASan campaigns)
+
+### O2: open performs no repair for mid-file damage in closed files
+- Discovered: 2026-08-07, torn_update + zero_hole smoke runs
+- Class: 2 (architectural)
+- Symptom: 7/8 torn_update cases fail open with MESSAGE_INTEGRITY.
+  `jls_rd_open` runs scan_initial/scan_sources/scan_signals with
+  fatal ROE *before* any repair, and repair only triggers when the
+  final chunk is not JLS_TAG_END.  Any damaged def/head chunk in an
+  otherwise closed file makes open fail with no repair attempt.
+- Fix: TBD (step 3 design decision: tolerate/rebuild damaged heads,
+  and consider repair for mid-file damage).  Status: OPEN
+
 ### O1: FSR statistics are approximate for entry-misaligned multi-entry
     reads (observation, needs Matt's ruling)
 - Discovered: 2026-08-07 via oracle self-test on an undamaged file
