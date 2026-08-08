@@ -1,11 +1,15 @@
 # JLS Recovery Defect Remediation Plan (step 3)
 
-Status: FIXES LANDED (2026-08-08).  All findings F1-F9 are FIXED and
+Status: COMPLETE (2026-08-08).  All findings F1-F9 are FIXED and
 covered by `test/recovery_test.c` (verified to fail before the fixes
 and pass after).  Every crash-consistent fuzz mode passes with zero
-failures; see "Verification campaign results" below.  Remaining open
-items are the two design decisions (O1, O2 interior damage) awaiting
-Matt's ruling.
+failures; see "Verification campaign results" below.  The design
+questions are resolved: O1 closed as designed (multi-entry statistics
+serve plot generation; single-point is exact), O2 closed as actual
+data loss with salvage via `jls copy` replay, C4 closed as a
+documented limitation (read-only files recover via replay to a
+copy), C5 closed as an accepted risk with the append-only END-last
+mitigation.
 
 Fix commits:
 
@@ -247,19 +251,33 @@ Format, one entry per unique defect:
   damaged track heads are rebuilt by physically scanning the chunks
   (jls_track_repair_head), and the definition scans skip a
   payload-damaged chunk instead of dropping every later definition.
-  All torn_update cases now pass.  REMAINING OPEN (needs Matt's
-  ruling): interior damage in *closed* files (zero_hole) is not
-  repaired.  Reads into the destroyed region now fail gracefully
-  with JLS_ERROR_MESSAGE_INTEGRITY — never silent wrong data, never
-  a crash.  Design options: (a) keep the graceful error (data is
-  gone; summaries still serve statistics), (b) reconstruct the holed
-  region from surviving summaries like omitted chunks (approximate
-  sample values), (c) trigger repair when any read hits mid-file
-  damage.  Option (b) changes data semantics; do not implement
-  without approval.  Status: OPEN (design decision)
+  All torn_update cases now pass.
+- Ruling (Matt, 2026-08-08): interior damage in closed files is
+  actual data loss; in-place repair is not required.  Handling:
+  1. Reads into the destroyed region keep failing gracefully with
+     JLS_ERROR_MESSAGE_INTEGRITY (never silent wrong data, never a
+     crash) — implemented and fuzz-verified.
+  2. Salvage is recovery-by-replay: `jls copy <src> <dst>` walks the
+     physical chunks, resyncs past damage (jls_raw_chunk_scan), and
+     replays into a fresh file.  Verified on a read-only zero-holed
+     file: the destroyed chunk becomes a skipped region, the copy
+     opens cleanly at full length, and reads over the hole use the
+     existing omitted-chunk reconstruction from surviving summaries.
+  Possible future refinements (not required): report damage extents
+  to the caller (e.g. a jls_rd API listing unreadable sample ranges)
+  so applications can distinguish salvaged approximations from real
+  samples; and/or an on-read omitted-chunk fallback behind an
+  explicit opt-in.  Status: CLOSED (by design; salvage via jls copy)
 
 ### O1: FSR statistics are approximate for entry-misaligned multi-entry
-    reads (observation, needs Matt's ruling)
+    reads (observation) — CLOSED, as designed
+- Ruling (Matt, 2026-08-08): the multi-entry path exists for plot
+  point generation; interior boundary approximation is acceptable
+  and as designed.  For exact statistics, request a single point
+  (data_length == 1), which evaluates start and end down to the
+  sample.  The fuzz oracle already reflects this: entry-aligned
+  windows are checked exactly, misaligned multi-entry windows use a
+  proportional tolerance.  No code change.
 - Discovered: 2026-08-07 via oracle self-test on an undamaged file
 - Detail: the writer adjusts signal def parameters (requested
   samples_per_data=1000 / sample_decimate_factor=100 became 1040/104).
@@ -284,16 +302,17 @@ Candidate defects already suspected from code inspection:
   as F9, FIXED.
 - C3: annotation/UTC/VSR chains never repaired.  CONFIRMED as F3,
   FIXED.
-- C4: recovery impossible without write permission (design gap).
-  STILL OPEN: opening a damaged read-only file fails gracefully
-  (fuzzer "readonly" checks pass; no crash, no leak).  In-memory
-  repair for read-only opens remains a design proposal for Matt.
+- C4: recovery impossible without write permission.  CLOSED
+  (documented limitation, Matt 2026-08-08): in-place repair cannot
+  and will not support read-only files; opening a damaged read-only
+  file fails gracefully (no crash, no leak; fuzzer "readonly"
+  checks pass).  The supported path is recovery by replay to a copy:
+  `jls copy <src> <dst>` works from a read-only source (verified).
 - C5: repair is not atomic; a crash during repair may lose more
-  data.  MITIGATED, not eliminated: all repair writes now append at
-  the file end and the END chunk is written last as the commit
-  point, so an interrupted repair leaves another repairable
-  unclosed file.  Not exhaustively fuzzed (would need write-budget
-  injection during repair itself).
+  data.  CLOSED (accepted risk, Matt 2026-08-08).  Mitigation in
+  place: all repair writes append at the file end and the END chunk
+  is written last as the commit point, so an interrupted repair
+  leaves another repairable unclosed file.
 
 
 ## Verification campaign results (2026-08-08, after fixes)
