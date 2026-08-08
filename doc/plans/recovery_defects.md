@@ -91,9 +91,12 @@ Format, one entry per unique defect:
 ### F3: annotation/UTC/user-data iteration errors after recovery
 - Discovered: 2026-08-07, fuzz mode truncate, campaign seed 12345
 - Repro (examples):
-  jls read_fuzzer --corrupt truncate --random 8706103446039621978 --cfg 29 --offset 732001 --iterations 1
-  jls read_fuzzer --corrupt truncate --random 6475571562195355053 --cfg 30 --offset 17267 --iterations 1
-  jls read_fuzzer --corrupt truncate --random 5719033040969464515 --cfg 25 --offset 79049 --iterations 1
+  jls read_fuzzer --corrupt truncate --random 8706103446039621978 --cfg 29 --offset 732001 \
+      --iterations 1
+  jls read_fuzzer --corrupt truncate --random 6475571562195355053 --cfg 30 --offset 17267 \
+      --iterations 1
+  jls read_fuzzer --corrupt truncate --random 5719033040969464515 --cfg 25 --offset 79049 \
+      --iterations 1
 - Class: 2 (iteration APIs return errors on recovered files)
 - Symptom: `jls_rd_annotations` / `jls_rd_utc` / `jls_rd_user_data`
   return EMPTY (13), NOT_FOUND (16), or MESSAGE_INTEGRITY (9) instead
@@ -121,9 +124,11 @@ Format, one entry per unique defect:
     signal near-total loss)
 - Discovered: 2026-08-07, fuzz mode truncate, campaign seed 12345
 - Repro (examples):
-  jls read_fuzzer --corrupt truncate --random 8491820169393132966 --cfg 19 --offset 188487 --iterations 1
+  jls read_fuzzer --corrupt truncate --random 8491820169393132966 --cfg 19 --offset 188487 \
+      --iterations 1
     (primary n=28080, intact 29120: one full data chunk lost)
-  jls read_fuzzer --corrupt truncate --random 14242569707943863013 --cfg 10 --offset 111206 --iterations 1
+  jls read_fuzzer --corrupt truncate --random 14242569707943863013 --cfg 10 --offset 111206 \
+      --iterations 1
     (secondary n=1, intact 20480: near-total loss)
 - Class: 3 (silent excess data loss)
 - Symptom: after successful repair, `jls_rd_fsr_length` reports fewer
@@ -154,8 +159,10 @@ Format, one entry per unique defect:
 ### F5: fsr_length errors and non-idempotent reopen on some truncations
 - Discovered: 2026-08-07, fuzz mode truncate, campaign seed 12345
 - Repro:
-  jls read_fuzzer --corrupt truncate --random 15123140413808120767 --cfg 7 --offset 434314 --iterations 1
-  jls read_fuzzer --corrupt truncate --random 6005057263588564345 --cfg 20 --offset 5480089 --iterations 1
+  jls read_fuzzer --corrupt truncate --random 15123140413808120767 --cfg 7 --offset 434314 \
+      --iterations 1
+  jls read_fuzzer --corrupt truncate --random 6005057263588564345 --cfg 20 --offset 5480089 \
+      --iterations 1
 - Class: 2/5 (open succeeds but length query fails; reopen differs)
 - Symptom: first open succeeds, `jls_rd_fsr_length` returns
   MESSAGE_INTEGRITY (9) or IO (5); reopen reports a different state.
