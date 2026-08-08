@@ -529,30 +529,34 @@ int32_t jls_core_scan_sources(struct jls_core_s * self) {
     }
     ROE(jls_raw_chunk_seek(self->raw, self->source_head.offset));
     while (1) {
-        if (jls_core_rd_chunk(self)) {
+        int32_t rc = jls_core_rd_chunk(self);
+        if (JLS_ERROR_MESSAGE_INTEGRITY == rc) {
+            // payload damaged but header valid: skip this chunk, keep the chain
+            JLS_LOGW("skip damaged source chunk at %" PRIi64, self->chunk_cur.offset);
+        } else if (rc) {
             // damaged file: keep the sources scanned so far
             JLS_LOGW("source scan ends early: unreadable chunk");
             return 0;
-        }
-        if (self->chunk_cur.hdr.tag != JLS_TAG_SOURCE_DEF) {
+        } else if (self->chunk_cur.hdr.tag != JLS_TAG_SOURCE_DEF) {
             JLS_LOGW("source scan ends early: unexpected tag %d", (int) self->chunk_cur.hdr.tag);
             return 0;
-        }
-        uint16_t source_id = self->chunk_cur.hdr.chunk_meta;
-        if (source_id >= JLS_SOURCE_COUNT) {
-            JLS_LOGW("source_id %d too big - skip", (int) source_id);
         } else {
-            struct jls_core_source_s * source_info = &self->source_info[source_id];
-            source_info->chunk_def = self->chunk_cur;
-            struct jls_source_def_s *src = &source_info->source_def;
-            ROE(jls_buf_rd_skip(self->buf, 64));
-            ROE(jls_buf_rd_str(self->buf, (const char **) &src->name));
-            ROE(jls_buf_rd_str(self->buf, (const char **) &src->vendor));
-            ROE(jls_buf_rd_str(self->buf, (const char **) &src->model));
-            ROE(jls_buf_rd_str(self->buf, (const char **) &src->version));
-            ROE(jls_buf_rd_str(self->buf, (const char **) &src->serial_number));
-            src->source_id = source_id;  // indicate that this source is valid!
-            JLS_LOGD1("Found source %d : %s", (int) source_id, src->name);
+            uint16_t source_id = self->chunk_cur.hdr.chunk_meta;
+            if (source_id >= JLS_SOURCE_COUNT) {
+                JLS_LOGW("source_id %d too big - skip", (int) source_id);
+            } else {
+                struct jls_core_source_s * source_info = &self->source_info[source_id];
+                source_info->chunk_def = self->chunk_cur;
+                struct jls_source_def_s *src = &source_info->source_def;
+                ROE(jls_buf_rd_skip(self->buf, 64));
+                ROE(jls_buf_rd_str(self->buf, (const char **) &src->name));
+                ROE(jls_buf_rd_str(self->buf, (const char **) &src->vendor));
+                ROE(jls_buf_rd_str(self->buf, (const char **) &src->model));
+                ROE(jls_buf_rd_str(self->buf, (const char **) &src->version));
+                ROE(jls_buf_rd_str(self->buf, (const char **) &src->serial_number));
+                src->source_id = source_id;  // indicate that this source is valid!
+                JLS_LOGD1("Found source %d : %s", (int) source_id, src->name);
+            }
         }
         if (!self->chunk_cur.hdr.item_next) {
             break;
@@ -635,12 +639,15 @@ int32_t jls_core_scan_signals(struct jls_core_s * self) {
     }
     ROE(jls_raw_chunk_seek(self->raw, self->signal_head.offset));
     while (1) {
-        if (jls_core_rd_chunk(self)) {
+        int32_t rc = jls_core_rd_chunk(self);
+        if (JLS_ERROR_MESSAGE_INTEGRITY == rc) {
+            // payload damaged but header valid: skip this chunk, keep the chain
+            JLS_LOGW("skip damaged signal chunk at %" PRIi64, self->chunk_cur.offset);
+        } else if (rc) {
             // damaged file: keep the signals scanned so far
             JLS_LOGW("signal scan ends early: unreadable chunk");
             return 0;
-        }
-        if (self->chunk_cur.hdr.tag == JLS_TAG_SIGNAL_DEF) {
+        } else if (self->chunk_cur.hdr.tag == JLS_TAG_SIGNAL_DEF) {
             handle_signal_def(self);
         } else if ((self->chunk_cur.hdr.tag & 7) == JLS_TRACK_CHUNK_DEF) {
             handle_track_def(self, self->chunk_cur.offset);

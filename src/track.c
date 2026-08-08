@@ -75,6 +75,56 @@ int32_t jls_track_update(struct jls_core_track_s * track, uint8_t level, int64_t
     return 0;
 }
 
+int32_t jls_track_repair_head(struct jls_core_signal_s * signal, uint8_t track_type) {
+    struct jls_core_s * core = signal->parent;
+    struct jls_raw_s * raw = core->raw;
+    uint16_t signal_id = signal->signal_def.signal_id;
+    struct jls_core_track_s * track = &signal->tracks[track_type];
+    uint8_t head_tag = jls_track_tag_pack(track_type, JLS_TRACK_CHUNK_HEAD);
+    uint8_t data_tag = jls_track_tag_pack(track_type, JLS_TRACK_CHUNK_DATA);
+    uint8_t index_tag = jls_track_tag_pack(track_type, JLS_TRACK_CHUNK_INDEX);
+    struct jls_core_chunk_s head = {.offset = 0};
+    int64_t head_offsets[JLS_SUMMARY_LEVEL_COUNT];
+    struct jls_chunk_header_s hdr;
+    memset(head_offsets, 0, sizeof(head_offsets));
+
+    // The head payload was lost.  Scan the physical chunks to find the
+    // head chunk and the first chunk at each level for this track.
+    ROE(jls_raw_chunk_seek(raw, sizeof(struct jls_file_header_s)));
+    while (1) {
+        if (jls_raw_rd_header(raw, &hdr)) {
+            if (jls_raw_chunk_scan(raw)) {
+                break;  // no further valid chunks
+            }
+            continue;
+        }
+        int64_t pos = jls_raw_chunk_tell(raw);
+        if ((hdr.tag == head_tag) && (hdr.chunk_meta == signal_id)) {
+            head.offset = pos;
+            head.hdr = hdr;
+        } else if ((hdr.chunk_meta & 0x0fff) == signal_id) {
+            uint8_t level = (uint8_t) (hdr.chunk_meta >> 12);
+            if ((hdr.tag == data_tag) && (0 == level) && (0 == head_offsets[0])) {
+                head_offsets[0] = pos;
+            } else if ((hdr.tag == index_tag) && level && (0 == head_offsets[level])) {
+                head_offsets[level] = pos;
+            }
+        }
+        if (jls_raw_chunk_next(raw) && jls_raw_chunk_scan(raw)) {
+            break;
+        }
+    }
+    if (0 == head.offset) {
+        return JLS_ERROR_NOT_FOUND;  // track was never written; nothing to rebuild
+    }
+    JLS_LOGI("rebuild head: signal %d track %d", (int) signal_id, (int) track_type);
+    track->parent = signal;
+    track->track_type = track_type;
+    track->head = head;
+    memcpy(track->head_offsets, head_offsets, sizeof(head_offsets));
+    return jls_track_wr_head(track);
+}
+
 int32_t jls_track_repair_pointers(struct jls_core_track_s * track) {
     struct jls_core_signal_s * signal = track->parent;
     struct jls_core_s * core = signal->parent;

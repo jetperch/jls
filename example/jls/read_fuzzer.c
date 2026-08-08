@@ -1114,7 +1114,8 @@ static int32_t fz_make_case(struct fz_s * fz, const struct fz_cfg_s * cfg,
         bool has_def5 = false;
         bool has_def9 = false;
         for (size_t i = 0; i < case_scan->length; ++i) {
-            if (case_scan->chunks[i].tag == JLS_TAG_SIGNAL_DEF) {
+            if ((case_scan->chunks[i].tag == JLS_TAG_SIGNAL_DEF)
+                    && (case_scan->chunks[i].end_offset <= case_scan->fend)) {  // complete payload
                 if (case_scan->chunks[i].chunk_meta == FZ_SIGNAL_ID_F32) {
                     has_def5 = true;
                 } else if (case_scan->chunks[i].chunk_meta == FZ_SIGNAL_ID_SEC) {
@@ -1211,6 +1212,7 @@ static int32_t fz_make_case(struct fz_s * fz, const struct fz_cfg_s * cfg,
             if (cs->offset < c->end_offset) {
                 cs->offset = c->end_offset;
             }
+            cs->defs_ok = (cs->offset >= scan->defs_end);
             ROE(fz_copy_truncate(pristine_path, case_path, cs->offset));
             size_t torn_len = c->payload_length / 2;
             if (torn_len > sizeof(buf)) {
