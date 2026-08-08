@@ -8,7 +8,7 @@ This file contains the list of changes made to the JLS project.
 
 2026 Aug 8
 
-* Fixed crash recovery (doc/plans/recovery_defects.md findings F1-F9):
+* Fixed crash recovery (doc/plans/completed/recovery_defects.md findings F1-F9):
   * Fixed repair truncating a fully valid final chunk (backward scan miss).
   * Fixed repair overwriting valid chunks below the truncation point.
   * Fixed heap overflow and infinite read loops on damaged files:

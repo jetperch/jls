@@ -15,7 +15,8 @@
  */
 
 /*
- * Regression tests for crash recovery, from doc/plans/recovery_defects.md.
+ * Regression tests for crash recovery, from
+ * doc/plans/completed/recovery_defects.md.
  * Each test targets findings F1-F9 with deterministic damage.
  */
 
