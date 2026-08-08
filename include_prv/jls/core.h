@@ -210,6 +210,20 @@ static inline uint8_t jls_core_tag_parse_track_type(uint8_t tag) {
     return (tag >> 3) & 3;
 }
 
+/// The FSR summary entry element size in bits for the signal data type.
+static inline uint8_t jls_core_fsr_summary_entry_size_bits(uint32_t data_type) {
+    switch (data_type & 0xffff) {
+        case JLS_DATATYPE_I32: // intentional fall-through
+        case JLS_DATATYPE_I64: // intentional fall-through
+        case JLS_DATATYPE_U32: // intentional fall-through
+        case JLS_DATATYPE_U64: // intentional fall-through
+        case JLS_DATATYPE_F64:
+            return 64;
+        default:
+            return 32;
+    }
+}
+
 int32_t jls_core_wr_data(struct jls_core_s * self, uint16_t signal_id, enum jls_track_type_e track_type,
                          const uint8_t * payload, uint32_t payload_length);
 
@@ -229,6 +243,20 @@ int32_t jls_fsr_open(struct jls_core_fsr_s ** instance, struct jls_core_signal_s
 int32_t jls_fsr_close(struct jls_core_fsr_s * self);
 
 int32_t jls_core_rd_chunk(struct jls_core_s * self);
+
+/**
+ * @brief Read the chunk at the current position and validate tag and chunk_meta.
+ *
+ * @param self The core instance.
+ * @param tag The required chunk tag.
+ * @param chunk_meta The required chunk metadata value.
+ * @return 0 or error code; JLS_ERROR_MESSAGE_INTEGRITY on tag/meta mismatch.
+ *
+ * Damaged or repaired files may contain pointers to foreign chunks.
+ * Every chain or index hop must validate the destination chunk with
+ * this function (or equivalent) before using its payload.
+ */
+int32_t jls_core_rd_chunk_validate(struct jls_core_s * self, uint8_t tag, uint16_t chunk_meta);
 int32_t jls_core_rd_chunk_end(struct jls_core_s * self);
 int32_t jls_core_scan_sources(struct jls_core_s * self);
 int32_t jls_core_scan_signals(struct jls_core_s * self);
