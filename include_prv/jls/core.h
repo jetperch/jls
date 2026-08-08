@@ -284,6 +284,24 @@ int32_t jls_core_rd_fsr_data0(struct jls_core_s * self, uint16_t signal_id, int6
 
 int32_t jls_core_repair_fsr(struct jls_core_s * self, uint16_t signal_id);
 
+/**
+ * @brief Walk an item_next chain and clamp it at the first invalid chunk.
+ *
+ * @param self The core instance.
+ * @param offset The file offset of the first chunk in the chain.
+ * @param tag The required tag for every chunk in the chain.
+ * @param chunk_meta The required chunk_meta, or -1 to skip the check.
+ * @return 0 on success (including a clamped chain),
+ *      JLS_ERROR_NOT_FOUND if the first chunk is invalid (the caller
+ *      must clear the reference to it), or another error code.
+ *
+ * Truncation leaves dangling item_next pointers.  Later repair appends
+ * chunks at the vacated offsets, so a dangling pointer can re-bind to
+ * a valid but foreign chunk.  This function zeros the item_next of the
+ * last valid chunk so readers stop at the damage.
+ */
+int32_t jls_core_repair_chain(struct jls_core_s * self, int64_t offset, uint8_t tag, int32_t chunk_meta);
+
 
 JLS_CPP_GUARD_END
 

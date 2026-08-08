@@ -16,6 +16,7 @@
 
 #include "jls/track.h"
 #include "jls/cdef.h"
+#include "jls/ec.h"
 #include "jls/log.h"
 #include "jls/util.h"
 #include <inttypes.h>
@@ -109,7 +110,11 @@ int32_t jls_track_repair_pointers(struct jls_core_track_s * track) {
         JLS_LOGI("repair signal_id %d track %d, level %d, offset %" PRIi64,
                  (int) signal_id, (int) track->track_type, (int) level, offset);
         bool descend = false;
-        if (jls_raw_chunk_seek(raw, offset) || jls_core_rd_chunk(core)) {  // index
+        uint16_t meta = (uint16_t) ((signal_id & 0x0fff) | (level << 12));
+        uint8_t index_tag = jls_track_tag_pack(track->track_type, JLS_TRACK_CHUNK_INDEX);
+        uint8_t summary_tag = jls_track_tag_pack(track->track_type, JLS_TRACK_CHUNK_SUMMARY);
+        if (jls_raw_chunk_seek(raw, offset)
+                || jls_core_rd_chunk_validate(core, index_tag, meta)) {  // index
             descend = true;
         } else {
             index_chunk_next = core->chunk_cur;
@@ -125,12 +130,15 @@ int32_t jls_track_repair_pointers(struct jls_core_track_s * track) {
                     offset_descend_next = r->entries[r->header.entry_count - 1].offset;
                 }
             }
-            if (jls_core_rd_chunk(core)) {
+            if (jls_core_rd_chunk_validate(core, summary_tag, meta)) {
                 descend = true;
             } else {
                 index_chunk = index_chunk_next;
                 summary_chunk = core->chunk_cur;
                 offset = index_chunk.hdr.item_next;  // next index
+                if (offset && (offset <= index_chunk.offset)) {
+                    offset = 0;  // chains always point forward; drop corrupt backward link
+                }
                 offset_descend = offset_descend_next;
                 track->index_head[level].offset = index_chunk.offset;
                 track->summary_head[level].offset = summary_chunk.offset;
@@ -161,20 +169,17 @@ int32_t jls_track_repair_pointers(struct jls_core_track_s * track) {
         }
     }
 
-    // update level 0 (data)
-    struct jls_core_chunk_s data_chunk = {.offset=0};
-    while (offset) {
-        JLS_LOGI("repair signal_id %d track %d, level %d, offset %" PRIi64,
-                 (int) signal_id, (int) track->track_type, (int) level, offset);
-        if (jls_raw_chunk_seek(raw, offset) || jls_core_rd_chunk(core)) {
-            if (data_chunk.offset) {
-                data_chunk.hdr.item_next = 0;
-                jls_core_update_chunk_header(core, &summary_chunk);
-            }
-            break;
+    // update level 0 (data): clamp the chain at the first invalid chunk
+    JLS_LOGI("repair signal_id %d track %d, level 0, offset %" PRIi64,
+             (int) signal_id, (int) track->track_type, offsets[0]);
+    uint8_t data_tag = jls_track_tag_pack(track->track_type, JLS_TRACK_CHUNK_DATA);
+    if (offsets[0]) {
+        int32_t rc = jls_core_repair_chain(core, offsets[0], data_tag, signal_id);
+        if (JLS_ERROR_NOT_FOUND == rc) {
+            offsets[0] = 0;  // dangling data head: no data chunk survives
+        } else if (rc) {
+            return rc;
         }
-        data_chunk = core->chunk_cur;
-        offset = core->chunk_cur.hdr.item_next;
     }
 
     ROE(jls_track_wr_head(track));
