@@ -126,8 +126,8 @@ float * gen_jls(int64_t sample_count) {
     assert_int_equal(0, jls_wr_signal_def(wr, &SIGNAL_1));
 
     for (int64_t sample_id = 0; sample_id < sample_count; sample_id += window_size) {
-        int64_t y_end = sample_id + sample_count - 1;
-        y_end = (y_end < sample_count) ? y_end : sample_count;
+        int64_t y_end = sample_id + window_size - 1;
+        y_end = (y_end < sample_count) ? y_end : (sample_count - 1);
         uint32_t omit = (y[sample_id] < threshold) && (y[y_end] < threshold) ? 1 : 0;
         assert_int_equal(0, jls_wr_fsr_omit_data(wr, 1, omit));
         assert_int_equal(0, jls_wr_fsr_f32(wr, 1, sample_id, y + sample_id, window_size));

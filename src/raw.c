@@ -188,7 +188,11 @@ int32_t jls_raw_open(struct jls_raw_s ** instance, const char * path, const char
         return JLS_ERROR_NOT_ENOUGH_MEMORY;
     }
     self->backend.fd = -1;
-    ROE(jls_bk_fopen(&self->backend, path, mode));
+    rc = jls_bk_fopen(&self->backend, path, mode);
+    if (rc) {
+        free(self);
+        return rc;
+    }
 
     switch (mode[0]) {
         case 'w':

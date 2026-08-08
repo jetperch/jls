@@ -493,7 +493,9 @@ int32_t jls_core_rd_chunk_end(struct jls_core_s * self) {
             return JLS_ERROR_EMPTY;
         }
         // include i == 0: the chunk at the window start is a valid candidate
-        for (int64_t i = (length - sizeof(struct jls_chunk_header_s)) / sizeof(uint64_t); i >= 0; --i) {
+        // signed math: length may be smaller than a chunk header near file start
+        for (int64_t i = (length - (int64_t) sizeof(struct jls_chunk_header_s)) / (int64_t) sizeof(uint64_t);
+                i >= 0; --i) {
             h = (struct jls_chunk_header_s *) &data[i];
             uint32_t crc32 = jls_crc32c_hdr(h);
             if (crc32 == h->crc32) {
