@@ -181,9 +181,9 @@ Per project guidance, each stage touches at most 3 files.
 - **Stage 3 — campaigns**: seeded Debug and ASan/UBSan runs, triage.
   DONE (results in recovery_defects.md).  NOTE: the fuzzer runs each
   case in a forked child by default (`--no-isolate` to disable), so a
-  Debug campaign survives crashes/hangs.  ASan/UBSan builds abort on
-  the first memory-safety bug (F8), so a *complete* sanitizer campaign
-  is blocked until F8/F9 are fixed in step 3.
+  Debug campaign survives crashes/hangs.  Step 3 fixed F8/F9, so
+  full sanitizer campaigns now run clean (see recovery_defects.md
+  verification results).
 - **Stage 4 — write_prefix hook** (files: `include/jls/backend.h`,
   `src/raw.c`, `src/backend_posix.c`, `src/backend_win.c`,
   `example/jls/read_fuzzer.c`): `jls_bk_write_limit_set` write-budget

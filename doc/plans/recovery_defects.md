@@ -1,9 +1,45 @@
 # JLS Recovery Defect Remediation Plan (step 3)
 
-Status: FRAMEWORK — populated as [recovery_fuzz.md](recovery_fuzz.md)
-campaigns produce findings.  Do not start fixes until the finding is
-recorded here with a repro and a regression test exists in
-`test/repair_test.c`.
+Status: FIXES LANDED (2026-08-08).  All findings F1-F9 are FIXED and
+covered by `test/recovery_test.c` (verified to fail before the fixes
+and pass after).  Every crash-consistent fuzz mode passes with zero
+failures; see "Verification campaign results" below.  Remaining open
+items are the two design decisions (O1, O2 interior damage) awaiting
+Matt's ruling.
+
+Fix commits:
+
+- e83a062 core: validate chunk tag/meta on every hop, fix repair_fsr
+  overflows (F6, F8, F9)
+- 27d1071 core, track: fix repair truncation point, chain clamping,
+  and mid-file writes (F1, F4, F5, C1)
+- 49f4f1e reader, core, track: recover ts tracks, user data, and
+  crash-window updates (F3, orphan chunks, torn heads)
+- 3340f4c test: add crash-recovery regression suite
+
+Additional defects found and fixed during step 3 (no fuzz-finding
+number; discovered by root-causing F4/F5 and by the new tests):
+
+- `jls_core_rd_chunk_end` backward window scan never tested the
+  candidate at each window start (`i > 0` instead of `i >= 0`).  The
+  skipped offsets recur every 1000 bytes, so repair truncated at the
+  START of a fully valid last chunk, discarding it (the true F4
+  "one chunk lost" mechanism).  Also: signed math for short windows
+  (UBSan), and offset 0 (file header) excluded as a candidate.
+- `jls_core_repair_fsr` kept a single `lvl` buffer pointer for the
+  initial level while `level` decremented, writing lower-level chunks
+  into the wrong buffers and passing a NULL summaryN source for files
+  with 2+ summary levels.
+- Repair wrote at the current file position in two places (data-walk
+  summary1 flush, END chunk), overwriting valid chunks below the
+  truncation point (the true F5 mechanism).  All repair writes now
+  seek to the file end first.
+- A crash between writing a chunk and updating its predecessor's
+  item_next (or the track head offsets for a chain-first chunk)
+  orphaned the final chunk.  Repair now relinks it, or restores the
+  lost head offset.
+- `test/fsr_omit_test.c` read one past the sample buffer
+  (`y_end` clamped to sample_count, and window arithmetic typo).
 
 
 ## Findings log
@@ -35,18 +71,18 @@ Format, one entry per unique defect:
   the file.  `jls_core_scan_fsr_sample_id` (called from
   src/reader.c:129) seeks the dangling offset, gets EMPTY from
   `jls_core_rd_chunk`, and the GOE aborts the whole open.
-- Regression test: TODO (stage 5)
-- Fix: clear head_offsets[0] in the repair walk when the first data
-  chunk is unreachable; make scan_fsr_sample_id treat an unreadable
-  data head as "no data" instead of a fatal open error.
-  Status: OPEN
+- Regression test: recovery_test.c:test_truncate_all_data_lost
+- Fix: jls_core_repair_chain clears head_offsets[0] when no data
+  chunk survives; scan_fsr_sample_id treats an unreadable data head
+  as "no data".  Status: FIXED (27d1071)
 
 ### F2: jls_bk_fread error log says "write mismatch"
 - Discovered: 2026-08-07 during F1 triage
 - Class: cosmetic
 - Root cause: copy-paste in src/backend_posix.c:146 (fread short-read
   path logs "write mismatch").
-- Fix: change message to "read mismatch".  Status: OPEN
+- Fix: change message to "read mismatch".  Status: FIXED (2026-08-07,
+  landed with the fuzzer backend work)
 
 ### F3: annotation/UTC/user-data iteration errors after recovery
 - Discovered: 2026-08-07, fuzz mode truncate, campaign seed 12345
@@ -70,10 +106,12 @@ Format, one entry per unique defect:
   UTC data chunks written after the last summary are lost because the
   UTC index/summary chain is not rebuilt on repair.  Same mechanism
   applies to annotations.
-- Regression test: TODO (stage 5)
-- Fix: repair ts-track (UTC/annotation) chains like FSR — rebuild the
-  index/summary from the surviving data chunks — and/or make iteration
-  stop gracefully at a dangling/invalid chunk.  Status: OPEN
+- Regression test: recovery_test.c:test_utc_annotation_user_data_after_crash
+- Fix: ts-track chains are clamped by jls_track_repair_pointers via
+  jls_core_repair_chain; the user data chain is clamped the same way;
+  jls_core_utc continues into the unsummarized tail data chunks after
+  the final index chunk (entries beyond the last summary were the
+  utc_count loss).  Status: FIXED (49f4f1e)
 
 ### F4: recovery discards intact samples (primary tail chunk; secondary
     signal near-total loss)
@@ -101,11 +139,13 @@ Format, one entry per unique defect:
   validate chunk tag/chunk_meta, so the foreign chunk is consumed as
   signal-9 data: its header (timestamp=0, entry_count=1) yields
   length 1.  The same mechanism produces the F6 infinite loop.
-- Regression test: TODO (stage 5)
-- Fix direction: invalidate dangling pointers (zero item_next of each
-  chain tail) BEFORE appending any repair chunks, and validate
-  tag/meta on every chain/index hop in repair and read paths.
-  Status: OPEN (root-caused)
+- Regression test: recovery_test.c:test_truncate_sweep
+- Fix: chains are clamped (item_next of the last valid chunk zeroed)
+  before repair appends anything, and every chain/index hop validates
+  tag/meta (jls_core_rd_chunk_validate).  The "one trailing chunk"
+  variant was the jls_core_rd_chunk_end window-scan miss (see the
+  step 3 additional defects above), not track.c.
+  Status: FIXED (27d1071)
 
 ### F5: fsr_length errors and non-idempotent reopen on some truncations
 - Discovered: 2026-08-07, fuzz mode truncate, campaign seed 12345
@@ -115,8 +155,12 @@ Format, one entry per unique defect:
 - Class: 2/5 (open succeeds but length query fails; reopen differs)
 - Symptom: first open succeeds, `jls_rd_fsr_length` returns
   MESSAGE_INTEGRITY (9) or IO (5); reopen reports a different state.
-- Regression test: TODO (stage 5)
-- Fix: TBD after root cause.  Status: OPEN
+- Regression test: recovery_test.c:test_truncate_sweep (reopen pass)
+- Root cause: jls_core_repair_fsr's data-walk summary1 flush wrote at
+  the current mid-file position, overwriting valid chunks below the
+  truncation point; the END chunk had the same hazard when no FSR
+  repair ran.  All repair writes now seek to the file end first.
+  Status: FIXED (27d1071, 49f4f1e)
 
 ### F6: infinite loop + unbounded logging reading a recovered file
 - Discovered: 2026-08-07, fuzz mode truncate, campaign seed 12345
@@ -133,10 +177,11 @@ Format, one entry per unique defect:
   and retries the same chunk forever.  The repaired file's level-1
   index pointing at an INDEX chunk is itself a repair defect to
   root-cause.
-- Regression test: TODO (stage 5)
-- Fix: rd_fsr_data0 must return an error on tag/meta mismatch, and the
-  read loops must fail on no-progress; separately fix the repair that
-  produced the bad index.  Status: OPEN
+- Regression test: recovery_test.c:test_truncate_sweep (terminates)
+- Fix: rd_fsr_data0 returns JLS_ERROR_MESSAGE_INTEGRITY on tag/meta
+  mismatch and invalid entry counts; read loops fail on no-progress
+  and reject backward item_next links; the repair no longer produces
+  bad indices (F4/F5 fixes).  Status: FIXED (e83a062)
 
 ### F7: writer out-of-bounds read on every byte-aligned FSR write
 - Discovered: 2026-08-07, ASan build, during pristine file generation
@@ -166,10 +211,12 @@ Format, one entry per unique defect:
   reached via a dangling item_next, per F4/F6).
 - Root cause: same dangling-pointer re-binding as F4/F6, plus no
   tag/meta/size validation before the memcpy.
-- Regression test: TODO (stage 5)
-- Fix: validate the chunk (tag == TRACK_FSR_DATA, chunk_meta ==
-  signal, payload_length <= data buffer size) before copying, and
-  bound the memcpy.  Shares the F4/F6 fix.  Status: OPEN
+- Regression test: recovery_test.c:test_truncate_sweep under ASan
+- Fix: every repair memcpy is bounded by the destination buffer size
+  and preceded by tag/meta validation.  Also fixed: the walk kept a
+  single lvl buffer pointer while descending levels, corrupting the
+  buffers and passing a NULL summaryN source for 2+ level files.
+  Status: FIXED (e83a062)
 
 ### F9: reader instance leaked on failed open
 - Discovered: 2026-08-07, ASan LeakSanitizer (cfg=26 seed
@@ -180,9 +227,13 @@ Format, one entry per unique defect:
 - Root cause: `jls_rd_open` early `return JLS_ERROR_EMPTY`
   (src/reader.c:94-95) and possibly other non-`goto exit` returns skip
   `jls_rd_close(self)`.
-- Regression test: TODO (stage 5); run under LSan.
-- Fix: route all failure returns in jls_rd_open through the exit
-  cleanup.  Status: OPEN
+- Regression test: recovery_test.c:test_open_damaged_defs; verified
+  leak-free with LSan (30 in-process fuzz cases; only the harness's
+  intentional crash-simulation writer leak remains).
+- Fix: all failure returns in jls_rd_open route through the exit
+  cleanup; jls_raw_open also leaked its instance when the backend
+  open failed (e.g. read-only recovery) and now frees it.
+  Status: FIXED (e83a062, 35ebddf)
 
 ### O2: open performs no repair for mid-file damage in closed files
 - Discovered: 2026-08-07, torn_update + zero_hole smoke runs
@@ -192,8 +243,20 @@ Format, one entry per unique defect:
   fatal ROE *before* any repair, and repair only triggers when the
   final chunk is not JLS_TAG_END.  Any damaged def/head chunk in an
   otherwise closed file makes open fail with no repair attempt.
-- Fix: TBD (step 3 design decision: tolerate/rebuild damaged heads,
-  and consider repair for mid-file damage).  Status: OPEN
+- Fix: PARTIALLY ADDRESSED (49f4f1e).  For unclosed (crash) files:
+  damaged track heads are rebuilt by physically scanning the chunks
+  (jls_track_repair_head), and the definition scans skip a
+  payload-damaged chunk instead of dropping every later definition.
+  All torn_update cases now pass.  REMAINING OPEN (needs Matt's
+  ruling): interior damage in *closed* files (zero_hole) is not
+  repaired.  Reads into the destroyed region now fail gracefully
+  with JLS_ERROR_MESSAGE_INTEGRITY — never silent wrong data, never
+  a crash.  Design options: (a) keep the graceful error (data is
+  gone; summaries still serve statistics), (b) reconstruct the holed
+  region from surviving summaries like omitted chunks (approximate
+  sample values), (c) trigger repair when any read hits mid-file
+  damage.  Option (b) changes data semantics; do not implement
+  without approval.  Status: OPEN (design decision)
 
 ### O1: FSR statistics are approximate for entry-misaligned multi-entry
     reads (observation, needs Matt's ruling)
@@ -211,19 +274,62 @@ Format, one entry per unique defect:
   intended/documented, and should the multi-entry path recurse for
   boundary entries like the single-entry path does?
 
-Candidate defects already suspected from code inspection — confirm via
-fuzzer before promoting to findings:
+Candidate defects already suspected from code inspection:
 
 - C1: `jls_track_repair_pointers` updates `summary_chunk` where
-  `data_chunk` was modified (src/track.c:170-173).
-- C2: `jls_rd_open` early return leaks reader instance
-  (src/reader.c:94-95).
-- C3: annotation/UTC/VSR chains never repaired (src/reader.c:139-144).
+  `data_chunk` was modified.  CONFIRMED and FIXED (27d1071): the
+  level-0 walk is now jls_core_repair_chain, which clamps the
+  correct chunk.
+- C2: `jls_rd_open` early return leaks reader instance.  CONFIRMED
+  as F9, FIXED.
+- C3: annotation/UTC/VSR chains never repaired.  CONFIRMED as F3,
+  FIXED.
 - C4: recovery impossible without write permission (design gap).
-- C5: repair is not atomic; crash during repair may lose more data.
+  STILL OPEN: opening a damaged read-only file fails gracefully
+  (fuzzer "readonly" checks pass; no crash, no leak).  In-memory
+  repair for read-only opens remains a design proposal for Matt.
+- C5: repair is not atomic; a crash during repair may lose more
+  data.  MITIGATED, not eliminated: all repair writes now append at
+  the file end and the END chunk is written last as the commit
+  point, so an interrupted repair leaves another repairable
+  unclosed file.  Not exhaustively fuzzed (would need write-budget
+  injection during repair itself).
 
 
-## Campaign results (2026-08-07)
+## Verification campaign results (2026-08-08, after fixes)
+
+Debug build, child-isolated, seed 20260808:
+
+| mode         | cases | failures | notes |
+|--------------|-------|----------|-------|
+| truncate     | 2000  | 0        | was 58% before fixes |
+| zero_tail    | 2000  | 0        | |
+| torn_update  | 2000  | 0        | mode now tears HEAD payloads (see below) |
+| bitflip      | 2000  | 0        | graceful-error mode |
+| write_prefix | 2000  | 0        | exact crash-prefix state space |
+| zero_hole    | 500   | 414      | ALL graceful MESSAGE_INTEGRITY errors (O2) |
+
+ASan/UBSan build (halt_on_error=0), 200 cases per mode plus the full
+unit suite (12 tests incl. the new recovery_test): zero sanitizer
+reports, zero failures in the crash-consistent modes.  The reader
+path is leak-free under LSan; the only remaining report is the
+harness's intentional crash-simulation writer abandonment.
+
+zero_hole is interior damage in closed files: reads into the
+destroyed region return JLS_ERROR_MESSAGE_INTEGRITY (documented,
+never silent wrong data, never a crash).  Repairing it is the open
+O2 design decision.
+
+torn_update recalibration: the writer rewrites only HEAD payloads in
+place (INDEX/SUMMARY payloads are append-only; their in-place updates
+touch the 32-byte header, which a tear makes CRC-invalid and is
+covered by the truncate/clamp handling).  The mode now tears HEAD
+payloads, which jls_track_repair_head recovers.  Torn INDEX/SUMMARY
+payloads model storage corruption and remain covered by zero_hole
+and bitflip as graceful errors.
+
+
+## Campaign results (2026-08-07, before fixes)
 
 Debug build, 3000 truncate cases (seed 31337), child-isolated:
 

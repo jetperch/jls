@@ -1174,14 +1174,15 @@ static int32_t fz_make_case(struct fz_s * fz, const struct fz_cfg_s * cfg,
         }
 
         case FZ_MODE_TORN_UPDATE: {
-            // pick an in-place-updated metadata chunk: HEAD, INDEX, or SUMMARY
+            // Pick a chunk whose payload the writer rewrites in place.
+            // Only HEAD payloads are updated in place; INDEX and SUMMARY
+            // payloads are append-only, so tearing them models storage
+            // corruption (bitflip/zero_hole class), not a crash.
             size_t candidates = 0;
             for (size_t i = 0; i < scan->length; ++i) {
                 uint8_t t = scan->chunks[i].tag;
                 if ((t & JLS_TRACK_TAG_FLAG) && scan->chunks[i].payload_length
-                        && (((t & 7) == JLS_TRACK_CHUNK_HEAD)
-                            || ((t & 7) == JLS_TRACK_CHUNK_INDEX)
-                            || ((t & 7) == JLS_TRACK_CHUNK_SUMMARY))) {
+                        && ((t & 7) == JLS_TRACK_CHUNK_HEAD)) {
                     ++candidates;
                 }
             }
@@ -1196,9 +1197,7 @@ static int32_t fz_make_case(struct fz_s * fz, const struct fz_cfg_s * cfg,
             for (size_t i = 0; i < scan->length; ++i) {
                 uint8_t t = scan->chunks[i].tag;
                 if ((t & JLS_TRACK_TAG_FLAG) && scan->chunks[i].payload_length
-                        && (((t & 7) == JLS_TRACK_CHUNK_HEAD)
-                            || ((t & 7) == JLS_TRACK_CHUNK_INDEX)
-                            || ((t & 7) == JLS_TRACK_CHUNK_SUMMARY))) {
+                        && ((t & 7) == JLS_TRACK_CHUNK_HEAD)) {
                     if (0 == pick--) {
                         c = &scan->chunks[i];
                         break;

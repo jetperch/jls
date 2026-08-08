@@ -4,6 +4,25 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.18.0
+
+2026 Aug 8
+
+* Fixed crash recovery (doc/plans/recovery_defects.md findings F1-F9):
+  * Fixed repair truncating a fully valid final chunk (backward scan miss).
+  * Fixed repair overwriting valid chunks below the truncation point.
+  * Fixed heap overflow and infinite read loops on damaged files:
+    every chain and index hop now validates chunk tag and meta.
+  * Repaired annotation, UTC, and user data chains; UTC iteration now
+    returns entries written after the last summary.
+  * Relinked the orphan final chunk and restored lost track head
+    offsets from the crash window; rebuilt torn track head payloads.
+  * Fixed reader and raw instance leaks on failed open.
+  * Fixed writer out-of-bounds read on byte-aligned FSR writes.
+* Added corruption fuzz campaigns to the read_fuzzer example and the
+  crash-recovery regression unit test suite.
+
+
 ## 0.17.0
 
 2026 Apr 27
