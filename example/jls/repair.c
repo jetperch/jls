@@ -29,7 +29,11 @@ static int usage(void) {
            "writer crash or power loss: opening the file recovers\n"
            "simple truncation automatically.  Use this when opening\n"
            "fails with MESSAGE_INTEGRITY.  For read-only media, use\n"
-           "'jls copy' instead.\n");
+           "'jls copy' instead.\n"
+           "\n"
+           "Repairs sample (FSR) data chains only.  Damaged annotation\n"
+           "and UTC chunks are not relinked; if those reads still fail\n"
+           "after repair, use 'jls copy' to salvage a new file.\n");
     return 1;
 }
 

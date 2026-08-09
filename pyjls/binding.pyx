@@ -1015,6 +1015,11 @@ def repair(path, msg_fn=None, progress_fn=None):
     with MESSAGE_INTEGRITY, this operation repairs the other damage
     classes with a single full-file traversal.  For read-only media,
     use :func:`copy` instead.
+
+    Chain repair covers sample (FSR) data only.  Damaged annotation,
+    UTC, and VSR chunks are not relinked: reads of the affected track
+    can still fail after a successful repair.  Use :func:`copy` to
+    salvage the readable prefix of such tracks into a new file.
     """
     cdef const char * c_path
     path_encode = path.encode('utf-8')

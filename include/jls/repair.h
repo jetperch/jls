@@ -64,6 +64,13 @@ JLS_CPP_GUARD_START
  * regions return summary-reconstructed values when the covering
  * summary survives, and fail otherwise.  For read-only media, use
  * jls_copy() to salvage into a new file instead.
+ *
+ * Chain repair covers sample (FSR) data only.  Annotation, UTC, and
+ * VSR chunks weave mixed chains that readers walk inline, so damage
+ * to those chunks is not relinked: reads of the affected track can
+ * still fail with JLS_ERROR_MESSAGE_INTEGRITY after a successful
+ * repair.  Use jls_copy() to salvage the readable prefix of such
+ * tracks into a new file.
  */
 JLS_API int32_t jls_repair(const char * path,
                            jls_msg_fn msg_fn, void * msg_user_data,
