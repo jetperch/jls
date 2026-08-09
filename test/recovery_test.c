@@ -35,6 +35,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#if !defined(_WIN32)
+#include <sys/stat.h>
+#endif
 
 
 static const char * SRC_PATH = "recovery_test_src.jls";
@@ -394,6 +397,166 @@ static void test_write_prefix_sweep(void ** state) {
     remove(SRC_PATH);
 }
 
+// Write a crash file with only signal 5 and the requested length.
+static void gen_crash_n(const char * path, int64_t sample_count) {
+    struct jls_wr_s * wr = NULL;
+    signals_generate();
+    assert_int_equal(0, jls_wr_open(&wr, path));
+    assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_3));
+    assert_int_equal(0, jls_wr_signal_def(wr, &SIGNAL_5));
+    for (int64_t sample_id = 0; sample_id < sample_count; sample_id += WINDOW_SIZE) {
+        int64_t len = sample_count - sample_id;
+        if (len > WINDOW_SIZE) {
+            len = WINDOW_SIZE;
+        }
+        assert_int_equal(0, jls_wr_fsr_f32(wr, 5, sample_id, signal_f32_, (uint32_t) len));
+    }
+    // simulated crash: abandon the writer, close only the file descriptor
+    struct jls_core_s * core = (struct jls_core_s *) wr;
+    jls_bk_fclose(jls_raw_backend(core->raw));
+}
+
+// Truncation recovery cost must track the crash tail, not the file size:
+// each chunk is visited at most once and data payloads outside the crash
+// window are never read.
+static void test_recovery_traversal_bound(void ** state) {
+    (void) state;
+    struct jls_rd_s * rd = NULL;
+    int64_t hops[2];
+    int64_t payload[2];
+    int64_t sample_counts[2] = {SAMPLE_COUNT, 30 * SAMPLE_COUNT};
+
+    for (int i = 0; i < 2; ++i) {
+        gen_crash_n(TST_PATH, sample_counts[i]);
+        int64_t h = jls_raw_rd_header_total();
+        int64_t p = jls_raw_rd_payload_total();
+        assert_int_equal(0, jls_rd_open(&rd, TST_PATH));
+        hops[i] = jls_raw_rd_header_total() - h;
+        payload[i] = jls_raw_rd_payload_total() - p;
+        jls_rd_close(rd);
+        remove(TST_PATH);
+    }
+    // 30x the data (870 extra data chunks, ~3.5 MB): recovery may read the
+    // extra level-1 index/summary chunks but never the extra data chunks
+    assert_true(hops[1] < (hops[0] + 400));
+    assert_true(payload[1] < (payload[0] + (1 << 20)));
+}
+
+// Find the first chunk with the requested tag, or 0 if absent.
+static int64_t find_chunk_offset(const char * path, uint8_t tag) {
+    struct jls_raw_s * raw = NULL;
+    struct jls_chunk_header_s hdr;
+    int64_t offset = 0;
+    int32_t rc = jls_raw_open(&raw, path, "r");
+    if (rc && (rc != JLS_ERROR_TRUNCATED)) {
+        return 0;
+    }
+    while (0 == jls_raw_rd_header(raw, &hdr)) {
+        if (hdr.tag == tag) {
+            offset = jls_raw_chunk_tell(raw);
+            break;
+        }
+        if (jls_raw_chunk_next(raw)) {
+            break;
+        }
+    }
+    jls_raw_close(raw);
+    return offset;
+}
+
+static void flip_byte(const char * path, int64_t offset) {
+    FILE * f = fopen(path, "r+b");
+    assert_non_null(f);
+    uint8_t b = 0;
+    assert_int_equal(0, fseek(f, (long) offset, SEEK_SET));
+    assert_int_equal(1, fread(&b, 1, 1, f));
+    b ^= 0xff;
+    assert_int_equal(0, fseek(f, (long) offset, SEEK_SET));
+    assert_int_equal(1, fwrite(&b, 1, 1, f));
+    fclose(f);
+}
+
+static uint8_t * file_read_all(const char * path, int64_t * length) {
+    *length = file_size(path);
+    uint8_t * data = malloc((size_t) *length);
+    assert_non_null(data);
+    FILE * f = fopen(path, "rb");
+    assert_non_null(f);
+    assert_int_equal((size_t) *length, fread(data, 1, (size_t) *length, f));
+    fclose(f);
+    return data;
+}
+
+// Interior corruption in a properly closed file: open must fail with
+// JLS_ERROR_MESSAGE_INTEGRITY and must not modify the file.
+static void test_open_clean_interior_corruption(void ** state) {
+    (void) state;
+    struct jls_rd_s * rd = NULL;
+    gen(TST_PATH, 1, 1, GEN_CLOSE, -1);
+    int64_t offset = find_chunk_offset(TST_PATH, JLS_TAG_SIGNAL_DEF);
+    assert_true(offset > 0);
+    flip_byte(TST_PATH, offset + sizeof(struct jls_chunk_header_s) + 8);  // payload byte
+
+    int64_t length_before = 0;
+    uint8_t * before = file_read_all(TST_PATH, &length_before);
+    assert_int_equal(JLS_ERROR_MESSAGE_INTEGRITY, jls_rd_open(&rd, TST_PATH));
+    int64_t length_after = 0;
+    uint8_t * after = file_read_all(TST_PATH, &length_after);
+    assert_int_equal(length_before, length_after);
+    assert_memory_equal(before, after, (size_t) length_before);
+    free(before);
+    free(after);
+    remove(TST_PATH);
+}
+
+// Torn track HEAD payload in a crashed file: truncation recovery cannot
+// proceed; open must fail with JLS_ERROR_MESSAGE_INTEGRITY (offline repair).
+static void test_open_crash_torn_head(void ** state) {
+    (void) state;
+    struct jls_rd_s * rd = NULL;
+    gen(TST_PATH, 0, 0, GEN_SKIP_CLOSE, -1);
+    int64_t offset = find_chunk_offset(TST_PATH, JLS_TAG_TRACK_FSR_HEAD);
+    assert_true(offset > 0);
+    flip_byte(TST_PATH, offset + sizeof(struct jls_chunk_header_s) + 4);  // payload byte
+    assert_int_equal(JLS_ERROR_MESSAGE_INTEGRITY, jls_rd_open(&rd, TST_PATH));
+    remove(TST_PATH);
+}
+
+// Recovery write failure (e.g. disk full): open must fail with
+// JLS_ERROR_TRUNCATED.
+static void test_open_crash_recovery_write_failure(void ** state) {
+    (void) state;
+    struct jls_rd_s * rd = NULL;
+    gen(TST_PATH, 0, 0, GEN_SKIP_CLOSE, -1);
+    jls_bk_write_limit_set(0);
+    assert_int_equal(JLS_ERROR_TRUNCATED, jls_rd_open(&rd, TST_PATH));
+    jls_bk_write_limit_set(-1);
+    remove(TST_PATH);
+}
+
+#if !defined(_WIN32)
+// Read-only truncated file: recovery cannot reopen for write; open must
+// fail with exactly JLS_ERROR_TRUNCATED.
+static void test_open_crash_read_only(void ** state) {
+    (void) state;
+    struct jls_rd_s * rd = NULL;
+    gen(TST_PATH, 0, 0, GEN_SKIP_CLOSE, -1);
+    assert_int_equal(0, chmod(TST_PATH, 0444));
+    FILE * f = fopen(TST_PATH, "r+b");
+    if (NULL != f) {
+        fclose(f);  // running with CAP_DAC_OVERRIDE (root): cannot test
+    } else {
+        assert_int_equal(JLS_ERROR_TRUNCATED, jls_rd_open(&rd, TST_PATH));
+        // the same file opens once writable again
+        assert_int_equal(0, chmod(TST_PATH, 0644));
+        assert_int_equal(0, jls_rd_open(&rd, TST_PATH));
+        jls_rd_close(rd);
+    }
+    chmod(TST_PATH, 0644);
+    remove(TST_PATH);
+}
+#endif
+
 // F9: failed opens must not crash and must fail with an error code.
 static void test_open_damaged_defs(void ** state) {
     (void) state;
@@ -421,6 +584,13 @@ int main(void) {
             cmocka_unit_test(test_truncate_all_data_lost),
             cmocka_unit_test(test_utc_annotation_user_data_after_crash),
             cmocka_unit_test(test_write_prefix_sweep),
+            cmocka_unit_test(test_recovery_traversal_bound),
+            cmocka_unit_test(test_open_clean_interior_corruption),
+            cmocka_unit_test(test_open_crash_torn_head),
+            cmocka_unit_test(test_open_crash_recovery_write_failure),
+#if !defined(_WIN32)
+            cmocka_unit_test(test_open_crash_read_only),
+#endif
             cmocka_unit_test(test_open_damaged_defs),
     };
 

@@ -75,54 +75,74 @@ int32_t jls_track_update(struct jls_core_track_s * track, uint8_t level, int64_t
     return 0;
 }
 
-int32_t jls_track_repair_head(struct jls_core_signal_s * signal, uint8_t track_type) {
-    struct jls_core_s * core = signal->parent;
-    struct jls_raw_s * raw = core->raw;
-    uint16_t signal_id = signal->signal_def.signal_id;
-    struct jls_core_track_s * track = &signal->tracks[track_type];
-    uint8_t head_tag = jls_track_tag_pack(track_type, JLS_TRACK_CHUNK_HEAD);
-    uint8_t data_tag = jls_track_tag_pack(track_type, JLS_TRACK_CHUNK_DATA);
-    uint8_t index_tag = jls_track_tag_pack(track_type, JLS_TRACK_CHUNK_INDEX);
-    struct jls_core_chunk_s head = {.offset = 0};
-    int64_t head_offsets[JLS_SUMMARY_LEVEL_COUNT];
-    struct jls_chunk_header_s hdr;
-    memset(head_offsets, 0, sizeof(head_offsets));
+/**
+ * @brief Find where the level-0 chain clamp should start.
+ *
+ * @param core The core instance.
+ * @param track The track to repair.
+ * @param index1_offset The offset of the last valid level-1 index chunk.
+ * @param start[out] The offset of the last valid data chunk referenced
+ *      by the level-1 index chain, or 0 when no reference was found.
+ * @return 0 or error code.
+ *
+ * The crash window starts at the last data chunk covered by a level-1
+ * index, so clamping the data chain from there is O(tail) instead of
+ * O(file).  Omitted (fsr_omit) entries are 0 and skipped; when a whole
+ * index holds only omitted entries, hop item_prev to the previous
+ * index chunk, bounded so pathological files cannot re-create an
+ * unbounded backward walk.
+ */
+static int32_t data_chain_clamp_start(struct jls_core_s * core, struct jls_core_track_s * track,
+                                      int64_t index1_offset, int64_t * start) {
+    uint16_t signal_id = track->parent->signal_def.signal_id;
+    uint8_t index_tag = jls_track_tag_pack(track->track_type, JLS_TRACK_CHUNK_INDEX);
+    uint8_t data_tag = jls_track_tag_pack(track->track_type, JLS_TRACK_CHUNK_DATA);
+    uint16_t meta = (uint16_t) ((signal_id & 0x0fff) | (1 << 12));
+    *start = 0;
 
-    // The head payload was lost.  Scan the physical chunks to find the
-    // head chunk and the first chunk at each level for this track.
-    ROE(jls_raw_chunk_seek(raw, sizeof(struct jls_file_header_s)));
-    while (1) {
-        if (jls_raw_rd_header(raw, &hdr)) {
-            if (jls_raw_chunk_scan(raw)) {
-                break;  // no further valid chunks
+    for (int hops = 0; index1_offset && (hops < 64); ++hops) {
+        ROE(jls_raw_chunk_seek(core->raw, index1_offset));
+        ROE(jls_core_rd_chunk_validate(core, index_tag, meta));
+        int64_t item_prev = (int64_t) core->chunk_cur.hdr.item_prev;
+        uint32_t entry_count;
+        int64_t entry_offset = 0;
+        if (JLS_TRACK_TYPE_FSR == track->track_type) {
+            struct jls_fsr_index_s * r = (struct jls_fsr_index_s *) core->buf->start;
+            entry_count = r->header.entry_count;
+            if ((sizeof(r->header) + entry_count * sizeof(r->offsets[0])) > core->buf->length) {
+                return JLS_ERROR_MESSAGE_INTEGRITY;
             }
-            continue;
-        }
-        int64_t pos = jls_raw_chunk_tell(raw);
-        if ((hdr.tag == head_tag) && (hdr.chunk_meta == signal_id)) {
-            head.offset = pos;
-            head.hdr = hdr;
-        } else if ((hdr.chunk_meta & 0x0fff) == signal_id) {
-            uint8_t level = (uint8_t) (hdr.chunk_meta >> 12);
-            if ((hdr.tag == data_tag) && (0 == level) && (0 == head_offsets[0])) {
-                head_offsets[0] = pos;
-            } else if ((hdr.tag == index_tag) && level && (0 == head_offsets[level])) {
-                head_offsets[level] = pos;
+            for (uint32_t i = entry_count; i > 0; --i) {
+                if (r->offsets[i - 1]) {
+                    entry_offset = (int64_t) r->offsets[i - 1];
+                    break;
+                }
+            }
+        } else {
+            struct jls_index_s * r = (struct jls_index_s *) core->buf->start;
+            entry_count = r->header.entry_count;
+            if ((sizeof(r->header) + entry_count * sizeof(r->entries[0])) > core->buf->length) {
+                return JLS_ERROR_MESSAGE_INTEGRITY;
+            }
+            for (uint32_t i = entry_count; i > 0; --i) {
+                if (r->entries[i - 1].offset) {
+                    entry_offset = (int64_t) r->entries[i - 1].offset;
+                    break;
+                }
             }
         }
-        if (jls_raw_chunk_next(raw) && jls_raw_chunk_scan(raw)) {
-            break;
+        if (entry_offset) {
+            // index entries reference completed pre-crash writes;
+            // an invalid target is interior damage, not truncation
+            ROE(jls_raw_chunk_seek(core->raw, entry_offset));
+            ROE(jls_core_rd_chunk_validate(core, data_tag, signal_id));
+            *start = entry_offset;
+            return 0;
         }
+        // all entries omitted in this index: hop to the previous index chunk
+        index1_offset = ((item_prev > 0) && (item_prev < index1_offset)) ? item_prev : 0;
     }
-    if (0 == head.offset) {
-        return JLS_ERROR_NOT_FOUND;  // track was never written; nothing to rebuild
-    }
-    JLS_LOGI("rebuild head: signal %d track %d", (int) signal_id, (int) track_type);
-    track->parent = signal;
-    track->track_type = track_type;
-    track->head = head;
-    memcpy(track->head_offsets, head_offsets, sizeof(head_offsets));
-    return jls_track_wr_head(track);
+    return 0;
 }
 
 int32_t jls_track_repair_pointers(struct jls_core_track_s * track) {
@@ -155,6 +175,7 @@ int32_t jls_track_repair_pointers(struct jls_core_track_s * track) {
     int64_t offset = offsets[level];
     int64_t offset_descend_next = 0;
     int64_t offset_descend = 0;
+    int64_t index1_offset = 0;  // last valid level-1 index chunk
 
     while (level > 0) {
         JLS_LOGI("repair signal_id %d track %d, level %d, offset %" PRIi64,
@@ -192,6 +213,9 @@ int32_t jls_track_repair_pointers(struct jls_core_track_s * track) {
                 offset_descend = offset_descend_next;
                 track->index_head[level].offset = index_chunk.offset;
                 track->summary_head[level].offset = summary_chunk.offset;
+                if (1 == level) {
+                    index1_offset = index_chunk.offset;
+                }
             }
         }
 
@@ -219,11 +243,24 @@ int32_t jls_track_repair_pointers(struct jls_core_track_s * track) {
         }
     }
 
-    // update level 0 (data): clamp the chain at the first invalid chunk
+    // update level 0 (data): clamp the chain at the first invalid chunk.
+    // Start in the crash window (found via the level-1 index), not at the
+    // chain head: the walk must stay O(tail), never O(file).
     JLS_LOGI("repair signal_id %d track %d, level 0, offset %" PRIi64,
              (int) signal_id, (int) track->track_type, offsets[0]);
     uint8_t data_tag = jls_track_tag_pack(track->track_type, JLS_TRACK_CHUNK_DATA);
-    if (offsets[0]) {
+    int64_t clamp_start = 0;
+    if (index1_offset) {
+        ROE(data_chain_clamp_start(core, track, index1_offset, &clamp_start));
+    }
+    if (clamp_start) {
+        int32_t rc = jls_core_repair_chain(core, clamp_start, data_tag, signal_id);
+        if (rc && (JLS_ERROR_NOT_FOUND != rc)) {  // start already validated
+            return rc;
+        }
+    } else if (offsets[0]) {
+        // no indexed data chunk: either a young file with less than one
+        // summary interval of data, or (pathological) a fully-omitted tail
         int32_t rc = jls_core_repair_chain(core, offsets[0], data_tag, signal_id);
         if (JLS_ERROR_NOT_FOUND == rc) {
             offsets[0] = 0;  // dangling data head: no data chunk survives

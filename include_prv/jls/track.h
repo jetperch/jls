@@ -56,20 +56,6 @@ int32_t jls_track_update(struct jls_core_track_s * track, uint8_t level, int64_t
  */
 int32_t jls_track_repair_pointers(struct jls_core_track_s * track);
 
-/**
- * @brief Rebuild a track head whose payload was lost or damaged.
- *
- * @param signal The signal instance holding the track.
- * @param track_type The jls_track_type_e value.
- * @return 0, JLS_ERROR_NOT_FOUND if the track has no head chunk
- *      (the track was never written), or another error code.
- *
- * Scans the physical chunks to locate the head chunk and the first
- * chunk at each level, then rewrites the head payload in place.
- * Call jls_track_repair_pointers() afterwards.
- */
-int32_t jls_track_repair_head(struct jls_core_signal_s * signal, uint8_t track_type);
-
 JLS_CPP_GUARD_END
 
 /** @} */
