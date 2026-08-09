@@ -15,6 +15,7 @@
  */
 
 #include "jls.h"
+#include "jls/repair.h"
 #include "cstr.h"
 #include "jls_util_prv.h"
 #include "jls/writer.h"
@@ -146,6 +147,7 @@ enum fz_fail_e {
     FZ_FAIL_REOPEN,         // second open of the repaired file failed
     FZ_FAIL_IDEMPOTENT,     // second open modified the file or length
     FZ_FAIL_RDONLY,         // read-only open misbehaved
+    FZ_FAIL_REPAIR,         // jls_repair failed or its result did not open
     FZ_FAIL_GENERATE,       // could not generate/scan the pristine file
     FZ_FAIL_CRASH,          // the verify child process crashed
     FZ_FAIL_HANG,           // the verify child process timed out
@@ -157,7 +159,7 @@ static const char * FZ_FAIL_NAMES[] = {
     "excess_loss", "data_mismatch", "stats_error", "stats_value",
     "ann_error", "ann_count", "utc_error", "utc_count",
     "user_data_error", "user_data_count", "reopen_fail", "not_idempotent",
-    "readonly", "generate", "crash", "hang",
+    "readonly", "repair_fail", "generate", "crash", "hang",
 };
 
 enum fz_mode_e {
@@ -770,6 +772,7 @@ struct fz_case_s {
     int64_t torn_offset;    // torn_update only: corrupted chunk offset
     bool strict;            // full oracle; false = graceful-error checks only
     bool defs_ok;           // false: damage in defs region, open may fail
+    bool repaired;          // jls_repair ran: open must now succeed
 };
 
 /**
@@ -797,6 +800,9 @@ static uint32_t fz_oracle(struct fz_s * fz, const struct fz_cfg_s * cfg,
     if (rc) {
         if (!fz_error_code_valid(rc)) {
             FZ_FAIL(FZ_FAIL_ERROR_CODE, "open rc=%" PRIi32 " out of range", rc);
+        } else if (cs->repaired && defs_ok) {
+            FZ_FAIL(FZ_FAIL_REPAIR, "open rc=%" PRIi32 " %s after repair",
+                    rc, jls_error_code_name(rc));
         } else if (defs_ok && strict) {
             FZ_FAIL(FZ_FAIL_OPEN, "open rc=%" PRIi32 " %s with defs intact",
                     rc, jls_error_code_name(rc));
@@ -1270,36 +1276,103 @@ static uint32_t fz_case_verify(struct fz_s * fz, const struct fz_cfg_s * cfg,
                                const struct fz_scan_s * scan, const char * case_path,
                                const char * ro_path, const struct fz_case_s * cs,
                                uint64_t case_seed, char * detail) {
-    uint32_t fails = fz_oracle(fz, cfg, scan, case_path, cs, detail);
+    uint32_t fails = 0;
+    detail[0] = 0;
+    // Modes that may produce damage beyond tail truncation.  write_prefix
+    // belongs here: an in-place head update is two backend writes (payload,
+    // then CRC footer), so a crash between them tears the head payload.
+    const bool may_need_repair = (cs->mode == FZ_MODE_ZERO_HOLE)
+            || (cs->mode == FZ_MODE_TORN_UPDATE)
+            || (cs->mode == FZ_MODE_BITFLIP)
+            || (cs->mode == FZ_MODE_WRITE_PREFIX);
 
-    // read-only open of a damaged file must fail gracefully
+    if (!may_need_repair) {
+        // tail-truncation class: jls_rd_open must recover automatically
+        fails = fz_oracle(fz, cfg, scan, case_path, cs, detail);
+    } else {
+        // open either succeeds or fails with MESSAGE_INTEGRITY, and
+        // jls_repair must then restore the file
+        struct jls_rd_s * rd = NULL;
+        int32_t rc = jls_rd_open(&rd, case_path);
+        if (0 == rc) {
+            jls_rd_close(rd);
+        } else if (!fz_error_code_valid(rc)) {
+            FZ_FAIL(FZ_FAIL_ERROR_CODE, "open rc=%" PRIi32 " out of range", rc);
+            return fails;
+        } else if ((JLS_ERROR_MESSAGE_INTEGRITY != rc) && cs->defs_ok && cs->strict) {
+            FZ_FAIL(FZ_FAIL_OPEN, "open rc=%" PRIi32 " %s with defs intact",
+                    rc, jls_error_code_name(rc));
+            return fails;
+        }
+        struct fz_case_s cs2 = *cs;
+        rc = jls_repair(case_path, NULL, NULL, NULL, NULL);
+        if (rc && cs->defs_ok) {
+            FZ_FAIL(FZ_FAIL_REPAIR, "jls_repair rc=%" PRIi32 " %s",
+                    rc, jls_error_code_name(rc));
+            return fails;
+        }
+        if (0 == rc) {
+            cs2.repaired = true;
+            if ((cs->mode == FZ_MODE_ZERO_HOLE) || (cs->mode == FZ_MODE_BITFLIP)) {
+                // dead data is summary-reconstructed and dead index/summary
+                // spans may still fail reads: graceful-error checks only.
+                // torn_update and write_prefix damage only head payloads and
+                // the tail, so the full strict oracle must hold after repair.
+                cs2.strict = false;
+            }
+        }
+        fails = fz_oracle(fz, cfg, scan, case_path, &cs2, detail);
+    }
+
+    // read-only contract: a file needing truncation recovery must fail with
+    // exactly JLS_ERROR_TRUNCATED; interior damage in a closed file may open
+    // (reads detect it lazily)
 #if !defined(_WIN32)
-    bool damaged = (cs->offset < scan->fend) || !cfg->closed
-            || (cs->mode != FZ_MODE_TRUNCATE);
-    if (damaged && (0 == (case_seed & 0xF))) {
+    bool needs_recovery = !cfg->closed
+            || (((cs->mode == FZ_MODE_TRUNCATE)
+                 || (cs->mode == FZ_MODE_ZERO_TAIL)
+                 || (cs->mode == FZ_MODE_TORN_UPDATE)
+                 || (cs->mode == FZ_MODE_WRITE_PREFIX))
+                && (cs->offset < scan->fend));
+    if (0 == (case_seed & 0xF)) {
         struct jls_rd_s * rd = NULL;
         chmod(ro_path, 0444);
         int32_t rc = jls_rd_open(&rd, ro_path);
         if (0 == rc) {
             jls_rd_close(rd);
-            if (cs->strict) {
-                if (0 == fails) {
-                    snprintf(detail, FZ_DETAIL_SZ, "read-only open of damaged file returned 0");
-                }
-                fails |= (1U << FZ_FAIL_RDONLY);
+            if (needs_recovery && cs->strict) {
+                FZ_FAIL(FZ_FAIL_RDONLY, "read-only open of unrecovered file returned 0");
             }
         } else if (!fz_error_code_valid(rc)) {
-            if (0 == fails) {
-                snprintf(detail, FZ_DETAIL_SZ, "read-only open rc=%" PRIi32 " out of range", rc);
-            }
-            fails |= (1U << FZ_FAIL_RDONLY);
+            FZ_FAIL(FZ_FAIL_RDONLY, "read-only open rc=%" PRIi32 " out of range", rc);
+        } else if (needs_recovery && cs->defs_ok && (JLS_ERROR_TRUNCATED != rc)) {
+            FZ_FAIL(FZ_FAIL_RDONLY, "read-only open rc=%" PRIi32 " %s, expected TRUNCATED",
+                    rc, jls_error_code_name(rc));
         }
         chmod(ro_path, 0644);
     }
 #else
-    (void) ro_path;
     (void) case_seed;
 #endif
+
+    // jls_repair must never make any case worse: with intact defs it must
+    // succeed and yield an openable file; degenerate files must error cleanly
+    int32_t repair_rc = jls_repair(ro_path, NULL, NULL, NULL, NULL);
+    if (0 == repair_rc) {
+        struct jls_rd_s * rd_repaired = NULL;
+        repair_rc = jls_rd_open(&rd_repaired, ro_path);
+        if (repair_rc) {
+            FZ_FAIL(FZ_FAIL_REPAIR, "repaired copy open rc=%" PRIi32 " %s",
+                    repair_rc, jls_error_code_name(repair_rc));
+        } else {
+            jls_rd_close(rd_repaired);
+        }
+    } else if (!fz_error_code_valid(repair_rc)) {
+        FZ_FAIL(FZ_FAIL_ERROR_CODE, "repair rc=%" PRIi32 " out of range", repair_rc);
+    } else if (cs->defs_ok) {
+        FZ_FAIL(FZ_FAIL_REPAIR, "repair copy rc=%" PRIi32 " %s with defs intact",
+                repair_rc, jls_error_code_name(repair_rc));
+    }
     return fails;
 }
 
