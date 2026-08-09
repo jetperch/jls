@@ -80,16 +80,19 @@ struct repair_s {
     void * progress_user_data;
 };
 
-static void msg(struct repair_s * self, const char * fmt, ...) {
+static int32_t msg(struct repair_s * self, const char * fmt, ...) {
     char msg_str[1024];
     if (NULL == self->msg_fn) {
-        return;
+        return 0;
     }
     va_list args;
     va_start(args, fmt);
     vsnprintf(msg_str, sizeof(msg_str), fmt, args);
     va_end(args);
-    self->msg_fn(self->msg_user_data, msg_str);
+    if (self->msg_fn(self->msg_user_data, msg_str)) {
+        return JLS_ERROR_ABORTED;
+    }
+    return 0;
 }
 
 static int32_t progress(struct repair_s * self, double fract) {
@@ -149,8 +152,8 @@ static int32_t chain_update(struct repair_s * self, struct chain_s * chain) {
         chain->first = cur->offset;
     } else if (chain->last.hdr.item_next
                && (chain->last.hdr.item_next != (uint64_t) cur->offset)) {
-        msg(self, "%" PRIi64 ": relink to %" PRIi64 " (tag %d)",
-            chain->last.offset, cur->offset, (int) cur->hdr.tag);
+        ROE(msg(self, "%" PRIi64 ": relink to %" PRIi64 " (tag %d)",
+                chain->last.offset, cur->offset, (int) cur->hdr.tag));
         chain->last.hdr.item_next = (uint64_t) cur->offset;
         ROE(jls_core_update_chunk_header(self->core, &chain->last));
         ++self->relink_count;
@@ -295,7 +298,7 @@ static int32_t repair_traverse(struct repair_s * self) {
 static int32_t chain_clamp(struct repair_s * self, struct chain_s * chain) {
     if (chain->last.offset && chain->last.hdr.item_next) {
         // a valid successor would have been relinked during the traversal
-        msg(self, "%" PRIi64 ": clamp chain end", chain->last.offset);
+        ROE(msg(self, "%" PRIi64 ": clamp chain end", chain->last.offset));
         chain->last.hdr.item_next = 0;
         ROE(jls_core_update_chunk_header(self->core, &chain->last));
         ++self->clamp_count;
@@ -352,8 +355,8 @@ static int32_t heads_rebuild(struct repair_s * self) {
             }
             if (head->offset) {
                 // header survived, payload torn: rewrite the payload in place
-                msg(self, "%" PRIi64 ": rebuild head payload, signal %d track %d",
-                    head->offset, (int) sig, (int) track);
+                ROE(msg(self, "%" PRIi64 ": rebuild head payload, signal %d track %d",
+                        head->offset, (int) sig, (int) track));
                 ROE(jls_raw_chunk_seek(core->raw, head->offset));
                 ROE(jls_raw_wr_payload(core->raw, (uint32_t) HEAD_PAYLOAD_SIZE,
                                        (uint8_t *) head_offsets));
@@ -367,8 +370,8 @@ static int32_t heads_rebuild(struct repair_s * self) {
                 hdr.payload_length = (uint32_t) HEAD_PAYLOAD_SIZE;
                 ROE(jls_raw_seek_end(core->raw));
                 int64_t offset = jls_raw_chunk_tell(core->raw);
-                msg(self, "%" PRIi64 ": append head, signal %d track %d",
-                    offset, (int) sig, (int) track);
+                ROE(msg(self, "%" PRIi64 ": append head, signal %d track %d",
+                        offset, (int) sig, (int) track));
                 ROE(jls_raw_wr(core->raw, &hdr, (uint8_t *) head_offsets));
                 if (self->signal_chain.last.offset) {
                     self->signal_chain.last.hdr.item_next = (uint64_t) offset;
@@ -441,8 +444,8 @@ static int32_t fsr_dead_data_to_omitted(struct repair_s * self) {
             }
             int64_t next = (int64_t) core->chunk_cur.hdr.item_next;
             if (dirty) {
-                msg(self, "%" PRIi64 ": signal %d dead data converted to omitted",
-                    offset, (int) sig);
+                ROE(msg(self, "%" PRIi64 ": signal %d dead data converted to omitted",
+                        offset, (int) sig));
                 ROE(jls_raw_chunk_seek(core->raw, offset));
                 ROE(jls_raw_wr_payload(core->raw,
                                        core->chunk_cur.hdr.payload_length,
@@ -518,10 +521,13 @@ int32_t jls_repair(const char * path,
     if (rc) {
         goto close;
     }
-    msg(self, "repair: %" PRIi64 " dead spans, %" PRIi64 " relinks, %" PRIi64
-        " clamps, %" PRIi64 " heads rebuilt, %" PRIi64 " entries omitted",
-        (int64_t) self->dead_count, self->relink_count, self->clamp_count,
-        self->head_rebuild_count, self->entry_zero_count);
+    rc = msg(self, "repair: %" PRIi64 " dead spans, %" PRIi64 " relinks, %" PRIi64
+             " clamps, %" PRIi64 " heads rebuilt, %" PRIi64 " entries omitted",
+             (int64_t) self->dead_count, self->relink_count, self->clamp_count,
+             self->head_rebuild_count, self->entry_zero_count);
+    if (rc) {
+        goto close;
+    }
 
 close:
     if (core->raw) {
@@ -538,8 +544,9 @@ close:
                 rc = JLS_ERROR_ABORTED;
             }
         } else {
-            msg(self, "repair could not restore the file: %d %s",
-                rc, jls_error_code_name(rc));
+            // the repair already failed with rc: a cancel request here is moot
+            (void) msg(self, "repair could not restore the file: %d %s",
+                       rc, jls_error_code_name(rc));
         }
     }
 

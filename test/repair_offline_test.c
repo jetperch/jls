@@ -269,6 +269,31 @@ static void test_repair_progress_and_cancel(void ** state) {
     remove(PATH);
 }
 
+static int32_t msg_cancel_fn(void * user_data, const char * msg) {
+    (void) msg;
+    int32_t * count = (int32_t *) user_data;
+    ++(*count);
+    return 1;
+}
+
+// msg_fn returning nonzero must cancel with JLS_ERROR_ABORTED, same as
+// progress_fn: the CLI relies on it for its quit-on-signal path.
+static void test_repair_msg_cancel(void ** state) {
+    (void) state;
+    gen(PATH, 0);
+    int64_t offset = find_chunk(PATH, JLS_TAG_TRACK_FSR_HEAD, 0, NULL);
+    corrupt(PATH, offset + sizeof(struct jls_chunk_header_s) + 4, 4);
+
+    int32_t count = 0;
+    assert_int_equal(JLS_ERROR_ABORTED, jls_repair(PATH, msg_cancel_fn, &count, NULL, NULL));
+    assert_true(count >= 1);
+
+    // a canceled repair can be rerun to completion
+    assert_int_equal(0, jls_repair(PATH, NULL, NULL, NULL, NULL));
+    assert_full_read(PATH);
+    remove(PATH);
+}
+
 static void test_repair_missing_file(void ** state) {
     (void) state;
     remove(PATH);
@@ -309,6 +334,7 @@ int main(void) {
             cmocka_unit_test(test_repair_torn_head),
             cmocka_unit_test(test_repair_dead_interior_data),
             cmocka_unit_test(test_repair_progress_and_cancel),
+            cmocka_unit_test(test_repair_msg_cancel),
             cmocka_unit_test(test_repair_missing_file),
             cmocka_unit_test(test_repair_not_jls),
 #if !defined(_WIN32)

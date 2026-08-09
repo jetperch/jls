@@ -343,6 +343,14 @@ class TestBinding(unittest.TestCase):
         with Reader(self._path) as r:
             self.assertEqual(3, r.signals[3].signal_id)
 
+    def test_repair_msg_cancel(self):
+        self._repair_case_create()
+        with self.assertRaises(RuntimeError):
+            repair(self._path, lambda msg: True)
+        repair(self._path)  # canceled repair reruns to completion
+        with Reader(self._path) as r:
+            self.assertEqual(3, r.signals[3].signal_id)
+
     def test_repair_missing_file(self):
         with self.assertRaises(RuntimeError):
             repair(self._path + '.does_not_exist.jls')
