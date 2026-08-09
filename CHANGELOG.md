@@ -22,7 +22,11 @@ This file contains the list of changes made to the JLS project.
       offsets, and clamped dangling chain links in the crash window.
     * Removed the full-file traversals from open: track head search
       considers only applicable track types, and the data chain clamp
-      starts from the last valid level-1 index entry.
+      starts from the last valid level-1 index entry.  For signals
+      with long omitted (constant) tails, the clamp start search
+      interleaves with a data chain walk from the head so neither a
+      long omitted tail nor a long data prefix forces an O(file)
+      walk.
   * jls_rd_open returns JLS_ERROR_TRUNCATED when the file needs
     truncation recovery but is read-only or the recovery write fails
     (was JLS_ERROR_IO).

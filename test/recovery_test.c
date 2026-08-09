@@ -74,6 +74,24 @@ static const struct jls_signal_def_s SIGNAL_5 = {
         .units = "A",
 };
 
+// small intervals so a run of fully-omitted level-1 index chunks is cheap
+// to generate: 64 samples per data chunk, 640 samples per level-1 index
+static const struct jls_signal_def_s SIGNAL_7 = {
+        .signal_id = 7,
+        .source_id = 3,
+        .signal_type = JLS_SIGNAL_TYPE_FSR,
+        .data_type = JLS_DATATYPE_U8,
+        .sample_rate = 1000000,
+        .samples_per_data = 64,
+        .sample_decimate_factor = 32,
+        .entries_per_summary = 20,
+        .summary_decimate_factor = 10,
+        .annotation_decimate_factor = 100,
+        .utc_decimate_factor = 100,
+        .name = "gpi",
+        .units = "",
+};
+
 static const struct jls_signal_def_s SIGNAL_9 = {
         .signal_id = 9,
         .source_id = 3,
@@ -442,6 +460,66 @@ static void test_recovery_traversal_bound(void ** state) {
     assert_true(payload[1] < (payload[0] + (1 << 20)));
 }
 
+// Write a crash file: a varying u8 prefix, then a constant (omitted) tail.
+static void gen_crash_omit(const char * path, int64_t prefix_samples, int64_t tail_samples) {
+    struct jls_wr_s * wr = NULL;
+    uint8_t buf[640];
+    assert_int_equal(0, jls_wr_open(&wr, path));
+    assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_3));
+    assert_int_equal(0, jls_wr_signal_def(wr, &SIGNAL_7));
+    assert_int_equal(0, jls_wr_fsr_omit_data(wr, 7, 1));
+    int64_t total = prefix_samples + tail_samples;
+    for (int64_t sample_id = 0; sample_id < total; sample_id += (int64_t) sizeof(buf)) {
+        int64_t len = total - sample_id;
+        if (len > (int64_t) sizeof(buf)) {
+            len = (int64_t) sizeof(buf);
+        }
+        for (int64_t i = 0; i < len; ++i) {
+            int64_t s = sample_id + i;
+            buf[i] = (s < prefix_samples) ? (uint8_t) (s * 13) : 0x42;
+        }
+        assert_int_equal(0, jls_wr_fsr(wr, 7, sample_id, buf, (uint32_t) len));
+    }
+    // simulated crash: abandon the writer, close only the file descriptor
+    struct jls_core_s * core = (struct jls_core_s *) wr;
+    jls_bk_fclose(jls_raw_backend(core->raw));
+}
+
+// A long trailing run of fully-omitted (constant fsr_omit) intervals must
+// not force recovery to walk the data chain from its head: cost tracks
+// min(omitted tail, data chunks), never the data prefix length.
+static void test_recovery_traversal_bound_omitted_tail(void ** state) {
+    (void) state;
+    struct jls_rd_s * rd = NULL;
+    int64_t hops[2];
+    int64_t prefix_counts[2] = {64000, 640000};
+    const int64_t tail = 64000;  // 100 fully-omitted level-1 index chunks
+    uint8_t buf[640];
+
+    for (int i = 0; i < 2; ++i) {
+        gen_crash_omit(TST_PATH, prefix_counts[i], tail);
+        int64_t h = jls_raw_rd_header_total();
+        assert_int_equal(0, jls_rd_open(&rd, TST_PATH));
+        hops[i] = jls_raw_rd_header_total() - h;
+
+        // prefix data intact
+        assert_int_equal(0, jls_rd_fsr(rd, 7, 1000, buf, (int64_t) sizeof(buf)));
+        for (int64_t j = 0; j < (int64_t) sizeof(buf); ++j) {
+            assert_int_equal((uint8_t) ((1000 + j) * 13), buf[j]);
+        }
+        // omitted tail reconstructs the constant value
+        assert_int_equal(0, jls_rd_fsr(rd, 7, prefix_counts[i] + 1000, buf, (int64_t) sizeof(buf)));
+        for (int64_t j = 0; j < (int64_t) sizeof(buf); ++j) {
+            assert_int_equal(0x42, buf[j]);
+        }
+        jls_rd_close(rd);
+        remove(TST_PATH);
+    }
+    // 10x the data prefix (9000 extra data chunks): recovery cost must not
+    // scale with it
+    assert_true(hops[1] < (hops[0] + 400));
+}
+
 // Find the first chunk with the requested tag, or 0 if absent.
 static int64_t find_chunk_offset(const char * path, uint8_t tag) {
     struct jls_raw_s * raw = NULL;
@@ -585,6 +663,7 @@ int main(void) {
             cmocka_unit_test(test_utc_annotation_user_data_after_crash),
             cmocka_unit_test(test_write_prefix_sweep),
             cmocka_unit_test(test_recovery_traversal_bound),
+            cmocka_unit_test(test_recovery_traversal_bound_omitted_tail),
             cmocka_unit_test(test_open_clean_interior_corruption),
             cmocka_unit_test(test_open_crash_torn_head),
             cmocka_unit_test(test_open_crash_recovery_write_failure),

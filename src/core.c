@@ -1351,29 +1351,52 @@ int32_t jls_core_ts_seek(struct jls_core_s * self, uint16_t signal_id, uint8_t l
     return 0;
 }
 
-int32_t jls_core_repair_chain(struct jls_core_s * self, int64_t offset, uint8_t tag, int32_t chunk_meta) {
-    struct jls_core_chunk_s prev = {.offset = 0};
-    while (offset) {
+int32_t jls_core_repair_chain_walk(struct jls_core_s * self, struct jls_core_chain_walk_s * walk,
+                                   int32_t max_hops) {
+    while (!walk->done && (max_hops-- > 0)) {
+        int64_t offset = walk->offset;
+        if (0 == offset) {
+            walk->done = true;
+            break;
+        }
         if (jls_raw_chunk_seek(self->raw, offset)
                 || jls_core_rd_chunk(self)
-                || (self->chunk_cur.hdr.tag != tag)
-                || ((chunk_meta >= 0) && (self->chunk_cur.hdr.chunk_meta != (uint16_t) chunk_meta))) {
-            if (0 == prev.offset) {
+                || (self->chunk_cur.hdr.tag != walk->tag)
+                || ((walk->chunk_meta >= 0)
+                    && (self->chunk_cur.hdr.chunk_meta != (uint16_t) walk->chunk_meta))) {
+            walk->done = true;
+            if (0 == walk->prev.offset) {
                 return JLS_ERROR_NOT_FOUND;  // first chunk invalid; caller must clear its head
             }
             JLS_LOGI("repair chain tag %d: clamp at %" PRIi64 ", drop invalid link %" PRIi64,
-                     (int) tag, prev.offset, offset);
-            prev.hdr.item_next = 0;
-            return jls_core_update_chunk_header(self, &prev);
+                     (int) walk->tag, walk->prev.offset, offset);
+            walk->prev.hdr.item_next = 0;
+            return jls_core_update_chunk_header(self, &walk->prev);
         }
-        prev = self->chunk_cur;
-        int64_t next = (int64_t) prev.hdr.item_next;
+        walk->prev = self->chunk_cur;
+        int64_t next = (int64_t) walk->prev.hdr.item_next;
         if (next && (next <= offset)) {
-            JLS_LOGI("repair chain tag %d: clamp backward link at %" PRIi64, (int) tag, prev.offset);
-            prev.hdr.item_next = 0;
-            return jls_core_update_chunk_header(self, &prev);
+            walk->done = true;
+            JLS_LOGI("repair chain tag %d: clamp backward link at %" PRIi64,
+                     (int) walk->tag, walk->prev.offset);
+            walk->prev.hdr.item_next = 0;
+            return jls_core_update_chunk_header(self, &walk->prev);
         }
-        offset = next;
+        walk->offset = next;
+    }
+    return 0;
+}
+
+int32_t jls_core_repair_chain(struct jls_core_s * self, int64_t offset, uint8_t tag, int32_t chunk_meta) {
+    struct jls_core_chain_walk_s walk = {
+        .offset = offset,
+        .prev = {.offset = 0},
+        .tag = tag,
+        .chunk_meta = chunk_meta,
+        .done = false,
+    };
+    while (!walk.done) {
+        ROE(jls_core_repair_chain_walk(self, &walk, INT32_MAX));
     }
     return 0;
 }

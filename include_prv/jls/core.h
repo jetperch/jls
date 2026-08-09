@@ -346,6 +346,32 @@ int32_t jls_core_repair_fsr(struct jls_core_s * self, uint16_t signal_id);
  */
 int32_t jls_core_repair_chain(struct jls_core_s * self, int64_t offset, uint8_t tag, int32_t chunk_meta);
 
+/// Cursor state for jls_core_repair_chain_walk.
+struct jls_core_chain_walk_s {
+    int64_t offset;                  ///< Next chunk to visit; from the chain head.
+    struct jls_core_chunk_s prev;    ///< Last valid chunk visited; zero initialize.
+    uint8_t tag;                     ///< The required tag for every chunk in the chain.
+    int32_t chunk_meta;              ///< The required chunk_meta, or -1 to skip the check.
+    bool done;                       ///< Set when the walk completed; zero initialize.
+};
+
+/**
+ * @brief Incremental jls_core_repair_chain: advance a walk by up to max_hops chunks.
+ *
+ * @param self The core instance.
+ * @param walk The walk cursor.  Initialize offset, tag, and chunk_meta;
+ *      zero prev and done.  Do not modify between calls.
+ * @param max_hops The maximum chunks to visit in this call.
+ * @return 0 or error code as jls_core_repair_chain.
+ *
+ * walk->done is set once the chain end was reached or the chain was
+ * clamped; further calls are no-ops.  This exists so a caller can
+ * interleave a chain walk with another bounded search and stop at
+ * whichever finishes first.
+ */
+int32_t jls_core_repair_chain_walk(struct jls_core_s * self, struct jls_core_chain_walk_s * walk,
+                                   int32_t max_hops);
+
 
 JLS_CPP_GUARD_END
 

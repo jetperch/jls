@@ -52,9 +52,14 @@ backend writes (payload, then CRC footer), so a crash can tear it.
   written", which is lossless to skip.  jls_track_repair_head and its
   full-file scans are removed from the open path.
 - Bounded level-0 clamp (src/track.c): the clamp starts from the last
-  valid entry of the last valid level-1 index chunk (hopping
-  item_prev over fully-omitted indexes, bounded), falling back to
-  head_offsets[0] only for young files with no index chunk.
+  valid entry of the last valid level-1 index chunk.  For a signal
+  whose tail is fully omitted (constant fsr_omit data), the backward
+  item_prev hop over all-omitted indexes interleaves with a forward
+  walk of the data chain from head_offsets[0], stopping at whichever
+  finishes first: cost is min(trailing omitted index chunks, total
+  data chunks), each chunk visited at most once, so neither a long
+  omitted tail nor a long data prefix forces an O(file) walk
+  (test_recovery_traversal_bound_omitted_tail).
 - jls_repair (src/repair.c): one forward traversal validating every
   chunk header+payload, building per-chain tables (first, last-valid)
   keyed by (signal, track, level, kind) plus defs chains and heads.

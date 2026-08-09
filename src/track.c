@@ -89,58 +89,106 @@ int32_t jls_track_update(struct jls_core_track_s * track, uint8_t level, int64_t
  * index, so clamping the data chain from there is O(tail) instead of
  * O(file).  Omitted (fsr_omit) entries are 0 and skipped; when a whole
  * index holds only omitted entries, hop item_prev to the previous
- * index chunk, bounded so pathological files cannot re-create an
- * unbounded backward walk.
+ * index chunk.
  */
-static int32_t data_chain_clamp_start(struct jls_core_s * core, struct jls_core_track_s * track,
-                                      int64_t index1_offset, int64_t * start) {
+static int32_t data_index_backstep(struct jls_core_s * core, struct jls_core_track_s * track,
+                                   int64_t * index1_offset, int64_t * entry_offset) {
     uint16_t signal_id = track->parent->signal_def.signal_id;
     uint8_t index_tag = jls_track_tag_pack(track->track_type, JLS_TRACK_CHUNK_INDEX);
-    uint8_t data_tag = jls_track_tag_pack(track->track_type, JLS_TRACK_CHUNK_DATA);
     uint16_t meta = (uint16_t) ((signal_id & 0x0fff) | (1 << 12));
-    *start = 0;
+    *entry_offset = 0;
 
-    for (int hops = 0; index1_offset && (hops < 64); ++hops) {
-        ROE(jls_raw_chunk_seek(core->raw, index1_offset));
-        ROE(jls_core_rd_chunk_validate(core, index_tag, meta));
-        int64_t item_prev = (int64_t) core->chunk_cur.hdr.item_prev;
-        uint32_t entry_count;
-        int64_t entry_offset = 0;
-        if (JLS_TRACK_TYPE_FSR == track->track_type) {
-            struct jls_fsr_index_s * r = (struct jls_fsr_index_s *) core->buf->start;
-            entry_count = r->header.entry_count;
-            if ((sizeof(r->header) + entry_count * sizeof(r->offsets[0])) > core->buf->length) {
-                return JLS_ERROR_MESSAGE_INTEGRITY;
-            }
-            for (uint32_t i = entry_count; i > 0; --i) {
-                if (r->offsets[i - 1]) {
-                    entry_offset = (int64_t) r->offsets[i - 1];
-                    break;
-                }
-            }
-        } else {
-            struct jls_index_s * r = (struct jls_index_s *) core->buf->start;
-            entry_count = r->header.entry_count;
-            if ((sizeof(r->header) + entry_count * sizeof(r->entries[0])) > core->buf->length) {
-                return JLS_ERROR_MESSAGE_INTEGRITY;
-            }
-            for (uint32_t i = entry_count; i > 0; --i) {
-                if (r->entries[i - 1].offset) {
-                    entry_offset = (int64_t) r->entries[i - 1].offset;
-                    break;
-                }
+    ROE(jls_raw_chunk_seek(core->raw, *index1_offset));
+    ROE(jls_core_rd_chunk_validate(core, index_tag, meta));
+    int64_t item_prev = (int64_t) core->chunk_cur.hdr.item_prev;
+    uint32_t entry_count;
+    if (JLS_TRACK_TYPE_FSR == track->track_type) {
+        struct jls_fsr_index_s * r = (struct jls_fsr_index_s *) core->buf->start;
+        entry_count = r->header.entry_count;
+        if ((sizeof(r->header) + entry_count * sizeof(r->offsets[0])) > core->buf->length) {
+            return JLS_ERROR_MESSAGE_INTEGRITY;
+        }
+        for (uint32_t i = entry_count; i > 0; --i) {
+            if (r->offsets[i - 1]) {
+                *entry_offset = (int64_t) r->offsets[i - 1];
+                break;
             }
         }
-        if (entry_offset) {
-            // index entries reference completed pre-crash writes;
-            // an invalid target is interior damage, not truncation
-            ROE(jls_raw_chunk_seek(core->raw, entry_offset));
-            ROE(jls_core_rd_chunk_validate(core, data_tag, signal_id));
-            *start = entry_offset;
-            return 0;
+    } else {
+        struct jls_index_s * r = (struct jls_index_s *) core->buf->start;
+        entry_count = r->header.entry_count;
+        if ((sizeof(r->header) + entry_count * sizeof(r->entries[0])) > core->buf->length) {
+            return JLS_ERROR_MESSAGE_INTEGRITY;
         }
-        // all entries omitted in this index: hop to the previous index chunk
-        index1_offset = ((item_prev > 0) && (item_prev < index1_offset)) ? item_prev : 0;
+        for (uint32_t i = entry_count; i > 0; --i) {
+            if (r->entries[i - 1].offset) {
+                *entry_offset = (int64_t) r->entries[i - 1].offset;
+                break;
+            }
+        }
+    }
+    // all entries omitted in this index: hop to the previous index chunk
+    *index1_offset = ((item_prev > 0) && (item_prev < *index1_offset)) ? item_prev : 0;
+    return 0;
+}
+
+/**
+ * @brief Clamp the level-0 data chain within the crash window.
+ *
+ * @param core The core instance.
+ * @param track The track to repair.
+ * @param index1_offset The offset of the last valid level-1 index chunk, or 0.
+ * @param head_offset The data chain head offset (track head_offsets[0]);
+ *      cleared to 0 when no data chunk survives.
+ * @return 0 or error code.
+ *
+ * Interleave a backward search over level-1 index chunks (which finds
+ * the last indexed data chunk, skipping omitted entries) with a
+ * forward walk of the data chain from its head, stopping at whichever
+ * finishes first.  Cost is min(trailing omitted index chunks, total
+ * data chunks), each chunk visited at most once, so neither a long
+ * omitted tail (constant fsr_omit signals) nor a long data prefix
+ * forces an O(file) walk.
+ */
+static int32_t data_chain_clamp(struct jls_core_s * core, struct jls_core_track_s * track,
+                                int64_t index1_offset, int64_t * head_offset) {
+    uint16_t signal_id = track->parent->signal_def.signal_id;
+    uint8_t data_tag = jls_track_tag_pack(track->track_type, JLS_TRACK_CHUNK_DATA);
+    struct jls_core_chain_walk_s fwd = {
+        .offset = *head_offset,
+        .prev = {.offset = 0},
+        .tag = data_tag,
+        .chunk_meta = signal_id,
+        .done = false,
+    };
+
+    while (index1_offset || (!fwd.done && fwd.offset)) {
+        if (index1_offset) {
+            int64_t entry_offset = 0;
+            ROE(data_index_backstep(core, track, &index1_offset, &entry_offset));
+            if (entry_offset) {
+                // index entries reference completed pre-crash writes;
+                // an invalid target is interior damage, not truncation
+                ROE(jls_raw_chunk_seek(core->raw, entry_offset));
+                ROE(jls_core_rd_chunk_validate(core, data_tag, signal_id));
+                int32_t rc = jls_core_repair_chain(core, entry_offset, data_tag, signal_id);
+                if (JLS_ERROR_NOT_FOUND == rc) {
+                    rc = 0;  // start already validated
+                }
+                return rc;
+            }
+        }
+        if (!fwd.done && fwd.offset) {
+            int32_t rc = jls_core_repair_chain_walk(core, &fwd, 1);
+            if (JLS_ERROR_NOT_FOUND == rc) {
+                *head_offset = 0;  // dangling data head: no data chunk survives
+                return 0;
+            }
+            ROE(rc);
+            if (fwd.done) {
+                return 0;
+            }
+        }
     }
     return 0;
 }
@@ -248,26 +296,7 @@ int32_t jls_track_repair_pointers(struct jls_core_track_s * track) {
     // chain head: the walk must stay O(tail), never O(file).
     JLS_LOGI("repair signal_id %d track %d, level 0, offset %" PRIi64,
              (int) signal_id, (int) track->track_type, offsets[0]);
-    uint8_t data_tag = jls_track_tag_pack(track->track_type, JLS_TRACK_CHUNK_DATA);
-    int64_t clamp_start = 0;
-    if (index1_offset) {
-        ROE(data_chain_clamp_start(core, track, index1_offset, &clamp_start));
-    }
-    if (clamp_start) {
-        int32_t rc = jls_core_repair_chain(core, clamp_start, data_tag, signal_id);
-        if (rc && (JLS_ERROR_NOT_FOUND != rc)) {  // start already validated
-            return rc;
-        }
-    } else if (offsets[0]) {
-        // no indexed data chunk: either a young file with less than one
-        // summary interval of data, or (pathological) a fully-omitted tail
-        int32_t rc = jls_core_repair_chain(core, offsets[0], data_tag, signal_id);
-        if (JLS_ERROR_NOT_FOUND == rc) {
-            offsets[0] = 0;  // dangling data head: no data chunk survives
-        } else if (rc) {
-            return rc;
-        }
-    }
+    ROE(data_chain_clamp(core, track, index1_offset, &offsets[0]));
 
     ROE(jls_track_wr_head(track));
     return 0;
