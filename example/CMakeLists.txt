@@ -37,6 +37,7 @@ add_executable(jls_exe
         jls/info.c
         jls/inspect.c
         jls/read_fuzzer.c
+        jls/repair.c
         jls.c
 )
 add_dependencies(jls_exe ${dependencies})

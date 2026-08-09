@@ -71,6 +71,7 @@ const struct command_s COMMANDS[] = {
         {"info", on_info, "Display JLS file information"},
         {"inspect", on_inspect, "Inspect JLS files"},
         {"read_fuzzer", on_read_fuzzer, "Perform JLS read fuzz testing"},
+        {"repair", on_repair, "Repair a damaged JLS file in place"},
         {"version", on_version, "Display version and platform information"},
         {"help", on_help, "Display help"},
         {NULL, NULL, NULL}

@@ -57,4 +57,5 @@ int on_fsr_statistics(struct app_s * self, int argc, char * argv[]);
 int on_info(struct app_s * self, int argc, char * argv[]);
 int on_inspect(struct app_s * self, int argc, char * argv[]);
 int on_read_fuzzer(struct app_s * self, int argc, char * argv[]);
+int on_repair(struct app_s * self, int argc, char * argv[]);
 int on_version(struct app_s * self, int argc, char * argv[]);
