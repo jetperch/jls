@@ -304,30 +304,10 @@ int32_t jls_core_validate_track_tag(struct jls_core_s * self, uint16_t signal_id
     ROE(jls_core_signal_validate(self, signal_id));
     struct jls_signal_def_s * signal_def = &self->signal_info[signal_id].signal_def;
     uint8_t track_type = jls_core_tag_parse_track_type(tag);
-    switch (signal_def->signal_type) {
-        case JLS_SIGNAL_TYPE_FSR:
-            if ((track_type == JLS_TRACK_TYPE_FSR)
-                || (track_type == JLS_TRACK_TYPE_ANNOTATION)
-                || (track_type == JLS_TRACK_TYPE_UTC)) {
-                // good
-            } else {
-                JLS_LOGW("unsupported track %d for FSR signal", (int) track_type);
-                return JLS_ERROR_PARAMETER_INVALID;
-            }
-            break;
-        case JLS_SIGNAL_TYPE_VSR:
-            if ((track_type == JLS_TRACK_TYPE_VSR)
-                || (track_type == JLS_TRACK_TYPE_ANNOTATION)) {
-                // good
-            } else {
-                JLS_LOGW("unsupported track %d for VSR signal", (int) track_type);
-                return JLS_ERROR_PARAMETER_INVALID;
-            }
-            break;
-        default:
-            // should have already been checked.
-            JLS_LOGW("unsupported signal type: %d", (int) signal_def->signal_type);
-            return JLS_ERROR_PARAMETER_INVALID;
+    if (!jls_core_track_applicable(signal_def->signal_type, track_type)) {
+        JLS_LOGW("unsupported track %d for signal type %d",
+                 (int) track_type, (int) signal_def->signal_type);
+        return JLS_ERROR_PARAMETER_INVALID;
     }
     return 0;
 }
@@ -523,51 +503,89 @@ int32_t jls_core_rd_chunk_end(struct jls_core_s * self) {
 }
 
 
+int32_t jls_core_truncate_tail(struct jls_core_s * self, int64_t pos, struct jls_core_chunk_s * tail) {
+    // remove the partial write after the last valid chunk
+    ROE(jls_raw_chunk_seek(self->raw, pos));
+    ROE(jls_core_rd_chunk(self));
+    ROE(jls_bk_truncate(jls_raw_backend(self->raw)));
+
+    // rewrite the last valid chunk so subsequent appends link correctly
+    ROE(jls_raw_chunk_seek(self->raw, pos));
+    ROE(jls_raw_wr(self->raw, &self->chunk_cur.hdr, self->buf->cur));
+    *tail = self->chunk_cur;
+    tail->offset = pos;
+
+    // relink an orphan final chunk: a crash between writing a chunk and
+    // updating its predecessor's item_next leaves the chunk unreachable
+    int64_t tail_prev = (int64_t) tail->hdr.item_prev;
+    if (tail_prev && (tail_prev < pos)
+            && (0 == jls_raw_chunk_seek(self->raw, tail_prev))
+            && (0 == jls_core_rd_chunk(self))
+            && (0 == self->chunk_cur.hdr.item_next)) {
+        JLS_LOGI("relink orphan final chunk at %" PRIi64, pos);
+        self->chunk_cur.hdr.item_next = (uint64_t) pos;
+        ROE(jls_core_update_chunk_header(self, &self->chunk_cur));
+    }
+    return 0;
+}
+
 int32_t jls_core_scan_sources(struct jls_core_s * self) {
     JLS_LOGD1("jls_core_scan_sources");
     if (0 == self->source_head.offset) {
+        // truncated before the first write, or defs region damaged
         JLS_LOGW("no source definitions found");
-        return 0;
+        return self->recovery_active ? 0 : JLS_ERROR_MESSAGE_INTEGRITY;
     }
+    struct jls_core_chunk_s prev = {.offset = 0};
     ROE(jls_raw_chunk_seek(self->raw, self->source_head.offset));
     while (1) {
         int32_t rc = jls_core_rd_chunk(self);
-        if (JLS_ERROR_MESSAGE_INTEGRITY == rc) {
-            // payload damaged but header valid: skip this chunk, keep the chain
-            JLS_LOGW("skip damaged source chunk at %" PRIi64, self->chunk_cur.offset);
-        } else if (rc) {
-            // damaged file: keep the sources scanned so far
-            JLS_LOGW("source scan ends early: unreadable chunk");
-            return 0;
-        } else if (self->chunk_cur.hdr.tag != JLS_TAG_SOURCE_DEF) {
-            JLS_LOGW("source scan ends early: unexpected tag %d", (int) self->chunk_cur.hdr.tag);
-            return 0;
-        } else {
-            uint16_t source_id = self->chunk_cur.hdr.chunk_meta;
-            if (source_id >= JLS_SOURCE_COUNT) {
-                JLS_LOGW("source_id %d too big - skip", (int) source_id);
-            } else {
-                struct jls_core_source_s * source_info = &self->source_info[source_id];
-                source_info->chunk_def = self->chunk_cur;
-                struct jls_source_def_s *src = &source_info->source_def;
-                ROE(jls_buf_rd_skip(self->buf, 64));
-                ROE(jls_buf_rd_str(self->buf, (const char **) &src->name));
-                ROE(jls_buf_rd_str(self->buf, (const char **) &src->vendor));
-                ROE(jls_buf_rd_str(self->buf, (const char **) &src->model));
-                ROE(jls_buf_rd_str(self->buf, (const char **) &src->version));
-                ROE(jls_buf_rd_str(self->buf, (const char **) &src->serial_number));
-                src->source_id = source_id;  // indicate that this source is valid!
-                JLS_LOGD1("Found source %d : %s", (int) source_id, src->name);
+        if (JLS_ERROR_EMPTY == rc) {
+            if (self->recovery_active) {
+                // chain reference into the truncated tail: clamp so the
+                // repaired file passes the strict (clean) scans
+                JLS_LOGW("source chain ends at truncation");
+                if (prev.offset) {
+                    prev.hdr.item_next = 0;
+                    ROE(jls_core_update_chunk_header(self, &prev));
+                }
+                return 0;
             }
+            return JLS_ERROR_MESSAGE_INTEGRITY;
+        } else if (rc) {
+            return rc;  // interior damage: offline jls_repair required
         }
+        if (self->chunk_cur.hdr.tag != JLS_TAG_SOURCE_DEF) {
+            JLS_LOGW("source chain: unexpected tag %d at %" PRIi64,
+                     (int) self->chunk_cur.hdr.tag, self->chunk_cur.offset);
+            return JLS_ERROR_MESSAGE_INTEGRITY;
+        }
+        uint16_t source_id = self->chunk_cur.hdr.chunk_meta;
+        if (source_id >= JLS_SOURCE_COUNT) {
+            JLS_LOGW("source_id %d too big - skip", (int) source_id);
+        } else {
+            struct jls_core_source_s * source_info = &self->source_info[source_id];
+            source_info->chunk_def = self->chunk_cur;
+            struct jls_source_def_s *src = &source_info->source_def;
+            ROE(jls_buf_rd_skip(self->buf, 64));
+            ROE(jls_buf_rd_str(self->buf, (const char **) &src->name));
+            ROE(jls_buf_rd_str(self->buf, (const char **) &src->vendor));
+            ROE(jls_buf_rd_str(self->buf, (const char **) &src->model));
+            ROE(jls_buf_rd_str(self->buf, (const char **) &src->version));
+            ROE(jls_buf_rd_str(self->buf, (const char **) &src->serial_number));
+            src->source_id = source_id;  // indicate that this source is valid!
+            JLS_LOGD1("Found source %d : %s", (int) source_id, src->name);
+        }
+        prev = self->chunk_cur;
         if (!self->chunk_cur.hdr.item_next) {
             break;
         }
-        if (((int64_t) self->chunk_cur.hdr.item_next <= self->chunk_cur.offset)
-                || jls_raw_chunk_seek(self->raw, self->chunk_cur.hdr.item_next)) {
-            JLS_LOGW("source scan ends early: invalid item_next");
-            return 0;
+        if ((int64_t) self->chunk_cur.hdr.item_next <= self->chunk_cur.offset) {
+            // chains always point forward
+            JLS_LOGW("source chain: invalid item_next at %" PRIi64, self->chunk_cur.offset);
+            return JLS_ERROR_MESSAGE_INTEGRITY;
         }
+        ROE(jls_raw_chunk_seek(self->raw, self->chunk_cur.hdr.item_next));
     }
     return 0;
 }
@@ -576,7 +594,7 @@ static int32_t handle_signal_def(struct jls_core_s * self) {
     uint16_t signal_id = self->chunk_cur.hdr.chunk_meta;
     if (signal_id >= JLS_SIGNAL_COUNT) {
         JLS_LOGW("signal_id %d too big - skip", (int) signal_id);
-        return JLS_ERROR_PARAMETER_INVALID;
+        return 0;  // semantically invalid but structurally sound: skip
     }
     struct jls_core_signal_s * signal_info = &self->signal_info[signal_id];
     signal_info->chunk_def = self->chunk_cur;
@@ -608,6 +626,10 @@ static int32_t handle_signal_def(struct jls_core_s * self) {
 static int32_t handle_track_def(struct jls_core_s * self, int64_t pos) {
     (void) pos;  // unused
     uint16_t signal_id = self->chunk_cur.hdr.chunk_meta & SIGNAL_MASK;
+    if (jls_core_signal_validate(self, signal_id)) {
+        JLS_LOGW("track def for undefined signal %d - skip", (int) signal_id);
+        return 0;  // the signal def was skipped: skip its tracks too
+    }
     ROE(jls_core_validate_track_tag(self, signal_id, self->chunk_cur.hdr.tag));
     return 0;
 }
@@ -615,14 +637,19 @@ static int32_t handle_track_def(struct jls_core_s * self, int64_t pos) {
 static int32_t handle_track_head(struct jls_core_s * self, int64_t pos) {
     (void) pos;  // unused
     uint16_t signal_id = self->chunk_cur.hdr.chunk_meta & SIGNAL_MASK;
+    if (jls_core_signal_validate(self, signal_id)) {
+        JLS_LOGW("track head for undefined signal %d - skip", (int) signal_id);
+        return 0;  // the signal def was skipped: skip its tracks too
+    }
     ROE(jls_core_validate_track_tag(self, signal_id, self->chunk_cur.hdr.tag));
     uint8_t track_type = jls_core_tag_parse_track_type(self->chunk_cur.hdr.tag);
     size_t expect_sz = JLS_SUMMARY_LEVEL_COUNT * sizeof(int64_t);
 
     if (self->buf->length != expect_sz) {
+        // torn head payload: offline jls_repair can rebuild it
         JLS_LOGW("cannot parse signal %d head, sz=%zu, expect=%zu",
                  (int) signal_id, self->buf->length, expect_sz);
-        return JLS_ERROR_PARAMETER_INVALID;
+        return JLS_ERROR_MESSAGE_INTEGRITY;
     }
     struct jls_core_signal_s * signal = &self->signal_info[signal_id];
     struct jls_core_track_s * track = &signal->tracks[track_type];
@@ -636,36 +663,52 @@ static int32_t handle_track_head(struct jls_core_s * self, int64_t pos) {
 int32_t jls_core_scan_signals(struct jls_core_s * self) {
     JLS_LOGD1("jls_core_scan_signals");
     if (0 == self->signal_head.offset) {
+        // truncated before the first write, or defs region damaged
         JLS_LOGW("no signal definitions found");
-        return 0;
+        return self->recovery_active ? 0 : JLS_ERROR_MESSAGE_INTEGRITY;
     }
+    struct jls_core_chunk_s prev = {.offset = 0};
     ROE(jls_raw_chunk_seek(self->raw, self->signal_head.offset));
     while (1) {
         int32_t rc = jls_core_rd_chunk(self);
-        if (JLS_ERROR_MESSAGE_INTEGRITY == rc) {
-            // payload damaged but header valid: skip this chunk, keep the chain
-            JLS_LOGW("skip damaged signal chunk at %" PRIi64, self->chunk_cur.offset);
+        if (JLS_ERROR_EMPTY == rc) {
+            if (self->recovery_active) {
+                // chain reference into the truncated tail: clamp so the
+                // repaired file passes the strict (clean) scans
+                JLS_LOGW("signal chain ends at truncation");
+                if (prev.offset) {
+                    prev.hdr.item_next = 0;
+                    ROE(jls_core_update_chunk_header(self, &prev));
+                }
+                return 0;
+            }
+            return JLS_ERROR_MESSAGE_INTEGRITY;
         } else if (rc) {
-            // damaged file: keep the signals scanned so far
-            JLS_LOGW("signal scan ends early: unreadable chunk");
-            return 0;
-        } else if (self->chunk_cur.hdr.tag == JLS_TAG_SIGNAL_DEF) {
-            handle_signal_def(self);
+            return rc;  // interior damage: offline jls_repair required
+        }
+        if (self->chunk_cur.hdr.tag == JLS_TAG_SIGNAL_DEF) {
+            rc = handle_signal_def(self);
         } else if ((self->chunk_cur.hdr.tag & 7) == JLS_TRACK_CHUNK_DEF) {
-            handle_track_def(self, self->chunk_cur.offset);
+            rc = handle_track_def(self, self->chunk_cur.offset);
         } else if ((self->chunk_cur.hdr.tag & 7) == JLS_TRACK_CHUNK_HEAD) {
-            handle_track_head(self, self->chunk_cur.offset);
+            rc = handle_track_head(self, self->chunk_cur.offset);
         } else {
             JLS_LOGW("unknown tag %d in signal list", (int) self->chunk_cur.hdr.tag);
+            rc = JLS_ERROR_MESSAGE_INTEGRITY;
         }
+        if (rc) {
+            return JLS_ERROR_MESSAGE_INTEGRITY;
+        }
+        prev = self->chunk_cur;
         if (!self->chunk_cur.hdr.item_next) {
             break;
         }
-        if (((int64_t) self->chunk_cur.hdr.item_next <= self->chunk_cur.offset)
-                || jls_raw_chunk_seek(self->raw, self->chunk_cur.hdr.item_next)) {
-            JLS_LOGW("signal scan ends early: invalid item_next");
-            return 0;
+        if ((int64_t) self->chunk_cur.hdr.item_next <= self->chunk_cur.offset) {
+            // chains always point forward
+            JLS_LOGW("signal chain: invalid item_next at %" PRIi64, self->chunk_cur.offset);
+            return JLS_ERROR_MESSAGE_INTEGRITY;
         }
+        ROE(jls_raw_chunk_seek(self->raw, self->chunk_cur.hdr.item_next));
     }
     return 0;
 }
@@ -684,9 +727,9 @@ int32_t jls_core_scan_fsr_sample_id(struct jls_core_s * self) {
         if (jls_raw_chunk_seek(self->raw, offset)
                 || jls_core_rd_chunk(self)
                 || (self->chunk_cur.hdr.tag != JLS_TAG_TRACK_FSR_DATA)) {
-            // damaged file: treat an unreadable data head as no data
+            // interior damage: offline jls_repair required
             JLS_LOGW("jls_core_scan_fsr_sample_id signal %d: data head unreadable", (int) signal_id);
-            continue;
+            return JLS_ERROR_MESSAGE_INTEGRITY;
         }
 
         struct jls_fsr_data_s * r = (struct jls_fsr_data_s *) self->buf->start;

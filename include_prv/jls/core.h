@@ -152,6 +152,10 @@ struct jls_core_s {
     struct jls_core_chunk_s chunk_cur;           // most recent read chunk header, payload in buf
     struct jls_core_f64_buf_s * f64_sample_buf;  // for reading samples
     struct jls_core_f64_buf_s * f64_stats_buf;   // for reading statistics
+
+    // Truncation recovery in progress: scans treat reads past the truncated
+    // end as chain terminations rather than integrity failures.
+    bool recovery_active;
 };
 
 int32_t jls_core_f64_buf_alloc(size_t length, struct jls_core_f64_buf_s ** buf);
@@ -210,6 +214,30 @@ static inline uint8_t jls_core_tag_parse_track_type(uint8_t tag) {
     return (tag >> 3) & 3;
 }
 
+/**
+ * @brief Test if the writer creates a track type for a signal type.
+ *
+ * @param signal_type The jls_signal_type_e value.
+ * @param track_type The jls_track_type_e value.
+ * @return True if jls_wr_signal_def() creates this track for the signal.
+ *
+ * Tracks are created eagerly at signal definition time, so an applicable
+ * track missing from a truncated file was never written and holds no data.
+ */
+static inline bool jls_core_track_applicable(uint8_t signal_type, uint8_t track_type) {
+    switch (signal_type) {
+        case JLS_SIGNAL_TYPE_FSR:
+            return (JLS_TRACK_TYPE_FSR == track_type)
+                    || (JLS_TRACK_TYPE_ANNOTATION == track_type)
+                    || (JLS_TRACK_TYPE_UTC == track_type);
+        case JLS_SIGNAL_TYPE_VSR:
+            return (JLS_TRACK_TYPE_VSR == track_type)
+                    || (JLS_TRACK_TYPE_ANNOTATION == track_type);
+        default:
+            return false;
+    }
+}
+
 /// The FSR summary entry element size in bits for the signal data type.
 static inline uint8_t jls_core_fsr_summary_entry_size_bits(uint32_t data_type) {
     switch (data_type & 0xffff) {
@@ -258,6 +286,22 @@ int32_t jls_core_rd_chunk(struct jls_core_s * self);
  */
 int32_t jls_core_rd_chunk_validate(struct jls_core_s * self, uint8_t tag, uint16_t chunk_meta);
 int32_t jls_core_rd_chunk_end(struct jls_core_s * self);
+
+/**
+ * @brief Truncate the torn tail and relink an orphan final chunk.
+ *
+ * @param self The core instance, opened for write ("a").
+ * @param pos The offset of the last valid chunk, from a prior
+ *      jls_core_rd_chunk_end() + jls_raw_chunk_tell().
+ * @param tail[out] The last valid chunk (header and offset).
+ * @return 0 or error code.
+ *
+ * Removes any partial write after the last valid chunk, rewrites that
+ * chunk so subsequent appends link correctly, and repairs the crash
+ * window where the final chunk was written but its predecessor's
+ * item_next update was lost.
+ */
+int32_t jls_core_truncate_tail(struct jls_core_s * self, int64_t pos, struct jls_core_chunk_s * tail);
 int32_t jls_core_scan_sources(struct jls_core_s * self);
 int32_t jls_core_scan_signals(struct jls_core_s * self);
 int32_t jls_core_scan_fsr_sample_id(struct jls_core_s * self);
