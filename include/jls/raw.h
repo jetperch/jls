@@ -149,6 +149,25 @@ int32_t jls_raw_rd_header(struct jls_raw_s * self, struct jls_chunk_header_s * h
 int32_t jls_raw_rd_payload(struct jls_raw_s * self, uint32_t payload_length_max, uint8_t * payload);
 
 /**
+ * @brief The total chunk headers read from the backend in this process.
+ *
+ * @return The monotonic count of chunk header reads.
+ *
+ * Test and diagnostic accounting, shared by all instances.  Used to
+ * assert traversal bounds on the jls_rd_open() recovery path.
+ */
+JLS_API int64_t jls_raw_rd_header_total(void);
+
+/**
+ * @brief The total payload bytes read from the backend in this process.
+ *
+ * @return The monotonic count of payload bytes read.
+ *
+ * Test and diagnostic accounting, shared by all instances.
+ */
+JLS_API int64_t jls_raw_rd_payload_total(void);
+
+/**
  * @brief Seek to a chunk.
  *
  * @param self The JLS raw instance.

@@ -90,6 +90,26 @@ static void test_one_chunk(void **state) {
     remove(filename);
 }
 
+static void test_read_accounting(void **state) {
+    (void) state;
+    struct jls_raw_s * j = NULL;
+    struct jls_chunk_header_s hdr;
+    uint8_t data[sizeof(PAYLOAD1) + 16];
+    assert_int_equal(0, jls_raw_open(&j, filename, "w"));
+    assert_int_equal(0, jls_raw_wr(j, hdr_set(&hdr, JLS_TAG_USER_DATA, 0, sizeof(PAYLOAD1)), PAYLOAD1));
+    assert_int_equal(0, jls_raw_close(j));
+
+    int64_t hdr_total = jls_raw_rd_header_total();
+    int64_t payload_total = jls_raw_rd_payload_total();
+    assert_int_equal(0, jls_raw_open(&j, filename, "r"));
+    assert_int_equal(0, jls_raw_rd(j, &hdr, sizeof(data), data));
+    assert_int_equal(0, jls_raw_close(j));
+    assert_int_equal(hdr_total + 1, jls_raw_rd_header_total());
+    // payload bytes are read rounded up to the on-disk size including CRC
+    assert_true(jls_raw_rd_payload_total() >= (payload_total + (int64_t) sizeof(PAYLOAD1)));
+    remove(filename);
+}
+
 static void construct_n_chunks(void) {
     struct jls_raw_s * j = NULL;
     struct jls_chunk_header_s hdr;
@@ -252,6 +272,7 @@ int main(void) {
             cmocka_unit_test(test_invalid_open),
             cmocka_unit_test(test_open_write),
             cmocka_unit_test(test_one_chunk),
+            cmocka_unit_test(test_read_accounting),
             cmocka_unit_test(test_n_chunks),
             cmocka_unit_test(test_chunks_nav),
             cmocka_unit_test(test_seek),

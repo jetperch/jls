@@ -74,6 +74,18 @@ int64_t jls_bk_write_total(void) {
     return bk_write_total;
 }
 
+// Read accounting for traversal-bound tests; see jls/raw.h.
+static int64_t raw_rd_header_total = 0;
+static int64_t raw_rd_payload_total = 0;
+
+int64_t jls_raw_rd_header_total(void) {
+    return raw_rd_header_total;
+}
+
+int64_t jls_raw_rd_payload_total(void) {
+    return raw_rd_payload_total;
+}
+
 int32_t jls_bk_write_limit_consume(uint32_t count) {
     bk_write_total += count;
     if (bk_write_limit < 0) {
@@ -343,6 +355,7 @@ int32_t jls_raw_rd_header(struct jls_raw_s * self, struct jls_chunk_header_s * h
             invalidate_current_chunk(self);
             return JLS_ERROR_EMPTY;
         }
+        ++raw_rd_header_total;
         uint32_t crc32 = jls_crc32c_hdr(h);
         if (crc32 != h->crc32) {
             JLS_LOGW("chunk header fpos=%" PRIi64 " crc error: %u != %u",
@@ -383,6 +396,7 @@ int32_t jls_raw_rd_payload(struct jls_raw_s * self, uint32_t payload_length_max,
     }
 
     RLE(jls_bk_fread(&self->backend, (uint8_t *) payload, rd_size));
+    raw_rd_payload_total += rd_size;
     crc32_calc = jls_crc32c(payload, hdr->payload_length);
     crc32_file = ((uint32_t)payload[rd_size - 4])
         | (((uint32_t)payload[rd_size - 3]) << 8)
