@@ -27,6 +27,7 @@
 #include <stdint.h>
 #include "jls/cmacro.h"
 #include "jls/format.h"
+#include "jls/progress.h"
 
 /**
  * @ingroup jls
@@ -39,24 +40,11 @@
 
 JLS_CPP_GUARD_START
 
-/**
- * @brief The function called for messages.
- *
- * @param user_data The arbitrary user data.
- * @param msg The user-meaningful message.
- * @return 0 to continue copy or any other value to stop.
- */
-typedef int32_t (*jls_copy_msg_fn)(void * user_data, const char * msg);
+/// Deprecated alias, use jls_msg_fn.
+typedef jls_msg_fn jls_copy_msg_fn;
 
-/**
- * @brief The function called for progress.
- *
- * @param user_data The arbitrary user data.
- * @param progress The normalized progress from 0.0 (starting) to 1.0 done.
- *      Multiply by 100 for percentage.
- * @return 0 to continue copy or any other value to stop.
- */
-typedef int32_t (*jls_copy_progress_fn)(void * user_data, double progress);
+/// Deprecated alias, use jls_progress_fn.
+typedef jls_progress_fn jls_copy_progress_fn;
 
 
 /**

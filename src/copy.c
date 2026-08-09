@@ -33,7 +33,9 @@
                  offset, description,                                                               \
                  ec, jls_error_code_name(ec), jls_error_code_description(ec),                       \
                  __LINE__);                                                                         \
-        msg_fn(msg_user_data, msg_str);                                                             \
+        if (msg_fn(msg_user_data, msg_str)) {                                                       \
+            cancel = 1;                                                                             \
+        }                                                                                           \
     }                                                                                               \
 } while (0)
 
@@ -42,6 +44,7 @@ int32_t jls_copy(const char * src, const char * dst,
                  jls_copy_msg_fn msg_fn, void * msg_user_data,
                  jls_copy_progress_fn progress_fn, void * progress_user_data) {
     int32_t rc = 0;
+    int32_t cancel = 0;
     int64_t offset = 0;
     int64_t offset_progress = 0;
     struct jls_raw_s * rd = NULL;
@@ -68,7 +71,7 @@ int32_t jls_copy(const char * src, const char * dst,
 
     struct jls_chunk_header_s hdr;
 
-    while (offset < offset_end) {
+    while ((offset < offset_end) && !cancel) {
         rc = jls_raw_rd_header(rd, &hdr);
         if (rc) {
             MSG_ERROR("jls_raw_rd_header", rc);
@@ -198,13 +201,17 @@ int32_t jls_copy(const char * src, const char * dst,
         }
         offset = jls_raw_chunk_tell(rd);
         if ((offset - offset_progress) >= PROGRESS_INTERVAL_BYTES) {
-            if (NULL != progress_fn) {
-                progress_fn(progress_user_data, offset / (double) offset_end);
-            }
             offset_progress = offset;
+            if ((NULL != progress_fn)
+                    && progress_fn(progress_user_data, offset / (double) offset_end)) {
+                cancel = 1;
+            }
         }
     }
-    if (NULL != progress_fn) {
+    if (cancel && (0 == rc)) {
+        rc = JLS_ERROR_ABORTED;
+    }
+    if ((0 == rc) && (NULL != progress_fn)) {
         progress_fn(progress_user_data, 1.0);
     }
     jls_raw_close(rd);
