@@ -13,7 +13,7 @@
 # limitations under the License.
 
 
-__version__ = "0.17.0"
+__version__ = "0.18.0"
 
 __title__ = "pyjls"
 __description__ = 'Joulescope™ file format'

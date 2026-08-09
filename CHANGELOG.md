@@ -6,21 +6,54 @@ This file contains the list of changes made to the JLS project.
 
 ## 0.18.0
 
-2026 Aug 8
+2026 Aug 9
 
-* Fixed crash recovery (doc/plans/completed/recovery_defects.md findings F1-F9):
-  * Fixed repair truncating a fully valid final chunk (backward scan miss).
-  * Fixed repair overwriting valid chunks below the truncation point.
-  * Fixed heap overflow and infinite read loops on damaged files:
-    every chain and index hop now validates chunk tag and meta.
+* Reworked recovery of damaged JLS files
+  (doc/plans/completed/recovery_defects.md findings F1-F9 and
+  doc/plans/recovery_single_pass.md):
+  * jls_rd_open now recovers tail truncation, the common damage from
+    writer crashes, power loss, and arbitrary truncation, quickly and
+    robustly in O(crash tail) regardless of file size:
+    * Fixed recovery truncating a fully valid final chunk
+      (backward scan miss).
+    * Fixed recovery overwriting valid chunks below the truncation
+      point; all repair writes append at the file end.
+    * Relinked the orphan final chunk, restored lost track head
+      offsets, and clamped dangling chain links in the crash window.
+    * Removed the full-file traversals from open: track head search
+      considers only applicable track types, and the data chain clamp
+      starts from the last valid level-1 index entry.
+  * jls_rd_open returns JLS_ERROR_TRUNCATED when the file needs
+    truncation recovery but is read-only or the recovery write fails
+    (was JLS_ERROR_IO).
+  * jls_rd_open returns JLS_ERROR_MESSAGE_INTEGRITY on any other
+    corruption (torn track heads, interior bit errors or zeroed
+    regions, damaged definition chains) instead of opening degraded;
+    every chain and index hop validates chunk tag and meta, which also
+    fixes heap overflow and infinite read loops on damaged files.
+    API impact: callers that tolerated degraded opens must catch this
+    and offer jls_repair.
+  * Added jls_repair(): offline, in-place repair with a single
+    full-file traversal for the damage classes that jls_rd_open
+    refuses.  Relinks chains around dead chunks, rebuilds torn or
+    lost track heads, converts dead FSR data to omitted regions
+    reconstructed from summaries, and finalizes the file.  Includes
+    the `jls repair` CLI command and the pyjls `repair()` binding.
   * Repaired annotation, UTC, and user data chains; UTC iteration now
     returns entries written after the last summary.
-  * Relinked the orphan final chunk and restored lost track head
-    offsets from the crash window; rebuilt torn track head payloads.
   * Fixed reader and raw instance leaks on failed open.
-  * Fixed writer out-of-bounds read on byte-aligned FSR writes.
-* Added corruption fuzz campaigns to the read_fuzzer example and the
-  crash-recovery regression unit test suite.
+* Fixed writer out-of-bounds read on byte-aligned FSR writes.
+* Added jls_msg_fn and jls_progress_fn (jls/progress.h); the jls_copy
+  callback types are deprecated aliases.  Copy and repair callbacks
+  now honor the cancel return value and stop with JLS_ERROR_ABORTED;
+  pyjls callbacks receive str messages and cancel by returning True.
+* Added jls_raw_rd_header_total() and jls_raw_rd_payload_total() read
+  accounting; the recovery test suite asserts open cost is independent
+  of file size.
+* Added corruption fuzz campaigns to the read_fuzzer example
+  (truncate, zero_tail, zero_hole, torn_update, bitflip,
+  write_prefix), which verify recovery and jls_repair end to end,
+  plus the crash-recovery and offline-repair unit test suites.
 
 
 ## 0.17.0
