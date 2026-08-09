@@ -10,7 +10,7 @@ This file contains the list of changes made to the JLS project.
 
 * Reworked recovery of damaged JLS files
   (doc/plans/completed/recovery_defects.md findings F1-F9 and
-  doc/plans/recovery_single_pass.md):
+  doc/plans/completed/recovery_single_pass.md):
   * jls_rd_open now recovers tail truncation, the common damage from
     writer crashes, power loss, and arbitrary truncation, quickly and
     robustly in O(crash tail) regardless of file size:

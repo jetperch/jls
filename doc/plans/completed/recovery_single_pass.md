@@ -2,7 +2,8 @@
 
 ## Status
 
-COMPLETE (2026 Aug 9), except the optional retrace removal below.
+COMPLETE (2026 Aug 9).  The "Open follow-up" items below are optional
+optimizations, deliberately deferred, not remaining scope.
 
 ## Requirements (Matt, 2026-08-08)
 
