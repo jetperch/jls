@@ -14,7 +14,7 @@
 
 from .binding import DataType, AnnotationType, SignalType, \
     Writer, Reader, SummaryFSR, TimeMap, \
-    copy, \
+    copy, repair, \
     data_type_as_enum, data_type_as_str, \
     utc_to_jls, jls_to_utc
 from .structs import SourceDef, SignalDef
@@ -23,7 +23,7 @@ from .version import *
 
 __all__ = ['Writer', 'Reader', 'DataType', 'AnnotationType', 'TimeMap',
            'SignalType', 'SourceDef', 'SignalDef', 'SummaryFSR',
-           'copy',
+           'copy', 'repair',
            'data_type_as_enum', 'data_type_as_str',
            'utc_to_jls', 'jls_to_utc',
            'time64',

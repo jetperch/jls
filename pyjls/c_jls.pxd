@@ -152,9 +152,16 @@ cdef extern from "jls/reader.h":
                                           int64_t timestamp, int64_t * sample_id)
     int32_t jls_rd_tmap_get(jls_rd_s * self, uint16_t signal_id, size_t index, jls_utc_summary_entry_s * entry)
 
+cdef extern from "jls/progress.h":
+    ctypedef int32_t (*jls_msg_fn)(void * user_data, const char * msg)
+    ctypedef int32_t (*jls_progress_fn)(void * user_data, double progress)
+
 cdef extern from "jls/copy.h":
-    ctypedef int32_t (*jls_copy_msg_fn)(void * user_data, const char * msg)
-    ctypedef int32_t (*jls_copy_progress_fn)(void * user_data, double progress)
     int32_t jls_copy(const char * src, const char * dst,
-                     jls_copy_msg_fn msg_fn, void * msg_user_data,
-                     jls_copy_progress_fn progress_fn, void * progress_user_data)
+                     jls_msg_fn msg_fn, void * msg_user_data,
+                     jls_progress_fn progress_fn, void * progress_user_data)
+
+cdef extern from "jls/repair.h":
+    int32_t jls_repair(const char * path,
+                       jls_msg_fn msg_fn, void * msg_user_data,
+                       jls_progress_fn progress_fn, void * progress_user_data)

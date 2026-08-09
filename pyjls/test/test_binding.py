@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from pyjls.binding import Writer, Reader, SummaryFSR, DataType, jls_inject_log, copy, TimeMap
+from pyjls.binding import Writer, Reader, SummaryFSR, DataType, jls_inject_log, copy, repair, TimeMap
 from pyjls.time64 import SECOND, YEAR
 import io
 import logging
@@ -307,6 +307,45 @@ class TestBinding(unittest.TestCase):
             self.assertTrue(os.path.isfile(dst.name))
             os.remove(dst.name)
         self.assertEqual(1.0, progresses[-1])
+
+    def _repair_case_create(self):
+        """Write a file, then corrupt 64 bytes in the sample data region."""
+        data = np.arange(110000, dtype=np.float32)
+        with Writer(self._path) as w:
+            w.source_def(source_id=1, name='name', vendor='vendor', model='model',
+                         version='version', serial_number='serial_number')
+            w.signal_def(3, source_id=1, sample_rate=1000000, name='current', units='A')
+            w.fsr(3, 0, data)
+        sz = os.path.getsize(self._path)
+        with open(self._path, 'r+b') as f:
+            f.seek(sz // 2)
+            f.write(b'\x5a' * 64)
+        return data
+
+    def test_repair(self):
+        msgs = []
+        progresses = []
+        data = self._repair_case_create()
+        repair(self._path, msgs.append, progresses.append)
+        self.assertEqual(1.0, progresses[-1])
+        self.assertEqual(progresses, sorted(progresses))  # monotonic
+        for msg in msgs:
+            self.assertIsInstance(msg, str)
+        with Reader(self._path) as r:
+            self.assertEqual(len(data), r.signals[3].length)
+            r.fsr(3, 0, len(data))  # reads complete without error
+
+    def test_repair_cancel(self):
+        self._repair_case_create()
+        with self.assertRaises(RuntimeError):
+            repair(self._path, None, lambda progress: True)
+        repair(self._path)  # canceled repair reruns to completion
+        with Reader(self._path) as r:
+            self.assertEqual(3, r.signals[3].signal_id)
+
+    def test_repair_missing_file(self):
+        with self.assertRaises(RuntimeError):
+            repair(self._path + '.does_not_exist.jls')
 
     def test_signal_lookup(self):
         with Writer(self._path) as w:
