@@ -25,6 +25,7 @@ set(SOURCES
         log.c
         msg_ring_buffer.c
         raw.c
+        repair.c
         tmap.c
         reader.c
         statistics.c

@@ -23,9 +23,11 @@
 #ifndef JLS_INC_H__
 #define JLS_INC_H__
 
+#include "jls/copy.h"
 #include "jls/ec.h"
 #include "jls/format.h"
 #include "jls/reader.h"
+#include "jls/repair.h"
 #include "jls/threaded_writer.h"
 #include "jls/time.h"
 #include "jls/version.h"
