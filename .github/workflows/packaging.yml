@@ -1,4 +1,4 @@
-# Copyright 2021-2025 Jetperch LLC
+# Copyright 2021-2026 Jetperch LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -38,14 +38,14 @@ jobs:
         os: ["windows-latest", "windows-11-arm"]
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Display CMake version
         run: cmake --version
 
       - name: Build static
         run: |
-          cmake -S . -B cmake_build_static -G "Visual Studio 17 2022" -DCMAKE_CONFIGURATION_TYPES=Release -DCMAKE_VERBOSE_MAKEFILE=ON
+          cmake -S . -B cmake_build_static -DCMAKE_CONFIGURATION_TYPES=Release -DCMAKE_VERBOSE_MAKEFILE=ON
           cmake --build cmake_build_static --config Release --target ALL_BUILD
 
       - name: Run tests
@@ -53,11 +53,11 @@ jobs:
 
       - name: Build dynamic
         run: |
-          cmake -S . -B cmake_build_dyn -G "Visual Studio 17 2022" -DCMAKE_CONFIGURATION_TYPES=Release -DCMAKE_VERBOSE_MAKEFILE=ON -DBUILD_SHARED_LIBS=ON
+          cmake -S . -B cmake_build_dyn -DCMAKE_CONFIGURATION_TYPES=Release -DCMAKE_VERBOSE_MAKEFILE=ON -DBUILD_SHARED_LIBS=ON
           cmake --build cmake_build_dyn --config Release --target jls
 
       - name: Upload binaries
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.os }}
           path: |
@@ -73,7 +73,7 @@ jobs:
         os: ["ubuntu-latest", "ubuntu-24.04-arm", "macos-latest"]
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Display CMake version
         run: cmake --version
@@ -87,7 +87,7 @@ jobs:
         run: cmake --build cmake_build_static --target test
 
       - name: Upload binaries
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.os }}
           path: |
@@ -106,10 +106,10 @@ jobs:
           echo "runner.arch=$RUNNER_ARCH"
 
       - name: Checkout repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
@@ -132,7 +132,7 @@ jobs:
         working-directory: pyjls/test
 
       - name: Upload python source package
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: python_sdist
           path: dist/*.tar.gz
@@ -149,11 +149,11 @@ jobs:
       fail-fast: false
       matrix:
         os: ["ubuntu-latest", "windows-latest", "macos-latest", "ubuntu-24.04-arm", "windows-11-arm"]
-        python_version: ["cp311", "cp312", "cp313", "cp314"]
+        python_version: ["cp312", "cp313", "cp314"]
 
     steps:
       - name: Download sdist
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           name: python_sdist
           path: dist/
@@ -164,7 +164,7 @@ jobs:
         run: echo "filename=$(ls dist/*.tar.gz)" >> $GITHUB_OUTPUT
 
       - name: Build wheels
-        uses: pypa/cibuildwheel@v3.4.1
+        uses: pypa/cibuildwheel@v4.2.0
         env:
           CIBW_ARCHS_MACOS: universal2
           CIBW_ARCHS_WINDOWS: native
@@ -180,7 +180,7 @@ jobs:
           package-dir: ${{ steps.find_sdist_filename.outputs.filename }}
 
       - name: Upload python wheels
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: python_wheel-${{ matrix.os }}-${{ matrix.python_version }}
           path: wheelhouse/*.whl
@@ -199,13 +199,13 @@ jobs:
 
     steps:
       - name: Download python sdist artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           name: python_sdist
           path: dist/
 
       - name: Download python wheel artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           pattern: python_wheel-*
           merge-multiple: true
@@ -216,13 +216,13 @@ jobs:
         run: ls dist/*
 
       - name: Publish packages to PyPi
-        uses: pypa/gh-action-pypi-publish@v1.13.0
+        uses: pypa/gh-action-pypi-publish@v1.14.2
         with:
           verbose: true
           print-hash: true
 
       - name: Download windows-latest artifact
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           name: windows-latest
           path: dist_windows_latest/
@@ -232,7 +232,7 @@ jobs:
         run: cp dist_windows_latest/cmake_build_static/example/Release/* dist/
 
       - name: Publish release assets
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             dist/*

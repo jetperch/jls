@@ -8,6 +8,7 @@ This file contains the list of changes made to the JLS project.
 
 2026 Aug 9
 
+* Dropped python 3.11 support and updated build dependencies to latest.
 * Reworked recovery of damaged JLS files
   (doc/plans/completed/recovery_defects.md findings F1-F9 and
   doc/plans/completed/recovery_single_pass.md):
