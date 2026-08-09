@@ -269,6 +269,70 @@ static void test_repair_progress_and_cancel(void ** state) {
     remove(PATH);
 }
 
+// Write a closed file large enough that progress fires mid-traversal.
+static void gen_large(const char * path, int64_t sample_count) {
+    struct jls_wr_s * wr = NULL;
+    signals_generate();
+    assert_int_equal(0, jls_wr_open(&wr, path));
+    assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_3));
+    assert_int_equal(0, jls_wr_signal_def(wr, &SIGNAL_5));
+    for (int64_t sample_id = 0; sample_id < sample_count; sample_id += WINDOW_SIZE) {
+        int64_t len = sample_count - sample_id;
+        if (len > WINDOW_SIZE) {
+            len = WINDOW_SIZE;
+        }
+        assert_int_equal(0, jls_wr_fsr_f32(wr, 5, sample_id, signal_f32_, (uint32_t) len));
+    }
+    assert_int_equal(0, jls_wr_close(wr));
+}
+
+static int32_t relink_count_fn(void * user_data, const char * msg) {
+    int32_t * count = (int32_t *) user_data;
+    if (NULL != strstr(msg, "relink")) {
+        ++(*count);
+    }
+    return 0;
+}
+
+// Cancel mid-traversal, after relink writes have occurred: repair is not
+// atomic (design ruling C5), so the partially-repaired file must repair
+// cleanly to a fully readable file on rerun.
+static void test_repair_cancel_mid_traversal_reruns(void ** state) {
+    (void) state;
+    const int64_t sample_count = 4000000;  // ~16 MB: progress fires mid-traversal
+    gen_large(PATH, sample_count);
+    // kill a data chunk ~1 MB in so a relink write precedes the cancel
+    int64_t offset = find_chunk(PATH, JLS_TAG_TRACK_FSR_DATA, 250, NULL);
+    assert_true(offset > 0);
+    corrupt(PATH, offset + sizeof(struct jls_chunk_header_s) + 4, 4);
+
+    int32_t relinks = 0;
+    struct progress_state_s cancel = {.count = 0, .last = 0.0, .cancel_after = 2};
+    assert_int_equal(JLS_ERROR_ABORTED,
+                     jls_repair(PATH, relink_count_fn, &relinks, progress_fn, &cancel));
+    assert_int_equal(2, cancel.count);
+    assert_true(cancel.last > 0.0);  // canceled mid-traversal,
+    assert_true(cancel.last < 1.0);  // not at start or completion
+    assert_true(relinks >= 1);       // a repair write preceded the cancel
+
+    // the partially-repaired file repairs to completion on rerun
+    assert_int_equal(0, jls_repair(PATH, NULL, NULL, NULL, NULL));
+    struct jls_rd_s * rd = NULL;
+    assert_int_equal(0, jls_rd_open(&rd, PATH));
+    int64_t samples = 0;
+    assert_int_equal(0, jls_rd_fsr_length(rd, 5, &samples));
+    assert_int_equal(sample_count, samples);
+    float * data = malloc(sizeof(float) * (size_t) sample_count);
+    assert_non_null(data);
+    assert_int_equal(0, jls_rd_fsr_f32(rd, 5, 0, data, samples));
+    for (int64_t i = 0; i < 100; ++i) {  // exact well away from the dead chunk
+        assert_float_equal(signal_f32_[i], data[i], 1e-9);
+    }
+    free(data);
+    jls_rd_close(rd);
+    remove(PATH);
+}
+
 static int32_t msg_cancel_fn(void * user_data, const char * msg) {
     (void) msg;
     int32_t * count = (int32_t *) user_data;
@@ -335,6 +399,7 @@ int main(void) {
             cmocka_unit_test(test_repair_dead_interior_data),
             cmocka_unit_test(test_repair_progress_and_cancel),
             cmocka_unit_test(test_repair_msg_cancel),
+            cmocka_unit_test(test_repair_cancel_mid_traversal_reruns),
             cmocka_unit_test(test_repair_missing_file),
             cmocka_unit_test(test_repair_not_jls),
 #if !defined(_WIN32)
