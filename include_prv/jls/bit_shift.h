@@ -50,6 +50,21 @@ extern "C" {
  */
 int32_t jls_bit_shift_array_right(uint8_t bits, void * data, size_t size);
 
+/**
+ * @brief Copy a bit range between packed (LSB first) byte arrays.
+ *
+ * @param dst The destination array.
+ * @param dst_offset The destination starting bit offset.
+ * @param src The source array.
+ * @param src_offset The source starting bit offset.
+ * @param bits The number of bits to copy.
+ *
+ * Destination bits below dst_offset in its first byte are preserved,
+ * and bits above the copied range in its last byte are cleared.  Only
+ * the source bytes that hold copied bits are read.
+ */
+void jls_bit_copy(uint8_t * dst, uint64_t dst_offset, const uint8_t * src, uint64_t src_offset, uint64_t bits);
+
 
 /** @} */
 
