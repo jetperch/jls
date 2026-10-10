@@ -203,3 +203,34 @@ data is itself open (copy.c "future" note).  The fuzzer bounds the copy
 with the backend write budget and reports a `copy_budget` note (16 in
 21000 cases).  Repro:
 `jls read_fuzzer --corrupt resign_payload --random 7568118458053062089 --iterations 1`.
+
+
+## Regression check (2026-10-10)
+
+An independent review of the full diff (dcdf003..fix/design_review) by a
+different model, plus a hardware differential test, after the fixes.
+
+Hardware: JS110, JS220, and JS320 recordings written by old and new pyjls
+and read by both (see `~/repos/Jetperch/example_jls/README.md`).  Writers
+produce byte-identical files for identical input, recovery of unclosed
+files is byte-identical, and all read differences are intended.  The old
+reader crashes on u1 reads when the u1 sample_id_offset is not a multiple
+of 8 (C1), independent of the writer.
+
+Regressions found by the review and fixed:
+
+- G1 (M v): the new 2^32 sample skip cap made `jls_copy` drop the rest of
+  a u1/u4/u8 signal after a constant run over 2^32 samples (omitted
+  chunks replay as skips), and the threaded writer latched the cap's
+  TOO_BIG, failing all later writes.  Cap removed; the threaded writer
+  latches only `jls_wr_error()`, matching the plain writer.
+- G2 (m v): the u1/u4 read rewrite duplicated `jls_bit_copy` without its
+  aligned fast path (about 4x slower).  Deduplicated, plus an unaligned
+  fast path: now at or above the old read speed.
+- G3 (m): read validation capped samples_per_data at 2^22, rejecting
+  valid older files with large sub-byte or u8 chunks.  Read now bounds
+  only the 16 MiB chunk size.
+
+Follow-ups outside jls: pyjoulescope_ui `SignalRecord.on_action_stop` and
+pyjoulescope_driver `Record.close()` should handle `Writer.close()`
+raising a latched write error.
