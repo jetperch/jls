@@ -48,6 +48,14 @@ struct jls_twr_s;
 
 int32_t jls_twr_run(struct jls_twr_s * self);
 
+/**
+ * @brief Validate an annotation type.
+ *
+ * @param annotation_type The jls_annotation_type_e.
+ * @return 0 or JLS_ERROR_PARAMETER_INVALID.
+ */
+int32_t jls_wr_annotation_type_validate(uint32_t annotation_type);
+
 /** @} */
 
 #ifdef __cplusplus

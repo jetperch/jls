@@ -152,6 +152,8 @@ static void test_validation(void **state) {
                                                                      JLS_STORAGE_TYPE_STRING, (const uint8_t *) str, sizeof(str)));
     assert_int_equal(JLS_ERROR_NOT_FOUND, jls_twr_annotation(wr, 7, 0, 0.0f, JLS_ANNOTATION_TYPE_TEXT, 0,
                                                              JLS_STORAGE_TYPE_STRING, (const uint8_t *) str, sizeof(str)));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_twr_annotation(wr, 5, 0, 0.0f, (enum jls_annotation_type_e) 99, 0,
+                                                                     JLS_STORAGE_TYPE_STRING, (const uint8_t *) str, sizeof(str)));
     // STRING payloads must be NUL-terminated within data_size
     assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_twr_annotation(wr, 5, 0, 0.0f, JLS_ANNOTATION_TYPE_TEXT, 0,
                                                                      JLS_STORAGE_TYPE_STRING, (const uint8_t *) str, 3));

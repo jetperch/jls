@@ -316,30 +316,37 @@ class TestBinding(unittest.TestCase):
             w.signal_def(4, source_id=1, signal_type=SignalType.VSR, name='vsr', units='A')
 
     def test_writer_signal_id_invalid(self):
+        # signal_id values that fit uint16 are validated by the JLS library
         x = np.zeros(10, dtype=np.float32)
         with Writer(self._path) as w:
             w.source_def(source_id=1, name='n')
-            for signal_id in [-1, 256, 65536]:
-                with self.assertRaisesRegex(ValueError, 'out of range'):
+            for signal_id in [-1, 65536]:
+                with self.assertRaises(OverflowError):
                     w.signal_def(signal_id, source_id=1)
+            with self.assertRaisesRegex(ValueError, 'PARAMETER_INVALID'):
+                w.signal_def(256, source_id=1)
             with self.assertRaisesRegex(ValueError, 'invalid data_type'):
                 w.signal_def(3, source_id=1, data_type='f16')
             w.signal_def(3, source_id=1, sample_rate=1000)
-            for signal_id in [7, 300, 70000]:
-                with self.assertRaisesRegex(ValueError, 'is not defined'):
+            with self.assertRaisesRegex(ValueError, 'ALREADY_EXISTS'):
+                w.signal_def(3, source_id=1, sample_rate=1000)
+            for signal_id, error in [(7, 'NOT_FOUND'), (300, 'PARAMETER_INVALID')]:
+                with self.assertRaisesRegex(ValueError, error):
                     w.fsr(signal_id, 0, x)
-                with self.assertRaisesRegex(ValueError, 'is not defined'):
+                with self.assertRaisesRegex(ValueError, error):
                     w.fsr_omit_data(signal_id, True)
-                with self.assertRaisesRegex(ValueError, 'is not defined'):
+                with self.assertRaisesRegex(ValueError, error):
                     w.annotation(signal_id, 0, None, 'text', 0, 'x')
-                with self.assertRaisesRegex(ValueError, 'is not defined'):
+                with self.assertRaisesRegex(ValueError, error):
                     w.utc(signal_id, 0, 0)
+            with self.assertRaises(OverflowError):
+                w.fsr(70000, 0, x)
             # signal 0 is the predefined VSR signal
-            with self.assertRaisesRegex(ValueError, 'not an FSR signal'):
+            with self.assertRaisesRegex(ValueError, 'NOT_SUPPORTED'):
                 w.fsr(0, 0, x)
-            with self.assertRaisesRegex(ValueError, 'not an FSR signal'):
+            with self.assertRaisesRegex(ValueError, 'NOT_SUPPORTED'):
                 w.fsr_omit_data(0, True)
-            with self.assertRaisesRegex(ValueError, 'not an FSR signal'):
+            with self.assertRaisesRegex(ValueError, 'NOT_SUPPORTED'):
                 w.utc(0, 0, 0)
             w.annotation(0, 0, None, 'text', 0, 'vsr ok')
             w.fsr(3, 0, x)
@@ -347,9 +354,10 @@ class TestBinding(unittest.TestCase):
     def test_writer_annotation_type_invalid(self):
         with Writer(self._path) as w:
             self._write_fsr_100(w)
-            for annotation_type in [99, 'bogus']:
-                with self.assertRaisesRegex(ValueError, 'invalid annotation_type'):
-                    w.annotation(3, 0, None, annotation_type, 0, 'x')
+            with self.assertRaisesRegex(ValueError, 'PARAMETER_INVALID'):
+                w.annotation(3, 0, None, 99, 0, 'x')
+            with self.assertRaisesRegex(ValueError, 'invalid annotation_type'):
+                w.annotation(3, 0, None, 'bogus', 0, 'x')
 
     def test_writer_empty_data(self):
         with Writer(self._path) as w:
@@ -371,21 +379,23 @@ class TestBinding(unittest.TestCase):
         with Reader(self._path) as r:
             fns = [
                 lambda s: r.fsr(s, 0, 10),
+                lambda s: r.fsr(s, 0, 0),
                 lambda s: r.fsr_statistics(s, 0, 10, 1),
+                lambda s: r.fsr_statistics(s, 0, 10, 0),
                 lambda s: r.utc(s, 0, self._on_utc),
                 lambda s: r.time_map_length(s),
                 lambda s: r.time_map_get(s),
                 lambda s: r.sample_id_to_timestamp(s, 0),
                 lambda s: r.timestamp_to_sample_id(s, 0),
             ]
-            for signal_id in [7, 300, 70000]:
+            for signal_id, error in [(7, 'NOT_FOUND'), (300, 'PARAMETER_INVALID')]:
                 for fn in fns:
-                    with self.assertRaisesRegex(ValueError, 'is not defined'):
+                    with self.assertRaisesRegex(ValueError, error):
                         fn(signal_id)
-                with self.assertRaisesRegex(ValueError, 'is not defined'):
+                with self.assertRaisesRegex(ValueError, error):
                     r.annotations(signal_id, 0, self._on_annotations)
             for fn in fns:
-                with self.assertRaisesRegex(ValueError, 'not an FSR signal'):
+                with self.assertRaisesRegex(ValueError, 'NOT_SUPPORTED'):
                     fn(4)
             r.annotations(4, 0, self._on_annotations)
         self.assertEqual([], self.annotations)

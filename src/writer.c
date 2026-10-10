@@ -15,6 +15,7 @@
  */
 
 #include "jls/writer.h"
+#include "jls/wr_prv.h"
 #include "jls/raw.h"
 #include "jls/format.h"
 #include "jls/buffer.h"
@@ -359,6 +360,18 @@ int32_t jls_wr_fsr_omit_data(struct jls_wr_s * self, uint16_t signal_id, uint32_
     return 0;
 }
 
+int32_t jls_wr_annotation_type_validate(uint32_t annotation_type) {
+    switch (annotation_type) {
+        case JLS_ANNOTATION_TYPE_USER:  // intentional fall-through
+        case JLS_ANNOTATION_TYPE_TEXT:
+        case JLS_ANNOTATION_TYPE_VERTICAL_MARKER:
+        case JLS_ANNOTATION_TYPE_HORIZONTAL_MARKER:
+            return 0;
+        default:
+            return JLS_ERROR_PARAMETER_INVALID;
+    }
+}
+
 int32_t jls_wr_annotation(struct jls_wr_s * self, uint16_t signal_id, int64_t timestamp,
                           float y,
                           enum jls_annotation_type_e annotation_type,
@@ -370,9 +383,7 @@ int32_t jls_wr_annotation(struct jls_wr_s * self, uint16_t signal_id, int64_t ti
     struct jls_buf_s * buf = self->core.buf;
     struct jls_core_signal_s * signal_info = &core->signal_info[signal_id];
     struct jls_core_track_s * track = &signal_info->tracks[JLS_TRACK_TYPE_ANNOTATION];
-    if ((annotation_type & 0xff) != annotation_type) {
-        return JLS_ERROR_PARAMETER_INVALID;
-    }
+    ROE(jls_wr_annotation_type_validate(annotation_type));
     if ((storage_type & 0xff) != storage_type) {
         return JLS_ERROR_PARAMETER_INVALID;
     }

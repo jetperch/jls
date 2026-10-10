@@ -36,11 +36,12 @@ This file contains the list of changes made to the JLS project.
     exceeds their chunk.
   * The threaded writer now rejects STRING and JSON payloads that are not
     NUL-terminated.
-* Writer and Reader methods now raise ValueError for an undefined or
-  out-of-range signal_id, a non-FSR signal where FSR is required, an
-  invalid annotation_type or data_type, or a negative length.  The
-  threaded writer now reports these synchronously, rather than only
-  logging them from its thread.
+* Errors that the JLS library returns for invalid arguments
+  (PARAMETER_INVALID, NOT_FOUND, NOT_SUPPORTED, TOO_BIG, ALREADY_EXISTS)
+  now raise ValueError instead of RuntimeError.  The library validates
+  signal_id and annotation_type, and the threaded writer now reports
+  these errors synchronously, rather than only logging them from its
+  thread.  Reader.utc() now rejects VSR signals.
 * Empty data now works: Writer.annotation() with data None or b'',
   Writer.fsr() with an empty array, and Reader.fsr() or
   Reader.fsr_statistics() with length 0.

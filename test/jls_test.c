@@ -1140,6 +1140,8 @@ static void test_signal_id_validation(void **state) {
     assert_int_equal(JLS_ERROR_NOT_FOUND, jls_wr_annotation(wr, 7, 0, NAN, JLS_ANNOTATION_TYPE_TEXT, 0,
                                                             JLS_STORAGE_TYPE_STRING, (const uint8_t *) STRING_1, 0));
     assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_wr_utc(wr, 300, 0, 0));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_wr_annotation(wr, 5, 0, NAN, (enum jls_annotation_type_e) 99, 0,
+                                                                    JLS_STORAGE_TYPE_STRING, (const uint8_t *) STRING_1, 0));
     assert_int_equal(0, jls_wr_close(wr));
 
     struct jls_rd_s * rd = NULL;
@@ -1151,6 +1153,7 @@ static void test_signal_id_validation(void **state) {
     assert_int_equal(JLS_ERROR_NOT_FOUND, jls_rd_fsr_statistics(rd, 7, 0, 1, stats, 1));
     assert_int_equal(JLS_ERROR_NOT_FOUND, jls_rd_annotations(rd, 7, 0, on_annotation_unexpected, NULL));
     assert_int_equal(JLS_ERROR_NOT_FOUND, jls_rd_utc(rd, 7, 0, on_utc_unexpected, NULL));
+    assert_int_equal(JLS_ERROR_NOT_SUPPORTED, jls_rd_utc(rd, 0, 0, on_utc_unexpected, NULL));
     assert_int_equal(JLS_ERROR_NOT_FOUND, jls_rd_sample_id_to_timestamp(rd, 7, 0, &i64));
     assert_int_equal(JLS_ERROR_NOT_FOUND, jls_rd_timestamp_to_sample_id(rd, 7, 0, &i64));
     assert_int_equal(JLS_ERROR_NOT_FOUND, jls_rd_tmap_get(rd, 7, 0, &entry));

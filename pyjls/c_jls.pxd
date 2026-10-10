@@ -16,6 +16,12 @@ from libc.stdint cimport uint8_t, uint16_t, uint32_t, uint64_t, int32_t, int64_t
 
 
 cdef extern from "jls/ec.h":
+    enum jls_error_code_e:
+        JLS_ERROR_PARAMETER_INVALID
+        JLS_ERROR_NOT_SUPPORTED
+        JLS_ERROR_TOO_BIG
+        JLS_ERROR_NOT_FOUND
+        JLS_ERROR_ALREADY_EXISTS
     const char * jls_error_code_name(int ec)
     const char * jls_error_code_description(int ec)
 

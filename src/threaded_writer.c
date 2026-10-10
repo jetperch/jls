@@ -461,6 +461,7 @@ int32_t jls_twr_annotation(struct jls_twr_s * self, uint16_t signal_id, int64_t 
             .d = 0
     };
     ROE(signal_validate(self, signal_id, false));
+    ROE(jls_wr_annotation_type_validate(annotation_type));
     ROE(payload_validate(storage_type, data, data_size));
     return msg_send(self, &hdr, data, data_size);
 }
