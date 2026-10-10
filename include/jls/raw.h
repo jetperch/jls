@@ -56,7 +56,12 @@ struct jls_raw_s;
  * @param[out] instance The new instance on success or NULL.
  * @param path The path to open.
  * @param mode The file open mode, which is one of "w", "r", "a".
- * @return 0 or error code.
+ * @return 0 or error code.  JLS_ERROR_UNSUPPORTED_FILE when the file
+ *      header is invalid.  JLS_ERROR_TRUNCATED, with a valid instance,
+ *      when the file was not closed gracefully.
+ *
+ * In append mode ("a"), read or rewrite the final chunk before appending
+ * so that the first appended chunk's payload_prev_length links to it.
  */
 int32_t jls_raw_open(struct jls_raw_s ** instance, const char * path, const char * mode);
 
