@@ -46,8 +46,12 @@ extern "C" {
  * @param src_datatype The source buffer datatype, see JLS_DATATYPE_*.
  * @param[out] dst The output f64 buffer.
  * @param samples The number of samples to convert.  Both src and dst must
- *      be able to hold at least this many samples.
- * @return 0 or error code.
+ *      be able to hold at least this many samples.  Packed types (u1, u4,
+ *      i4) read ceil(samples * bits / 8) source bytes.
+ * @return 0 or error code.  JLS_ERROR_PARAMETER_INVALID for an
+ *      unsupported datatype, leaving dst unmodified.
+ *
+ * Fixed-point integer types (q != 0) scale each value by 2^-q.
  */
 int32_t jls_dt_buffer_to_f64(const void * src, uint32_t src_datatype, double * dst, size_t samples);
 
