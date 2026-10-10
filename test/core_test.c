@@ -118,6 +118,14 @@ static struct jls_chunk_header_s * chunk_nth(struct file_s * f, uint8_t tag, uin
     return NULL;
 }
 
+static int chunk_count(struct file_s * f, uint8_t tag, uint16_t meta) {
+    int count = 0;
+    while (chunk_nth(f, tag, meta, count)) {
+        ++count;
+    }
+    return count;
+}
+
 // Recompute the header and payload CRCs after a patch.
 static void chunk_resign(struct jls_chunk_header_s * h) {
     if (h->payload_length) {
@@ -166,6 +174,21 @@ static struct jls_signal_def_s signal_def_typed(uint32_t data_type, uint32_t spd
     def.summary_decimate_factor = sumdf;
     return def;
 }
+
+// Write packed sub-byte or byte samples starting at sample_id.
+static void gen_packed(const char * path, const struct jls_signal_def_s * def, int64_t sample_id,
+                       const uint8_t * data, uint32_t n, int omit) {
+    struct jls_wr_s * wr = NULL;
+    assert_int_equal(0, jls_wr_open(&wr, path));
+    assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_1));
+    assert_int_equal(0, jls_wr_signal_def(wr, def));
+    if (omit) {
+        assert_int_equal(0, jls_wr_fsr_omit_data(wr, def->signal_id, 1));
+    }
+    assert_int_equal(0, jls_wr_fsr(wr, def->signal_id, sample_id, data, n));
+    assert_int_equal(0, jls_wr_close(wr));
+}
+
 
 // --- D1, D2, D4: signal definition align & validate ---
 
@@ -365,6 +388,164 @@ static void test_signal_def_duplicate_read(void ** state) {
 }
 
 
+// --- C2: data chunk timestamp must cover the read ---
+
+static void test_fsr_data_timestamp_corrupt(void ** state) {
+    (void) state;
+    const uint32_t types[] = {JLS_DATATYPE_U1, JLS_DATATYPE_F32};
+    const int64_t timestamps[] = {0, 600};  // chunk 2 starts before / after the read
+    for (size_t t = 0; t < ARRAY_SIZE(types); ++t) {
+        for (size_t k = 0; k < ARRAY_SIZE(timestamps); ++k) {
+            int bits = jls_datatype_parse_size(types[t]);
+            struct jls_signal_def_s def = signal_def_typed(types[t], 256, 256, 10, 10);
+            const uint32_t n = 256 * 4;
+            uint8_t * x = calloc(1, (n * bits) / 8 + 8);
+            assert_non_null(x);
+            gen_packed(PATH, &def, 0, x, n, 0);
+            free(x);
+            struct file_s f;
+            file_load(PATH, &f, 0);
+            struct jls_chunk_header_s * h = chunk_nth(&f, JLS_TAG_TRACK_FSR_DATA, 1, 2);
+            assert_non_null(h);
+            struct jls_payload_header_s * p = chunk_payload(h);
+            assert_int_equal(512, p->timestamp);
+            p->timestamp = timestamps[k];
+            chunk_resign(h);
+            file_save(PATH, &f);
+
+            struct jls_rd_s * rd = NULL;
+            assert_int_equal(0, jls_rd_open(&rd, PATH));
+            uint64_t y[8];
+            assert_int_equal(0, jls_rd_fsr(rd, 1, 300, y, 16));
+            assert_int_equal(JLS_ERROR_MESSAGE_INTEGRITY, jls_rd_fsr(rd, 1, 520, y, 16));
+            if (0 == timestamps[k]) {
+                assert_int_equal(JLS_ERROR_MESSAGE_INTEGRITY, jls_rd_fsr(rd, 1, 601, y, 16));
+            }
+            assert_int_equal(JLS_ERROR_MESSAGE_INTEGRITY, jls_rd_fsr(rd, 1, 500, y, 16));
+            jls_rd_close(rd);
+        }
+    }
+    remove(PATH);
+}
+
+
+// --- C3, C4: omitted chunk reconstruction ---
+
+static void gen_omit_u8(uint8_t value) {
+    struct jls_signal_def_s def = signal_def_typed(JLS_DATATYPE_U8, 64, 32, 20, 10);
+    uint8_t x[64 * 8 + 10];
+    memset(x, value, sizeof(x));
+    x[sizeof(x) - 1] = value + 1;  // keep the final chunk: length from data
+    gen_packed(PATH, &def, 0, x, sizeof(x), 1);
+}
+
+static void test_fsr_omit_reconstruct_corrupt(void ** state) {
+    (void) state;
+    for (int mode = 0; mode < 4; ++mode) {
+        gen_omit_u8(7);
+        struct file_s f;
+        file_load(PATH, &f, 0);
+        struct jls_chunk_header_s * h = chunk_nth(&f, JLS_TAG_TRACK_FSR_SUMMARY, META_L1, 0);
+        assert_non_null(h);
+        struct jls_payload_header_s * p = chunk_payload(h);
+        switch (mode) {
+            case 0: p->timestamp = 1LL << 40; break;         // s_index hugely negative
+            case 1: p->timestamp = -65540LL * 1024; break;   // s_index past the summary
+            case 2: p->entry_count = 0xFFFFFFF0U; break;     // past the payload
+            case 3: p->entry_count = 2; break;               // omitted chunk 3 has no summary
+            default: break;
+        }
+        chunk_resign(h);
+        file_save(PATH, &f);
+
+        struct jls_rd_s * rd = NULL;
+        assert_int_equal(0, jls_rd_open(&rd, PATH));
+        uint8_t y[16];
+        int32_t rc = jls_rd_fsr(rd, 1, 64 * 3 + 5, y, sizeof(y));
+        if (rc != JLS_ERROR_MESSAGE_INTEGRITY) { fail_msg("mode %d rc %d", mode, rc); }
+        jls_rd_close(rd);
+    }
+    remove(PATH);
+}
+
+static void test_fsr_omit_reconstruct_types(void ** state) {
+    (void) state;
+    struct {
+        uint32_t data_type;
+        uint8_t fill;    // packed constant sample byte
+    } cases[] = {
+        {JLS_DATATYPE_U1, 0xff},
+        {JLS_DATATYPE_U4, 0xaa},
+        {JLS_DATATYPE_I4, 0xdd},    // -3
+        {JLS_DATATYPE_U8, 200},
+        {JLS_DATATYPE_I8, 0xfd},    // -3
+        {JLS_DATATYPE_I8, 0x80},    // -128
+    };
+    for (size_t i = 0; i < ARRAY_SIZE(cases); ++i) {
+        int bits = jls_datatype_parse_size(cases[i].data_type);
+        struct jls_signal_def_s def = signal_def_typed(cases[i].data_type, 256, 256, 20, 10);
+        const uint32_t n = 256 * 8;
+        size_t sz = (n * bits) / 8;
+        uint8_t * x = malloc(sz + 8);
+        uint8_t * y = malloc(sz);
+        assert_non_null(x);
+        assert_non_null(y);
+        memset(x, cases[i].fill, sz + 8);
+        gen_packed(PATH, &def, 0, x, n, 1);
+
+        struct file_s f;
+        file_load(PATH, &f, 0);
+        assert_true(chunk_count(&f, JLS_TAG_TRACK_FSR_DATA, 1) < 4);  // chunks were omitted
+        free(f.data);
+
+        struct jls_rd_s * rd = NULL;
+        assert_int_equal(0, jls_rd_open(&rd, PATH));
+        memset(y, 0x11, sz);
+        assert_int_equal(0, jls_rd_fsr(rd, 1, 0, y, n));
+        assert_memory_equal(x, y, sz);
+        assert_int_equal(0, jls_rd_fsr(rd, 1, 256 * 5 + 8, y, 16));
+        assert_memory_equal(x, y, (16 * bits) / 8);
+        jls_rd_close(rd);
+        free(x);
+        free(y);
+    }
+    remove(PATH);
+}
+
+
+// --- C5: level-1 index & summary validation ---
+
+static void test_fsr_level1_corrupt(void ** state) {
+    (void) state;
+    for (int mode = 0; mode < 4; ++mode) {
+        gen_f32(PATH, &SIGNAL_1, 50000, 1);
+        struct file_s f;
+        file_load(PATH, &f, 0);
+        uint8_t tag = (mode < 2) ? JLS_TAG_TRACK_FSR_INDEX : JLS_TAG_TRACK_FSR_SUMMARY;
+        struct jls_chunk_header_s * h = chunk_nth(&f, tag, META_L1, 0);
+        assert_non_null(h);
+        struct jls_payload_header_s * p = chunk_payload(h);
+        switch (mode) {
+            case 0: p->entry_size_bits = 32; break;
+            case 1: p->entry_count = 1000; break;           // > entries_per_summary / entries_per_data
+            case 2: p->entry_size_bits = 64; break;
+            case 3: p->entry_count = 100000; break;
+            default: break;
+        }
+        chunk_resign(h);
+        file_save(PATH, &f);
+
+        struct jls_rd_s * rd = NULL;
+        assert_int_equal(0, jls_rd_open(&rd, PATH));
+        float y[16];
+        assert_int_equal(JLS_ERROR_MESSAGE_INTEGRITY, jls_rd_fsr_f32(rd, 1, 100, y, ARRAY_SIZE(y)));
+        assert_int_equal(0, jls_rd_fsr_f32(rd, 1, 30000, y, ARRAY_SIZE(y)));  // second index unaffected
+        jls_rd_close(rd);
+    }
+    remove(PATH);
+}
+
+
 int main(void) {
     const struct CMUnitTest tests[] = {
             cmocka_unit_test(test_signal_def_align_wrap_rejected),
@@ -372,6 +553,10 @@ int main(void) {
             cmocka_unit_test(test_signal_def_validate_fsr),
             cmocka_unit_test(test_signal_def_hostile_read),
             cmocka_unit_test(test_signal_def_duplicate_read),
+            cmocka_unit_test(test_fsr_data_timestamp_corrupt),
+            cmocka_unit_test(test_fsr_omit_reconstruct_corrupt),
+            cmocka_unit_test(test_fsr_omit_reconstruct_types),
+            cmocka_unit_test(test_fsr_level1_corrupt),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
