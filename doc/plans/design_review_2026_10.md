@@ -130,3 +130,48 @@ API call, flush, and close.  Appends stay bounds-checked regardless.
 Add a CRC-resigning corruption mode to `read_fuzzer` (mutate header and
 payload fields, recompute both CRCs) so the hostile-file space reached
 by these reviews is exercised continuously.
+
+Status: DONE.  `jls read_fuzzer --corrupt <mode>` gains three modes in
+`example/jls/read_fuzzer.c`:
+
+| Mode           | Mutation per case                                 |
+|----------------|---------------------------------------------------|
+| resign_header  | one chunk header field, header CRC re-signed      |
+| resign_payload | one chunk payload field, payload CRC re-signed    |
+| resign         | 1-3 mixed header/payload mutations                |
+
+Chunks are picked by weighted tag class (signal defs, FSR
+data/index/summary, annotation/UTC/user data, track heads), then
+uniformly within the class.  Header mutations: payload_length
+(header only, so the layout lies), payload_prev_length, item_next and
+item_prev (0, self, backward, misaligned, past EOF), chunk_meta (signal
+id, level), tag.  Payload mutations: payload header timestamp,
+entry_count, entry_size_bits (INT64/UINT32 extremes, +/-small);
+signal def factors, data_type and signal_type; annotation storage_type
+and data_size; head, FSR index and annotation/UTC index offsets;
+unterminated strings; bit flips; and a consistent payload shrink.
+
+A hostile file need not recover data.  A case passes when the reader
+(open, sources, signals, FSR length/reads/f32 reads with exactly-sized
+heap buffers, statistics, time conversions, tmap, annotations, UTC,
+user data), `jls_copy` and `jls_repair` (each result re-exercised)
+return only JLS error codes, without a crash, sanitizer abort, or hang.
+
+Campaign (ASan+UBSan, `ASAN_OPTIONS=detect_leaks=0:halt_on_error=1:exitcode=99`):
+
+- Pre-fix library (444d34c): 600 cases, 384 failures (64%): UBSan
+  overflows in tmap.c, reader.c, core.c; ASan stack/heap overflows in
+  crc32c, wr_fsr.c; allocation-size-too-big in buffer.c; hangs.
+- This branch: 21000 cases (7000 per mode, 12 parallel seeds), 0
+  failures.  An earlier 16833-case run was also clean.
+
+Deferred, X1 (M): `jls_copy` amplifies hostile FSR sample_id gaps.  A
+data chunk timestamp moved forward makes the destination writer fill
+up to `JLS_WR_FSR_SKIP_MAX` (2^32) samples, 16 GiB for f32, from a
+few-MB source.  Legitimate files only have data-chunk gaps for omitted
+constant data (<= 8-bit types), which the writer re-omits, so a fix
+could reject gaps for wider types, but the copy policy for omitted
+data is itself open (copy.c "future" note).  The fuzzer bounds the copy
+with the backend write budget and reports a `copy_budget` note (16 in
+21000 cases).  Repro:
+`jls read_fuzzer --corrupt resign_payload --random 7568118458053062089 --iterations 1`.
