@@ -203,9 +203,13 @@ static int32_t chunk_record(struct repair_s * self) {
         case JLS_TRACK_CHUNK_DEF:
             return chain_update(self, &self->signal_chain);
         case JLS_TRACK_CHUNK_HEAD:
+            if (cur->hdr.payload_length != HEAD_PAYLOAD_SIZE) {
+                // readers reject this head: drop it from the chain, append a new one
+                dead_span_add(self, cur->offset, jls_raw_chunk_tell(self->core->raw));
+                return 0;
+            }
             self->heads[sig][track].offset = cur->offset;
-            self->heads[sig][track].payload_ok =
-                    (self->core->buf->length == HEAD_PAYLOAD_SIZE);
+            self->heads[sig][track].payload_ok = true;
             return chain_update(self, &self->signal_chain);
         case JLS_TRACK_CHUNK_DATA:
             if (0 == level) {
@@ -242,12 +246,51 @@ static int32_t repair_traverse(struct repair_s * self) {
     ROE(jls_raw_chunk_seek(raw, offset));
 
     while (offset < self->fend) {
+        bool resync = false;
         int32_t rc = jls_raw_rd_header(raw, &hdr);
         if (JLS_ERROR_EMPTY == rc) {
             dead_span_add(self, offset, self->fend);
             break;  // partial chunk at the end
         } else if (rc) {
-            // damaged header: resync to the next valid chunk
+            resync = true;  // damaged header
+        } else {
+            rc = jls_core_rd_chunk(core);
+            if (JLS_ERROR_NOT_ENOUGH_MEMORY == rc) {
+                return rc;
+            } else if (rc) {
+                // damaged payload, valid header.  A torn track head is kept
+                // in its chain; heads_rebuild() rewrites the payload in place.
+                struct jls_core_chunk_s * cur = &core->chunk_cur;
+                uint16_t sig = cur->hdr.chunk_meta & 0x0fff;
+                bool is_head = (cur->hdr.tag & JLS_TRACK_TAG_FLAG)
+                        && (JLS_TRACK_CHUNK_HEAD == jls_core_tag_parse_track_chunk(cur->hdr.tag))
+                        && (sig < JLS_SIGNAL_COUNT);
+                if (is_head && (cur->hdr.payload_length != HEAD_PAYLOAD_SIZE)) {
+                    // head length is fixed: the length field itself is corrupt
+                    resync = true;
+                } else {
+                    if (is_head) {
+                        uint8_t track = jls_core_tag_parse_track_type(cur->hdr.tag);
+                        self->heads[sig][track].offset = cur->offset;
+                        self->heads[sig][track].payload_ok = false;
+                        ROE(chain_update(self, &self->signal_chain));
+                    }
+                    // the valid header bounds the payload within the file
+                    if (jls_raw_chunk_seek(raw, offset) || jls_raw_chunk_next(raw)) {
+                        dead_span_add(self, offset, self->fend);
+                        break;
+                    }
+                    int64_t next = jls_raw_chunk_tell(raw);
+                    if (!is_head) {
+                        dead_span_add(self, offset, next);
+                    }
+                    offset = next;
+                    continue;
+                }
+            }
+        }
+        if (resync) {
+            // resync to the next valid chunk
             if (jls_raw_chunk_seek(raw, offset + 1) || jls_raw_chunk_scan(raw)) {
                 dead_span_add(self, offset, self->fend);
                 break;  // no further valid chunks
@@ -255,33 +298,6 @@ static int32_t repair_traverse(struct repair_s * self) {
             int64_t next = jls_raw_chunk_tell(raw);
             dead_span_add(self, offset, next);
             offset = next;
-            continue;
-        }
-        rc = jls_core_rd_chunk(core);
-        if (JLS_ERROR_NOT_ENOUGH_MEMORY == rc) {
-            return rc;
-        } else if (rc) {
-            // damaged payload, valid header.  A torn track head is kept in
-            // its chain; heads_rebuild() rewrites the payload in place.
-            struct jls_core_chunk_s * cur = &core->chunk_cur;
-            uint16_t sig = cur->hdr.chunk_meta & 0x0fff;
-            if ((cur->hdr.tag & JLS_TRACK_TAG_FLAG)
-                    && (JLS_TRACK_CHUNK_HEAD == jls_core_tag_parse_track_chunk(cur->hdr.tag))
-                    && (sig < JLS_SIGNAL_COUNT)) {
-                uint8_t track = jls_core_tag_parse_track_type(cur->hdr.tag);
-                self->heads[sig][track].offset = cur->offset;
-                self->heads[sig][track].payload_ok = false;
-                ROE(chain_update(self, &self->signal_chain));
-            } else if (jls_raw_chunk_next(raw)) {
-                dead_span_add(self, offset, self->fend);
-                break;
-            } else {
-                dead_span_add(self, offset, jls_raw_chunk_tell(raw));
-            }
-            if (jls_raw_chunk_seek(raw, offset) || jls_raw_chunk_next(raw)) {
-                break;
-            }
-            offset = jls_raw_chunk_tell(raw);
             continue;
         }
         ROE(chunk_record(self));
@@ -428,8 +444,9 @@ static int32_t fsr_dead_data_to_omitted(struct repair_s * self) {
             ROE(jls_raw_chunk_seek(core->raw, offset));
             ROE(jls_core_rd_chunk_validate(core, index_tag, meta));
             struct jls_fsr_index_s * r = (struct jls_fsr_index_s *) core->buf->start;
-            if ((sizeof(r->header) + r->header.entry_count * sizeof(r->offsets[0]))
-                    > core->buf->length) {
+            // 64-bit: entry_count * 8 must not wrap a 32-bit size_t
+            if (((uint64_t) sizeof(r->header) + (uint64_t) r->header.entry_count * sizeof(r->offsets[0]))
+                    > (uint64_t) core->buf->length) {
                 return JLS_ERROR_MESSAGE_INTEGRITY;
             }
             bool dirty = false;

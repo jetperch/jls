@@ -198,6 +198,58 @@ static void test_repair_torn_head(void ** state) {
     remove(PATH);
 }
 
+// Rewrite the chunk header at offset with a new payload_length (valid CRC).
+static void head_length_set(const char * path, int64_t offset, uint32_t payload_length) {
+    struct jls_raw_s * raw = NULL;
+    struct jls_chunk_header_s hdr;
+    assert_int_equal(0, jls_raw_open(&raw, path, "a"));
+    assert_int_equal(0, jls_raw_chunk_seek(raw, offset));
+    assert_int_equal(0, jls_raw_rd_header(raw, &hdr));
+    hdr.payload_length = payload_length;
+    assert_int_equal(0, jls_raw_chunk_seek(raw, offset));
+    assert_int_equal(0, jls_raw_wr_header(raw, &hdr));
+    assert_int_equal(0, jls_raw_close(raw));
+}
+
+static void test_repair_head_length_torn(void ** state) {
+    (void) state;
+    struct jls_rd_s * rd = NULL;
+    gen(PATH, 1);
+    int64_t offset = find_chunk(PATH, JLS_TAG_TRACK_FSR_HEAD, 0, NULL);
+    assert_true(offset > 0);
+    // header valid, payload CRC fails, length disagrees with a head payload
+    head_length_set(PATH, offset, 4096);
+    assert_int_not_equal(0, jls_rd_open(&rd, PATH));
+    assert_int_equal(0, jls_repair(PATH, NULL, NULL, NULL, NULL));
+    assert_full_read(PATH);
+    remove(PATH);
+}
+
+static void test_repair_head_length_valid(void ** state) {
+    (void) state;
+    struct jls_rd_s * rd = NULL;
+    struct jls_raw_s * raw = NULL;
+    struct jls_chunk_header_s hdr;
+    uint8_t payload[16];
+    memset(payload, 0, sizeof(payload));
+    gen(PATH, 1);
+    int64_t offset = find_chunk(PATH, JLS_TAG_TRACK_FSR_HEAD, 0, NULL);
+    assert_true(offset > 0);
+    // a CRC-valid head with the wrong payload length
+    assert_int_equal(0, jls_raw_open(&raw, PATH, "a"));
+    assert_int_equal(0, jls_raw_chunk_seek(raw, offset));
+    assert_int_equal(0, jls_raw_rd_header(raw, &hdr));
+    hdr.payload_length = sizeof(payload);
+    assert_int_equal(0, jls_raw_chunk_seek(raw, offset));
+    assert_int_equal(0, jls_raw_wr(raw, &hdr, payload));
+    assert_int_equal(0, jls_raw_close(raw));
+    assert_int_not_equal(0, jls_rd_open(&rd, PATH));
+
+    assert_int_equal(0, jls_repair(PATH, NULL, NULL, NULL, NULL));
+    assert_full_read(PATH);
+    remove(PATH);
+}
+
 static void test_repair_dead_interior_data(void ** state) {
     (void) state;
     struct jls_rd_s * rd = NULL;
@@ -396,6 +448,8 @@ int main(void) {
     const struct CMUnitTest tests[] = {
             cmocka_unit_test(test_repair_healthy_is_noop),
             cmocka_unit_test(test_repair_torn_head),
+            cmocka_unit_test(test_repair_head_length_torn),
+            cmocka_unit_test(test_repair_head_length_valid),
             cmocka_unit_test(test_repair_dead_interior_data),
             cmocka_unit_test(test_repair_progress_and_cancel),
             cmocka_unit_test(test_repair_msg_cancel),
