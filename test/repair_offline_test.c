@@ -27,6 +27,7 @@
 #include <setjmp.h>
 #include <cmocka.h>
 #include "jls/backend.h"
+#include "jls/copy.h"
 #include "jls/core.h"
 #include "jls/ec.h"
 #include "jls/format.h"
@@ -444,6 +445,173 @@ static void test_repair_read_only(void ** state) {
 }
 #endif
 
+static const char * COPY_PATH = "repair_offline_test_copy_tmp.jls";
+
+struct copy_msg_s {
+    int32_t count;
+    char last[1024];
+};
+
+static int32_t copy_msg_fn(void * user_data, const char * msg) {
+    struct copy_msg_s * m = (struct copy_msg_s *) user_data;
+    ++m->count;
+    snprintf(m->last, sizeof(m->last), "%s", msg);
+    return 0;
+}
+
+// Overwrite a chunk payload in place and re-sign its CRC.
+static void payload_resign(const char * path, int64_t offset, void (*fn)(uint8_t * payload, uint32_t length)) {
+    struct jls_raw_s * raw = NULL;
+    struct jls_chunk_header_s hdr;
+    static uint8_t payload[1 << 16];
+    assert_int_equal(0, jls_raw_open(&raw, path, "a"));
+    assert_int_equal(0, jls_raw_chunk_seek(raw, offset));
+    assert_int_equal(0, jls_raw_rd(raw, &hdr, sizeof(payload), payload));
+    fn(payload, hdr.payload_length);
+    assert_int_equal(0, jls_raw_chunk_seek(raw, offset));
+    assert_int_equal(0, jls_raw_wr_payload(raw, hdr.payload_length, payload));
+    assert_int_equal(0, jls_raw_close(raw));
+}
+
+static void copy_assert_samples(const char * path, int64_t start, int64_t length) {
+    struct jls_rd_s * rd = NULL;
+    static float data[SAMPLE_COUNT];
+    assert_int_equal(0, jls_rd_open(&rd, path));
+    assert_int_equal(0, jls_rd_fsr_f32(rd, 5, start, data, length));
+    jls_rd_close(rd);
+    for (int64_t i = 0; i < length; ++i) {
+        assert_true(signal_f32_[start + i] == data[i]);  // exact: NaN gap fill fails
+    }
+}
+
+// Get the sample range of the nth FSR data chunk.
+static void fsr_chunk_range(const char * path, int n, int64_t * start, int64_t * length) {
+    struct jls_fsr_data_s header;
+    int64_t offset = find_chunk(path, JLS_TAG_TRACK_FSR_DATA, n, NULL);
+    assert_true(offset > 0);
+    FILE * f = fopen(path, "rb");
+    assert_non_null(f);
+    assert_int_equal(0, fseek(f, (long) (offset + sizeof(struct jls_chunk_header_s)), SEEK_SET));
+    assert_int_equal(1, fread(&header, sizeof(header), 1, f));
+    fclose(f);
+    *start = header.header.timestamp;
+    *length = header.header.entry_count;
+}
+
+static void test_copy_healthy(void ** state) {
+    (void) state;
+    struct copy_msg_s m = {0};
+    gen(PATH, 1);
+    assert_int_equal(0, jls_copy(PATH, COPY_PATH, copy_msg_fn, &m, NULL, NULL));
+    assert_int_equal(0, m.count);
+    assert_full_read(COPY_PATH);
+    remove(PATH);
+    remove(COPY_PATH);
+}
+
+static void fsr_entry_count_huge(uint8_t * payload, uint32_t length) {
+    (void) length;
+    ((struct jls_fsr_data_s *) payload)->header.entry_count = 0x01000000;
+}
+
+static void test_copy_fsr_entry_count(void ** state) {
+    (void) state;
+    struct copy_msg_s m = {0};
+    int64_t start = 0;
+    int64_t length = 0;
+    gen(PATH, 1);
+    fsr_chunk_range(PATH, 3, &start, &length);
+    int64_t offset = find_chunk(PATH, JLS_TAG_TRACK_FSR_DATA, 2, NULL);
+    assert_true(offset > 0);
+    payload_resign(PATH, offset, fsr_entry_count_huge);
+    assert_int_equal(0, jls_copy(PATH, COPY_PATH, copy_msg_fn, &m, NULL, NULL));
+    assert_int_equal(1, m.count);
+    assert_non_null(strstr(m.last, "entry_count"));
+    copy_assert_samples(COPY_PATH, 0, 2000);  // before the skipped chunk
+    copy_assert_samples(COPY_PATH, start, length);  // after the skipped chunk
+    remove(PATH);
+    remove(COPY_PATH);
+}
+
+static void test_copy_resync_keeps_next_chunk(void ** state) {
+    (void) state;
+    struct copy_msg_s m = {0};
+    int64_t start = 0;
+    int64_t length = 0;
+    gen(PATH, 1);
+    fsr_chunk_range(PATH, 6, &start, &length);
+    int64_t offset = find_chunk(PATH, JLS_TAG_TRACK_FSR_DATA, 5, NULL);
+    assert_true(offset > 0);
+    corrupt(PATH, offset, sizeof(struct jls_chunk_header_s));  // damaged header
+    assert_int_equal(0, jls_copy(PATH, COPY_PATH, copy_msg_fn, &m, NULL, NULL));
+    assert_true(m.count > 0);
+    copy_assert_samples(COPY_PATH, start, length);  // the chunk found by the scan
+    remove(PATH);
+    remove(COPY_PATH);
+}
+
+static void gen_annotations(const char * path) {
+    struct jls_wr_s * wr = NULL;
+    signals_generate();
+    assert_int_equal(0, jls_wr_open(&wr, path));
+    assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_3));
+    assert_int_equal(0, jls_wr_signal_def(wr, &SIGNAL_5));
+    assert_int_equal(0, jls_wr_fsr_f32(wr, 5, 0, signal_f32_, 2000));
+    assert_int_equal(0, jls_wr_annotation(wr, 5, 10, 0.0f, JLS_ANNOTATION_TYPE_TEXT, 0,
+                                          JLS_STORAGE_TYPE_STRING, (const uint8_t *) "hello", 0));
+    assert_int_equal(0, jls_wr_user_data(wr, 1, JLS_STORAGE_TYPE_STRING, (const uint8_t *) "world", 0));
+    assert_int_equal(0, jls_wr_close(wr));
+}
+
+static void annotation_data_size_huge(uint8_t * payload, uint32_t length) {
+    (void) length;
+    ((struct jls_annotation_s *) payload)->data_size = 0x7fffffff;
+}
+
+static void annotation_unterminated(uint8_t * payload, uint32_t length) {
+    struct jls_annotation_s * a = (struct jls_annotation_s *) payload;
+    (void) length;
+    memset(a->data, 'x', a->data_size);
+}
+
+static void user_data_unterminated(uint8_t * payload, uint32_t length) {
+    memset(payload, 'x', length);
+}
+
+static int32_t annotation_count_cbk(void * user_data, const struct jls_annotation_s * annotation) {
+    (void) annotation;
+    ++*((int32_t *) user_data);
+    return 0;
+}
+
+static void copy_corrupt_case(uint8_t tag, int n, void (*fn)(uint8_t * payload, uint32_t length),
+                              const char * expect) {
+    struct copy_msg_s m = {0};
+    struct jls_rd_s * rd = NULL;
+    int32_t count = 0;
+    gen_annotations(PATH);
+    int64_t offset = find_chunk(PATH, tag, n, NULL);
+    assert_true(offset > 0);
+    payload_resign(PATH, offset, fn);
+    assert_int_equal(0, jls_copy(PATH, COPY_PATH, copy_msg_fn, &m, NULL, NULL));
+    assert_int_equal(1, m.count);
+    assert_non_null(strstr(m.last, expect));
+    assert_int_equal(0, jls_rd_open(&rd, COPY_PATH));
+    assert_int_equal(0, jls_rd_annotations(rd, 5, 0, annotation_count_cbk, &count));
+    jls_rd_close(rd);
+    assert_int_equal((JLS_TAG_TRACK_ANNOTATION_DATA == tag) ? 0 : 1, count);
+    remove(PATH);
+    remove(COPY_PATH);
+}
+
+static void test_copy_annotation_invalid(void ** state) {
+    (void) state;
+    copy_corrupt_case(JLS_TAG_TRACK_ANNOTATION_DATA, 0, annotation_data_size_huge, "annotation data_size");
+    copy_corrupt_case(JLS_TAG_TRACK_ANNOTATION_DATA, 0, annotation_unterminated, "not terminated");
+    // user data chunk 0 is the writer's empty initial chunk
+    copy_corrupt_case(JLS_TAG_USER_DATA, 1, user_data_unterminated, "not terminated");
+}
+
 int main(void) {
     const struct CMUnitTest tests[] = {
             cmocka_unit_test(test_repair_healthy_is_noop),
@@ -456,6 +624,10 @@ int main(void) {
             cmocka_unit_test(test_repair_cancel_mid_traversal_reruns),
             cmocka_unit_test(test_repair_missing_file),
             cmocka_unit_test(test_repair_not_jls),
+            cmocka_unit_test(test_copy_healthy),
+            cmocka_unit_test(test_copy_fsr_entry_count),
+            cmocka_unit_test(test_copy_resync_keeps_next_chunk),
+            cmocka_unit_test(test_copy_annotation_invalid),
 #if !defined(_WIN32)
             cmocka_unit_test(test_repair_read_only),
 #endif
