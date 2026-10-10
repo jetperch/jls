@@ -299,23 +299,35 @@ cdef class Writer:
 
     @property
     def flags(self):
-        cdef c_jls.jls_twr_s * wr = self._wr
+        cdef c_jls.jls_twr_s * wr = self._wr_get()
         return c_jls.jls_twr_flags_get(wr)
 
     @flags.setter
     def flags(self, value):
-        cdef c_jls.jls_twr_s * wr = self._wr
+        cdef c_jls.jls_twr_s * wr = self._wr_get()
         c_jls.jls_twr_flags_set(wr, value)
 
+    cdef c_jls.jls_twr_s * _wr_get(self) except NULL:
+        if self._wr == NULL:
+            raise RuntimeError('Writer is closed')
+        return self._wr
+
     def close(self):
-        """Close the JLS file and release all resources."""
+        """Close the JLS file and release all resources.
+
+        Safe to call repeatedly.  Afterwards, the other methods raise
+        RuntimeError.
+        """
         cdef c_jls.jls_twr_s * wr = self._wr
+        if wr == NULL:
+            return
+        self._wr = NULL
         with nogil:
             c_jls.jls_twr_close(wr)
 
     def flush(self):
         """Flush any pending data to the JLS file."""
-        cdef c_jls.jls_twr_s * wr = self._wr
+        cdef c_jls.jls_twr_s * wr = self._wr_get()
         with nogil:
             c_jls.jls_twr_flush(wr)
 
@@ -334,7 +346,7 @@ cdef class Writer:
         s.model = model_b
         s.version = version_b
         s.serial_number = serial_number_b
-        rc = c_jls.jls_twr_source_def(self._wr, &s)
+        rc = c_jls.jls_twr_source_def(self._wr_get(), &s)
         _handle_rc('source_def', rc)
 
     def source_def_from_struct(self, s: SourceDef):
@@ -373,7 +385,7 @@ cdef class Writer:
         units_b = _encode_str(units)
         s.name = name_b
         s.units = units_b
-        rc = c_jls.jls_twr_signal_def(self._wr, s)
+        rc = c_jls.jls_twr_signal_def(self._wr_get(), s)
         _handle_rc('signal_def', rc)
 
     def signal_def_from_struct(self, s: SignalDef):
@@ -405,7 +417,7 @@ cdef class Writer:
         cdef const uint8_t[:] payload_u8
         cdef const uint8_t * payload_u8_ptr = NULL
         cdef uint32_t payload_length
-        cdef c_jls.jls_twr_s * wr = self._wr
+        cdef c_jls.jls_twr_s * wr = self._wr_get()
         storage_type, payload_bytes, payload_length = _storage_pack(data)
         payload_u8 = payload_bytes
         if 0 != payload_length:
@@ -432,7 +444,7 @@ cdef class Writer:
         :param data: The data to add.
         :raise: On error.
         """
-        cdef c_jls.jls_twr_s * wr = self._wr
+        cdef c_jls.jls_twr_s * wr = self._wr_get()
         cdef uint16_t signal_id_u16 = signal_id
         cdef int64_t sample_id_i64 = sample_id
         cdef int32_t rc
@@ -458,7 +470,7 @@ cdef class Writer:
         _handle_rc('fsr', rc)
 
     def fsr_omit_data(self, signal_id, enable):
-        cdef c_jls.jls_twr_s * wr = self._wr
+        cdef c_jls.jls_twr_s * wr = self._wr_get()
         cdef uint16_t signal_id_u16 = signal_id
         cdef uint32_t enable_u32 = 0 if bool(enable) else 1
         cdef int32_t rc
@@ -476,7 +488,7 @@ cdef class Writer:
         :param data: The data for the annotation.
         :raise: On error.
         """
-        cdef c_jls.jls_twr_s * wr = self._wr
+        cdef c_jls.jls_twr_s * wr = self._wr_get()
         cdef uint16_t signal_id_u16 = signal_id
         cdef int64_t timestamp_i64 = timestamp
         cdef uint8_t group_id_u8 = group_id
@@ -511,7 +523,7 @@ cdef class Writer:
         :param utc: The UTC timestamp.
         :raise: On error.
         """
-        cdef c_jls.jls_twr_s * wr = self._wr
+        cdef c_jls.jls_twr_s * wr = self._wr_get()
         cdef uint16_t signal_id_u16 = signal_id
         cdef int64_t sample_id_i64 = sample_id
         cdef int64_t utc_i64c = utc_i64
@@ -556,7 +568,7 @@ cdef class Reader:
         rc = c_jls.jls_rd_open(&self._rd, path.encode('utf-8'))
         _handle_rc('open', rc)
 
-        rc = c_jls.jls_rd_sources(self._rd, &sources, &count)
+        rc = c_jls.jls_rd_sources(self._rd_get(), &sources, &count)
         _handle_rc('rd_sources', rc)
         for i in range(count):
             source_def = SourceDef(
@@ -568,7 +580,7 @@ cdef class Reader:
                 serial_number=sources[i].serial_number.decode('utf-8'))
             self._sources[sources[i].source_id] = source_def
 
-        rc = c_jls.jls_rd_signals(self._rd, &signals, &count)
+        rc = c_jls.jls_rd_signals(self._rd_get(), &signals, &count)
         _handle_rc('rd_signals', rc)
         for i in range(count):
             signal_id = signals[i].signal_id
@@ -588,7 +600,7 @@ cdef class Reader:
                 name=signals[i].name.decode('utf-8'),
                 units=signals[i].units.decode('utf-8'))
             if signal_def.signal_type == c_jls.JLS_SIGNAL_TYPE_FSR:
-                rc = c_jls.jls_rd_fsr_length(self._rd, signal_id, &samples)
+                rc = c_jls.jls_rd_fsr_length(self._rd_get(), signal_id, &samples)
                 _handle_rc('rd_fsr_length', rc)
                 signal_def.length = samples
             self._signals[signal_id] = signal_def
@@ -599,9 +611,22 @@ cdef class Reader:
     def __exit__(self, type, value, traceback):
         self.close()
 
+    cdef c_jls.jls_rd_s * _rd_get(self) except NULL:
+        if self._rd == NULL:
+            raise RuntimeError('Reader is closed')
+        return self._rd
+
     def close(self):
-        """Close the JLS file and free all resources."""
-        c_jls.jls_rd_close(self._rd)
+        """Close the JLS file and release all resources.
+
+        Safe to call repeatedly.  Afterwards, the other methods raise
+        RuntimeError.
+        """
+        cdef c_jls.jls_rd_s * rd = self._rd
+        if rd == NULL:
+            return
+        self._rd = NULL
+        c_jls.jls_rd_close(rd)
 
     @property
     def sources(self) -> Mapping[int, SourceDef]:
@@ -721,8 +746,9 @@ cdef class Reader:
         data_u8 = np.empty(u8_length, dtype=np.uint8)
         data = data_u8.view(dtype=np_type)
         u8 = data_u8
+        cdef c_jls.jls_rd_s * rd = self._rd_get()
         with nogil:
-            rc = c_jls.jls_rd_fsr(self._rd, signal_id_u16, start_sample_id_i64, &u8[0], length_i64)
+            rc = c_jls.jls_rd_fsr(rd, signal_id_u16, start_sample_id_i64, &u8[0], length_i64)
         _handle_rc('rd_fsr', rc)
         return data
 
@@ -760,8 +786,9 @@ cdef class Reader:
 
         data = np.empty((length, c_jls.JLS_SUMMARY_FSR_COUNT), dtype=np.float64)
         c_data = data
+        cdef c_jls.jls_rd_s * rd = self._rd_get()
         with nogil:
-            rc = c_jls.jls_rd_fsr_statistics(self._rd, signal_id_u16, start_sample_id_i64,
+            rc = c_jls.jls_rd_fsr_statistics(rd, signal_id_u16, start_sample_id_i64,
                                              increment_i64, &c_data[0, 0], length_i64)
         _handle_rc('rd_fsr_statistics', rc)
         return data
@@ -778,7 +805,7 @@ cdef class Reader:
         cdef int32_t rc
         is_fsr = self._signals[signal_id].signal_type == c_jls.JLS_SIGNAL_TYPE_FSR
         user_data = AnnotationCallback(is_fsr, cbk_fn)
-        rc = c_jls.jls_rd_annotations(self._rd, signal_id, timestamp, _annotation_cbk_fn, <void *> user_data)
+        rc = c_jls.jls_rd_annotations(self._rd_get(), signal_id, timestamp, _annotation_cbk_fn, <void *> user_data)
         _handle_rc('rd_annotations', rc)
 
     def user_data(self, cbk_fn):
@@ -789,7 +816,7 @@ cdef class Reader:
             user data entries or False to continue iterating.
         """
         cdef int32_t rc
-        rc = c_jls.jls_rd_user_data(self._rd, _user_data_cbk_fn, <void *> cbk_fn)
+        rc = c_jls.jls_rd_user_data(self._rd_get(), _user_data_cbk_fn, <void *> cbk_fn)
         _handle_rc('rd_user_data', rc)
 
     def utc(self, signal_id, sample_id, cbk_fn):
@@ -804,11 +831,11 @@ cdef class Reader:
             or False to continue iterating.
         """
         cdef int32_t rc
-        rc = c_jls.jls_rd_utc(self._rd, signal_id, sample_id, _utc_cbk_fn, <void *> cbk_fn)
+        rc = c_jls.jls_rd_utc(self._rd_get(), signal_id, sample_id, _utc_cbk_fn, <void *> cbk_fn)
         _handle_rc(f'rd_utc({signal_id}, {sample_id})', rc)
 
     def time_map_length(self, signal_id):
-        return c_jls.jls_rd_tmap_length(self._rd, signal_id)
+        return c_jls.jls_rd_tmap_length(self._rd_get(), signal_id)
 
     def sample_id_to_timestamp(self, signal_id, sample_id):
         """Convert sample_id to UTC timestamp for FSR signals.
@@ -823,12 +850,12 @@ cdef class Reader:
             sz = len(sample_id)
             result = np.empty(sz, dtype=np.int64)
             for idx, s in enumerate(sample_id):
-                rc = c_jls.jls_rd_sample_id_to_timestamp(self._rd, signal_id, s, &utc_timestamp)
+                rc = c_jls.jls_rd_sample_id_to_timestamp(self._rd_get(), signal_id, s, &utc_timestamp)
                 _handle_rc('sample_id_to_timestamp', rc)
                 result[idx] = utc_timestamp
             return result
         else:
-            rc = c_jls.jls_rd_sample_id_to_timestamp(self._rd, signal_id, sample_id, &utc_timestamp)
+            rc = c_jls.jls_rd_sample_id_to_timestamp(self._rd_get(), signal_id, sample_id, &utc_timestamp)
             _handle_rc('sample_id_to_timestamp', rc)
             return utc_timestamp
 
@@ -845,12 +872,12 @@ cdef class Reader:
             sz = len(utc_timestamp)
             result = np.empty(sz, dtype=np.uint64)
             for idx, t in enumerate(utc_timestamp):
-                rc = c_jls.jls_rd_timestamp_to_sample_id(self._rd, signal_id, t, &sample_id)
+                rc = c_jls.jls_rd_timestamp_to_sample_id(self._rd_get(), signal_id, t, &sample_id)
                 _handle_rc('jls_rd_timestamp_to_sample_id', rc)
                 result[idx] = sample_id
             return result
         else:
-            rc = c_jls.jls_rd_timestamp_to_sample_id(self._rd, signal_id, utc_timestamp, &sample_id)
+            rc = c_jls.jls_rd_timestamp_to_sample_id(self._rd_get(), signal_id, utc_timestamp, &sample_id)
             _handle_rc('timestamp_to_sample_id', rc)
             return sample_id
 
@@ -891,7 +918,7 @@ cdef class Reader:
         k = i1 - i0
         out = np.empty(k, dtype=_TIME_MAP_GET_DTYPE)
         for i in range(k):
-            c_jls.jls_rd_tmap_get(self._rd, signal_id, i + i0, &time_map)
+            c_jls.jls_rd_tmap_get(self._rd_get(), signal_id, i + i0, &time_map)
             out[i][0] = time_map.sample_id
             out[i][1] = time_map.timestamp
         return out

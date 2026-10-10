@@ -4,6 +4,18 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.18.1
+
+unreleased
+
+* Fixed a crash on calling Writer.close() or Reader.close() twice, or on
+  using a Writer or Reader after close().  close() freed the native handle
+  but kept it, so the interpreter crashed with a segmentation fault.  A
+  second close() now does nothing, and the other methods raise
+  RuntimeError.  Closing a Reader inside its `with` block crashed the
+  same way.
+
+
 ## 0.18.0
 
 2026 Aug 9

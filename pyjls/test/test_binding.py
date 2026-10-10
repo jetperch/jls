@@ -65,6 +65,22 @@ class TestBinding(unittest.TestCase):
             self.assertEqual('', s.model)
             self.assertEqual('', s.version)
 
+    def test_close_twice_and_use_after_close(self):
+        # Previously crashed the interpreter: close() freed the handle and kept it.
+        w = Writer(self._path)
+        w.source_def(source_id=1, name='n', vendor='v', model='m', version='1', serial_number='s')
+        w.signal_def(3, source_id=1, sample_rate=1000, name='current', units='A')
+        w.fsr(3, 0, np.zeros(100, dtype=np.float32))
+        w.close()
+        w.close()
+        with self.assertRaisesRegex(RuntimeError, 'Writer is closed'):
+            w.fsr(3, 100, np.zeros(100, dtype=np.float32))
+        with Reader(self._path) as r:
+            self.assertEqual(100, r.signals[3].length)
+            r.close()  # inside the with block, which closes again
+        with self.assertRaisesRegex(RuntimeError, 'Reader is closed'):
+            r.fsr(3, 0, 10)
+
     def test_fsr_f32(self):
         data = np.arange(110000, dtype=np.float32)
         with Writer(self._path) as w:
