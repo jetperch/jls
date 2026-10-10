@@ -15,7 +15,7 @@
  */
 
 #include "jls.h"
-#include "jls/repair.h"
+#include "jls/crc32c.h"
 #include "cstr.h"
 #include "jls_util_prv.h"
 #include "jls/writer.h"
@@ -26,6 +26,7 @@
 #include "jls/ec.h"
 #include "jls/time.h"
 #include <math.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -84,7 +85,8 @@ static int usage(void) {
             "\n"
             "Corruption fuzz mode:\n"
             "  --corrupt <mode>   Corruption mode, one of: truncate, zero_tail,\n"
-            "                     zero_hole, torn_update, bitflip, write_prefix\n"
+            "                     zero_hole, torn_update, bitflip, write_prefix,\n"
+            "                     resign, resign_header, resign_payload\n"
             "  --random <seed>    The 64-bit random number seed\n"
             "  --iterations <n>   The number of cases, 0 for unlimited [1000]\n"
             "  --workdir <dir>    The working directory [read_fuzzer_work]\n"
@@ -100,6 +102,18 @@ static int usage(void) {
             "file, applies a seeded corruption to a copy, then verifies\n"
             "recovery: open, signal defs, sample data vs reference,\n"
             "statistics, annotations, UTC, user data, and idempotent reopen.\n"
+            "\n"
+            "The resign modes mutate chunk header and payload fields with\n"
+            "structure-aware values, then recompute the chunk CRCs so the\n"
+            "hostile file reaches every parser.  resign_header mutates one\n"
+            "header, resign_payload one payload, and resign applies 1-3 mixed\n"
+            "mutations.  The file need not recover: a case passes when the\n"
+            "reader, jls_copy and jls_repair return only JLS error codes\n"
+            "without crashing or hanging.  Build with ASan/UBSan and set\n"
+            "ASAN_OPTIONS=detect_leaks=0:halt_on_error=1:exitcode=99 so\n"
+            "sanitizer reports count as crash failures.  jls_copy output is\n"
+            "bounded by a write budget; exceeding it is reported as the\n"
+            "copy_budget note (hostile sample_id gaps are NaN-filled).\n"
     );
     return 1;
 }
@@ -170,13 +184,23 @@ enum fz_mode_e {
                             // payload, then truncate the tail
     FZ_MODE_BITFLIP,        // flip random bits; graceful errors only
     FZ_MODE_WRITE_PREFIX,   // stop the writer after N bytes (exact crash)
+    FZ_MODE_RESIGN,         // 1-3 mixed resign_header/resign_payload mutations
+    FZ_MODE_RESIGN_HEADER,  // mutate one chunk header field, re-sign its CRC
+    FZ_MODE_RESIGN_PAYLOAD, // mutate one chunk payload field, re-sign its CRC
 };
 
 static const char * FZ_MODE_NAMES[] = {
     "truncate", "zero_tail", "zero_hole", "torn_update", "bitflip",
-    "write_prefix",
+    "write_prefix", "resign", "resign_header", "resign_payload",
 };
-#define FZ_MODE_COUNT (6)
+#define FZ_MODE_COUNT (9)
+
+enum fz_note_e {
+    FZ_NOTE_COPY_BUDGET,    // jls_copy output exceeded its write budget
+    FZ_NOTE_COUNT
+};
+
+static const char * FZ_NOTE_NAMES[] = {"copy_budget"};
 
 struct fz_chunk_s {
     int64_t offset;
@@ -228,6 +252,7 @@ struct fz_s {
     uint64_t fails[FZ_FAIL_COUNT];
     uint64_t case_count;
     uint64_t fail_count;
+    uint64_t notes[FZ_NOTE_COUNT];
 };
 
 static const int64_t FZ_SIZES[] = {FZ_WINDOW * 8, FZ_WINDOW * 120, FZ_WINDOW * 1000};
@@ -773,6 +798,7 @@ struct fz_case_s {
     bool strict;            // full oracle; false = graceful-error checks only
     bool defs_ok;           // false: damage in defs region, open may fail
     bool repaired;          // jls_repair ran: open must now succeed
+    char desc[FZ_DETAIL_SZ]; // resign modes: the applied mutations
 };
 
 /**
@@ -1079,6 +1105,552 @@ static int64_t fz_pick_offset(struct fz_s * fz, const struct fz_cfg_s * cfg,
     return off;
 }
 
+/*
+ * CRC-resigning mutations (resign, resign_header, resign_payload).
+ *
+ * Every other mode leaves chunk CRCs stale, so a mutated header or payload
+ * is rejected by its CRC check before any parser sees it.  These modes
+ * apply structure-aware mutations to chunks, then recompute the header
+ * CRC (and the payload CRC footer for payload mutations), so the
+ * hostile-but-CRC-valid file space reaches every parser.  A hostile file
+ * need not recover data: see fz_hostile_exercise for the pass criteria.
+ */
+
+#define FZ_HDR_OFF_ITEM_NEXT        (0)
+#define FZ_HDR_OFF_ITEM_PREV        (8)
+#define FZ_HDR_OFF_TAG              (16)
+#define FZ_HDR_OFF_RSV0             (17)
+#define FZ_HDR_OFF_CHUNK_META       (18)
+#define FZ_HDR_OFF_PAYLOAD_LENGTH   (20)
+#define FZ_HDR_OFF_PAYLOAD_PREV     (24)
+#define FZ_PH_SZ                    (16)  // struct jls_payload_header_s
+#define FZ_PH_OFF_TIMESTAMP         (0)
+#define FZ_PH_OFF_ENTRY_COUNT       (8)
+#define FZ_PH_OFF_ENTRY_SIZE_BITS   (12)
+#define FZ_PH_OFF_RSV16             (14)
+
+static bool fz_mode_is_resign(enum fz_mode_e mode) {
+    return (mode == FZ_MODE_RESIGN) || (mode == FZ_MODE_RESIGN_HEADER)
+            || (mode == FZ_MODE_RESIGN_PAYLOAD);
+}
+
+// In-memory hostile file under construction.
+struct fz_mut_s {
+    uint8_t * buf;
+    int64_t size;
+    const struct fz_scan_s * scan;
+    char * desc;            // human-readable mutation log, FZ_DETAIL_SZ
+};
+
+static void fz_desc_append(struct fz_mut_s * m, const char * fmt, ...) {
+    size_t len = strlen(m->desc);
+    if (len + 1 >= FZ_DETAIL_SZ) {
+        return;
+    }
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(m->desc + len, FZ_DETAIL_SZ - len, fmt, args);
+    va_end(args);
+}
+
+static uint64_t fz_rd_u(const uint8_t * p, uint32_t sz) {
+    uint64_t v = 0;
+    for (uint32_t i = 0; i < sz; ++i) {
+        v |= ((uint64_t) p[i]) << (8 * i);
+    }
+    return v;
+}
+
+static void fz_wr_u(uint8_t * p, uint32_t sz, uint64_t v) {
+    for (uint32_t i = 0; i < sz; ++i) {
+        p[i] = (uint8_t) (v >> (8 * i));
+    }
+}
+
+static uint32_t fz_pick_u32(uint32_t old) {
+    static const uint32_t EDGES[] = {
+        0, 1, 2, 3, 7, 8, 15, 16, 255, 256, 1000, 65535, 65536,
+        1U << 20, (1U << 20) + 1, 1U << 24, 0x7FFFFFFFU, 0x80000000U,
+        0xFFFFFFF0U, 0xFFFFFFFEU, 0xFFFFFFFFU,
+    };
+    const uint32_t n = (uint32_t) (sizeof(EDGES) / sizeof(EDGES[0]));
+    switch (random_range_u32(0, 6)) {
+        case 0: case 1: return EDGES[random_range_u32(0, n)];
+        case 2: return old + random_range_u32(1, 17);
+        case 3: return old - random_range_u32(1, 17);
+        case 4: return (random_u32() & 1) ? (old * 2) : (old / 2);
+        default: return random_u32();
+    }
+}
+
+static int64_t fz_pick_i64(int64_t old) {
+    static const int64_t EDGES[] = {
+        0, 1, -1, 2, INT64_MIN, INT64_MIN + 1, INT64_MAX, INT64_MAX - 1,
+        INT32_MAX, INT32_MIN, (int64_t) UINT32_MAX, 1LL << 32, 1LL << 62, -(1LL << 62),
+    };
+    const uint32_t n = (uint32_t) (sizeof(EDGES) / sizeof(EDGES[0]));
+    switch (random_range_u32(0, 6)) {
+        case 0: case 1: return EDGES[random_range_u32(0, n)];
+        case 2: return (int64_t) ((uint64_t) old + random_range_u32(1, 2001));
+        case 3: return (int64_t) ((uint64_t) old - random_range_u32(1, 2001));
+        case 4: return (int64_t) (0U - (uint64_t) old);
+        default: return (int64_t) random_u64();
+    }
+}
+
+static uint16_t fz_pick_u16(uint16_t old) {
+    static const uint16_t EDGES[] = {0, 1, 2, 3, 4, 5, 7, 8, 9, 15, 16, 24, 31, 32, 33,
+                                     63, 64, 65, 128, 255, 256, 0x7FFF, 0x8000, 0xFFFF};
+    const uint32_t n = (uint32_t) (sizeof(EDGES) / sizeof(EDGES[0]));
+    switch (random_range_u32(0, 4)) {
+        case 0: case 1: return EDGES[random_range_u32(0, n)];
+        case 2: return (uint16_t) (old ^ (1U << random_range_u32(0, 16)));
+        default: return (uint16_t) random_u32();
+    }
+}
+
+// A file offset: self, neighbors, other chunks, misaligned, past EOF, ...
+static uint64_t fz_pick_offset_value(struct fz_mut_s * m, int64_t self) {
+    const struct fz_scan_s * scan = m->scan;
+    const struct fz_chunk_s * other = &scan->chunks[random_range_u32(0, (uint32_t) scan->length)];
+    switch (random_range_u32(0, 16)) {
+        case 0: return 0;
+        case 1: return (uint64_t) self;                         // self loop
+        case 2: return (uint64_t) self + FZ_CHUNK_HDR_SZ;       // into own payload
+        case 3: return (uint64_t) (self - FZ_CHUNK_HDR_SZ);     // backward, mid-chunk
+        case 4: case 5: case 6: return (uint64_t) other->offset;  // any chunk, often backward
+        case 7: return (uint64_t) other->offset + 4;            // misaligned
+        case 8: return (uint64_t) other->offset + 8;            // inside a header
+        case 9: return (uint64_t) m->size;                      // EOF
+        case 10: return (uint64_t) m->size + 8;                 // past EOF
+        case 11: return (uint64_t) m->size - 8;                 // tail
+        case 12: return 1ULL << 40;
+        case 13: return UINT64_MAX - 7;
+        case 14: return 16;                                     // file header
+        default: return (uint64_t) random_range_i64(0, m->size + 1) & ~7ULL;
+    }
+}
+
+// Tag-class weights: bias toward parsers with the most structure.
+static uint32_t fz_tag_weight(uint8_t tag) {
+    switch (tag) {
+        case JLS_TAG_SIGNAL_DEF: return 8;
+        case JLS_TAG_SOURCE_DEF: return 3;
+        case JLS_TAG_TRACK_FSR_DATA: return 4;
+        case JLS_TAG_TRACK_FSR_INDEX: return 6;
+        case JLS_TAG_TRACK_FSR_SUMMARY: return 6;
+        case JLS_TAG_TRACK_ANNOTATION_DATA: return 5;
+        case JLS_TAG_TRACK_ANNOTATION_INDEX: return 4;
+        case JLS_TAG_TRACK_ANNOTATION_SUMMARY: return 4;
+        case JLS_TAG_TRACK_UTC_DATA: return 4;
+        case JLS_TAG_TRACK_UTC_INDEX: return 4;
+        case JLS_TAG_TRACK_UTC_SUMMARY: return 4;
+        case JLS_TAG_USER_DATA: return 4;
+        case JLS_TAG_END: return 1;
+        default: break;
+    }
+    if ((tag & JLS_TRACK_TAG_FLAG) && ((tag & 7) == JLS_TRACK_CHUNK_HEAD)) {
+        return 5;
+    }
+    return 2;  // track defs and anything else
+}
+
+static bool fz_chunk_eligible(const struct fz_mut_s * m, const struct fz_chunk_s * c,
+                              bool need_payload) {
+    if ((c->offset + FZ_CHUNK_HDR_SZ) > m->size) {
+        return false;
+    }
+    return !need_payload || (c->payload_length && (c->end_offset <= m->size));
+}
+
+// Pick a chunk: weighted tag class first, then uniform within the class,
+// so the many FSR data chunks do not drown the rare definition chunks.
+static const struct fz_chunk_s * fz_pick_chunk(struct fz_mut_s * m, bool need_payload) {
+    const struct fz_scan_s * scan = m->scan;
+    uint32_t counts[256] = {0};
+    uint32_t total = 0;
+    for (size_t i = 0; i < scan->length; ++i) {
+        const struct fz_chunk_s * c = &scan->chunks[i];
+        if (fz_chunk_eligible(m, c, need_payload)) {
+            if (0 == counts[c->tag]++) {
+                total += fz_tag_weight(c->tag);
+            }
+        }
+    }
+    if (0 == total) {
+        return NULL;
+    }
+    uint32_t r = random_range_u32(0, total);
+    uint32_t tag;
+    for (tag = 0; tag < 255; ++tag) {
+        if (counts[tag]) {
+            uint32_t w = fz_tag_weight((uint8_t) tag);
+            if (r < w) {
+                break;
+            }
+            r -= w;
+        }
+    }
+    uint32_t pick = random_range_u32(0, counts[tag]);
+    for (size_t i = 0; i < scan->length; ++i) {
+        const struct fz_chunk_s * c = &scan->chunks[i];
+        if ((c->tag == tag) && fz_chunk_eligible(m, c, need_payload) && (0 == pick--)) {
+            return c;
+        }
+    }
+    return NULL;
+}
+
+static void fz_resign_header(struct fz_mut_s * m, int64_t offset) {
+    struct jls_chunk_header_s hdr;
+    memcpy(&hdr, m->buf + offset, sizeof(hdr));
+    hdr.crc32 = jls_crc32c((const uint8_t *) &hdr, sizeof(hdr) - 4);
+    memcpy(m->buf + offset, &hdr, sizeof(hdr));
+}
+
+static void fz_resign_payload(struct fz_mut_s * m, int64_t offset, uint32_t payload_length) {
+    int64_t p = offset + FZ_CHUNK_HDR_SZ;
+    int64_t crc_offset = p + fz_psod(payload_length) - 4;
+    if (!payload_length || ((crc_offset + 4) > m->size)) {
+        return;
+    }
+    fz_wr_u(m->buf + crc_offset, 4, jls_crc32c(m->buf + p, payload_length));
+}
+
+static void fz_mutate_header(struct fz_mut_s * m, const struct fz_chunk_s * c) {
+    static const uint8_t TAGS[] = {
+        JLS_TAG_INVALID, JLS_TAG_SOURCE_DEF, JLS_TAG_SIGNAL_DEF,
+        JLS_TAG_TRACK_FSR_DEF, JLS_TAG_TRACK_FSR_HEAD, JLS_TAG_TRACK_FSR_DATA,
+        JLS_TAG_TRACK_FSR_INDEX, JLS_TAG_TRACK_FSR_SUMMARY,
+        JLS_TAG_TRACK_VSR_DEF, JLS_TAG_TRACK_VSR_HEAD, JLS_TAG_TRACK_VSR_DATA,
+        JLS_TAG_TRACK_VSR_INDEX, JLS_TAG_TRACK_VSR_SUMMARY,
+        JLS_TAG_TRACK_ANNOTATION_DEF, JLS_TAG_TRACK_ANNOTATION_HEAD,
+        JLS_TAG_TRACK_ANNOTATION_DATA, JLS_TAG_TRACK_ANNOTATION_INDEX,
+        JLS_TAG_TRACK_ANNOTATION_SUMMARY,
+        JLS_TAG_TRACK_UTC_DEF, JLS_TAG_TRACK_UTC_HEAD, JLS_TAG_TRACK_UTC_DATA,
+        JLS_TAG_TRACK_UTC_INDEX, JLS_TAG_TRACK_UTC_SUMMARY,
+        JLS_TAG_USER_DATA, JLS_TAG_END,
+    };
+    static const uint16_t METAS[] = {0, 1, FZ_SIGNAL_ID_F32, FZ_SIGNAL_ID_SEC, 255, 256,
+                                     0x0fff, 0x1000, 0xf000, 0xffff};
+    uint8_t * h = m->buf + c->offset;
+    switch (random_range_u32(0, 12)) {
+        case 0: case 1: case 2: {  // header only: the chunk layout now lies
+            uint32_t v = fz_pick_u32(c->payload_length);
+            if (0 == random_range_u32(0, 4)) {
+                v = (uint32_t) (m->size - c->offset);  // reaches EOF
+            }
+            fz_wr_u(h + FZ_HDR_OFF_PAYLOAD_LENGTH, 4, v);
+            fz_desc_append(m, " hdr.payload_length=%" PRIu32, v);
+            break;
+        }
+        case 3: {
+            uint32_t v = fz_pick_u32((uint32_t) fz_rd_u(h + FZ_HDR_OFF_PAYLOAD_PREV, 4));
+            fz_wr_u(h + FZ_HDR_OFF_PAYLOAD_PREV, 4, v);
+            fz_desc_append(m, " hdr.payload_prev_length=%" PRIu32, v);
+            break;
+        }
+        case 4: case 5: {
+            uint64_t v = fz_pick_offset_value(m, c->offset);
+            fz_wr_u(h + FZ_HDR_OFF_ITEM_NEXT, 8, v);
+            fz_desc_append(m, " hdr.item_next=%" PRIu64, v);
+            break;
+        }
+        case 6: case 7: {
+            uint64_t v = fz_pick_offset_value(m, c->offset);
+            fz_wr_u(h + FZ_HDR_OFF_ITEM_PREV, 8, v);
+            fz_desc_append(m, " hdr.item_prev=%" PRIu64, v);
+            break;
+        }
+        case 8: case 9: {
+            uint16_t old = (uint16_t) fz_rd_u(h + FZ_HDR_OFF_CHUNK_META, 2);
+            uint16_t v;
+            switch (random_range_u32(0, 4)) {
+                case 0: v = METAS[random_range_u32(0, sizeof(METAS) / sizeof(METAS[0]))]; break;
+                case 1: v = (uint16_t) ((old & 0x0fff) | (random_range_u32(0, 16) << 12)); break;
+                case 2: v = (uint16_t) ((old & 0xf000) | random_range_u32(0, 0x1000)); break;
+                default: v = fz_pick_u16(old); break;
+            }
+            fz_wr_u(h + FZ_HDR_OFF_CHUNK_META, 2, v);
+            fz_desc_append(m, " hdr.chunk_meta=0x%04x", (unsigned) v);
+            break;
+        }
+        case 10: {
+            uint8_t v = (random_u32() & 3) ? TAGS[random_range_u32(0, sizeof(TAGS))]
+                                           : (uint8_t) random_u32();
+            h[FZ_HDR_OFF_TAG] = v;
+            fz_desc_append(m, " hdr.tag=0x%02x", (unsigned) v);
+            break;
+        }
+        default:
+            h[FZ_HDR_OFF_RSV0] = (uint8_t) random_u32();
+            fz_desc_append(m, " hdr.rsv0=0x%02x", (unsigned) h[FZ_HDR_OFF_RSV0]);
+            break;
+    }
+    fz_resign_header(m, c->offset);
+}
+
+// Mutate a u16/u32/i64 payload field at payload offset off, when in range.
+static void fz_mut_field(struct fz_mut_s * m, uint8_t * p, uint32_t plen,
+                         uint32_t off, uint32_t sz, const char * name) {
+    if ((off + sz) > plen) {
+        return;
+    }
+    uint64_t v;
+    switch (sz) {
+        case 2: v = fz_pick_u16((uint16_t) fz_rd_u(p + off, 2)); break;
+        case 4: v = fz_pick_u32((uint32_t) fz_rd_u(p + off, 4)); break;
+        default: v = (uint64_t) fz_pick_i64((int64_t) fz_rd_u(p + off, 8)); break;
+    }
+    fz_wr_u(p + off, sz, v);
+    if (sz == 8) {
+        fz_desc_append(m, " %s[@%" PRIu32 "]=%" PRIi64, name, off, (int64_t) v);
+    } else {
+        fz_desc_append(m, " %s[@%" PRIu32 "]=%" PRIu64, name, off, v);
+    }
+}
+
+static void fz_mut_offset_field(struct fz_mut_s * m, const struct fz_chunk_s * c,
+                                uint8_t * p, uint32_t off, const char * name) {
+    if ((off + 8) > c->payload_length) {
+        return;
+    }
+    uint64_t v = fz_pick_offset_value(m, c->offset);
+    fz_wr_u(p + off, 8, v);
+    fz_desc_append(m, " %s[@%" PRIu32 "]=%" PRIu64, name, off, v);
+}
+
+static void fz_mut_payload_header(struct fz_mut_s * m, uint8_t * p, uint32_t plen) {
+    switch (random_range_u32(0, 7)) {
+        case 0: case 1: fz_mut_field(m, p, plen, FZ_PH_OFF_TIMESTAMP, 8, "ph.timestamp"); break;
+        case 2: case 3: fz_mut_field(m, p, plen, FZ_PH_OFF_ENTRY_COUNT, 4, "ph.entry_count"); break;
+        case 4: case 5: fz_mut_field(m, p, plen, FZ_PH_OFF_ENTRY_SIZE_BITS, 2, "ph.entry_size_bits"); break;
+        default: fz_mut_field(m, p, plen, FZ_PH_OFF_RSV16, 2, "ph.rsv16"); break;
+    }
+}
+
+// Replace NUL terminators so strings run off the payload end.
+static void fz_mut_unterminate(struct fz_mut_s * m, uint8_t * p, uint32_t plen) {
+    uint32_t start = ((plen > 64) && (random_u32() & 1)) ? (plen - 64) : 0;
+    for (uint32_t i = start; i < plen; ++i) {
+        if (0 == p[i]) {
+            p[i] = 'A';
+        }
+    }
+    fz_desc_append(m, " unterminate[%" PRIu32 ":]", start);
+}
+
+static void fz_mut_bitflips(struct fz_mut_s * m, uint8_t * p, uint32_t plen) {
+    uint32_t flips = random_range_u32(1, 9);
+    for (uint32_t i = 0; i < flips; ++i) {
+        p[random_range_u32(0, plen)] ^= (uint8_t) (1U << random_range_u32(0, 8));
+    }
+    fz_desc_append(m, " bitflip x%" PRIu32, flips);
+}
+
+static void fz_mut_signal_def(struct fz_mut_s * m, uint8_t * p, uint32_t plen) {
+    // see jls_wr_signal_def: source_id u16 @0, signal_type u8 @2,
+    // data_type @4, sample_rate @8, samples_per_data @12,
+    // sample_decimate_factor @16, entries_per_summary @20,
+    // summary_decimate_factor @24, annotation_decimate_factor @28,
+    // utc_decimate_factor @32, reserved, then name and units strings
+    static const uint32_t DT[] = {
+        JLS_DATATYPE_U1, JLS_DATATYPE_U4, JLS_DATATYPE_U8, JLS_DATATYPE_U16,
+        JLS_DATATYPE_U24, JLS_DATATYPE_U32, JLS_DATATYPE_U64,
+        JLS_DATATYPE_I4, JLS_DATATYPE_I8, JLS_DATATYPE_I16, JLS_DATATYPE_I24,
+        JLS_DATATYPE_I32, JLS_DATATYPE_I64, JLS_DATATYPE_F32, JLS_DATATYPE_F64,
+        0, 0xFFFFFFFFU, 0x00000004U, 0x00000804U, 0x0000F00FU, 0x00FF1004U, 0x00201004U,
+    };
+    static const char * NAMES[] = {
+        "def.sample_rate", "def.samples_per_data", "def.sample_decimate_factor",
+        "def.entries_per_summary", "def.summary_decimate_factor",
+        "def.annotation_decimate_factor", "def.utc_decimate_factor",
+    };
+    uint32_t f = random_range_u32(0, 13);
+    switch (f) {
+        case 0: fz_mut_field(m, p, plen, 0, 2, "def.source_id"); break;
+        case 1: {
+            uint8_t v = (random_u32() & 1) ? (uint8_t) random_range_u32(0, 3) : (uint8_t) random_u32();
+            p[2] = v;
+            fz_desc_append(m, " def.signal_type=%u", (unsigned) v);
+            break;
+        }
+        case 2: case 3: {
+            uint32_t v = (random_u32() & 3) ? DT[random_range_u32(0, sizeof(DT) / sizeof(DT[0]))]
+                                            : fz_pick_u32((uint32_t) fz_rd_u(p + 4, 4));
+            fz_wr_u(p + 4, 4, v);
+            fz_desc_append(m, " def.data_type=0x%08" PRIx32, v);
+            break;
+        }
+        case 11: fz_mut_unterminate(m, p, plen); break;
+        case 12: {  // several factors at once, to get past single-field checks
+            for (uint32_t k = 12; k <= 32; k += 4) {
+                if (random_u32() & 1) {
+                    uint32_t v = (random_u32() & 1) ? 1U : (1U << random_range_u32(0, 32));
+                    fz_wr_u(p + k, 4, v);
+                    fz_desc_append(m, " %s=%" PRIu32, NAMES[(k - 8) / 4], v);
+                }
+            }
+            break;
+        }
+        default: {
+            uint32_t k = f - 4;  // 0..6
+            fz_mut_field(m, p, plen, 8 + 4 * k, 4, NAMES[k]);
+            break;
+        }
+    }
+}
+
+static void fz_mut_annotation_data(struct fz_mut_s * m, uint8_t * p, uint32_t plen) {
+    // annotation_type @16, storage_type @17, group_id @18, y @20, data_size @24
+    switch (random_range_u32(0, 5)) {
+        case 0: case 1: {
+            uint8_t v = (random_u32() & 1) ? (uint8_t) random_range_u32(0, 6) : (uint8_t) random_u32();
+            if (plen > 17) {
+                p[17] = v;
+            }
+            fz_desc_append(m, " ann.storage_type=%u", (unsigned) v);
+            break;
+        }
+        case 2: fz_mut_field(m, p, plen, 24, 4, "ann.data_size"); break;
+        case 3: fz_mut_unterminate(m, p, plen); break;
+        default: {
+            uint8_t v = (uint8_t) random_u32();
+            if (plen > 16) {
+                p[16] = v;
+            }
+            fz_desc_append(m, " ann.annotation_type=%u", (unsigned) v);
+            break;
+        }
+    }
+}
+
+static void fz_mutate_payload(struct fz_mut_s * m, const struct fz_chunk_s * c) {
+    static const uint32_t F32[] = {0x7FC00000U, 0x7F800000U, 0xFF800000U, 0x7F7FFFFFU,
+                                   0xFF7FFFFFU, 0x00000001U, 0x80000000U};
+    uint8_t * p = m->buf + c->offset + FZ_CHUNK_HDR_SZ;
+    uint32_t plen = c->payload_length;
+    uint8_t tag = c->tag;
+    uint8_t chunk_type = tag & 7;
+    bool is_track = (0 != (tag & JLS_TRACK_TAG_FLAG));
+    uint32_t entries = (plen > FZ_PH_SZ) ? (plen - FZ_PH_SZ) : 0;  // bytes after the payload header
+    uint32_t r = random_range_u32(0, 16);
+
+    if (r == 0) {
+        fz_mut_bitflips(m, p, plen);
+    } else if (r == 1) {
+        // consistent shrink: a valid smaller chunk whose forward link
+        // (by payload_length) lands inside its stale payload bytes
+        uint32_t new_len = random_range_u32(0, plen);
+        fz_wr_u(m->buf + c->offset + FZ_HDR_OFF_PAYLOAD_LENGTH, 4, new_len);
+        fz_resign_header(m, c->offset);
+        fz_desc_append(m, " shrink payload_length=%" PRIu32, new_len);
+        if (new_len) {
+            int64_t pad_start = c->offset + FZ_CHUNK_HDR_SZ + new_len;
+            int64_t crc_offset = c->offset + FZ_CHUNK_HDR_SZ + fz_psod(new_len) - 4;
+            memset(m->buf + pad_start, 0, (size_t) (crc_offset - pad_start));
+        }
+        plen = new_len;
+    } else if (tag == JLS_TAG_SIGNAL_DEF) {
+        fz_mut_signal_def(m, p, plen);
+    } else if ((tag == JLS_TAG_SOURCE_DEF) || (tag == JLS_TAG_USER_DATA)) {
+        if (r & 1) {
+            fz_mut_unterminate(m, p, plen);
+        } else {
+            fz_mut_bitflips(m, p, plen);
+        }
+    } else if (is_track && (chunk_type == JLS_TRACK_CHUNK_HEAD)) {
+        // struct jls_track_head_s: uint64_t offset[16]
+        uint32_t level = (random_u32() & 1) ? random_range_u32(0, 3) : random_range_u32(0, 16);
+        fz_mut_offset_field(m, c, p, level * 8, "head.offset");
+    } else if (is_track && (chunk_type >= JLS_TRACK_CHUNK_DATA) && (r < 9)) {
+        fz_mut_payload_header(m, p, plen);  // DATA, INDEX, SUMMARY
+    } else if (tag == JLS_TAG_TRACK_FSR_INDEX) {
+        if (entries >= 8) {
+            fz_mut_offset_field(m, c, p, FZ_PH_SZ + 8 * random_range_u32(0, entries / 8),
+                                "fsr_index.offsets");
+        }
+    } else if ((tag == JLS_TAG_TRACK_ANNOTATION_INDEX) || (tag == JLS_TAG_TRACK_UTC_INDEX)) {
+        if (entries >= 16) {  // struct jls_index_entry_s
+            uint32_t off = FZ_PH_SZ + 16 * random_range_u32(0, entries / 16);
+            if (random_u32() & 1) {
+                fz_mut_offset_field(m, c, p, off + 8, "index.offset");
+            } else {
+                fz_mut_field(m, p, plen, off, 8, "index.timestamp");
+            }
+        }
+    } else if (tag == JLS_TAG_TRACK_ANNOTATION_DATA) {
+        fz_mut_annotation_data(m, p, plen);
+    } else if ((tag == JLS_TAG_TRACK_UTC_SUMMARY) || (tag == JLS_TAG_TRACK_ANNOTATION_SUMMARY)
+               || (tag == JLS_TAG_TRACK_UTC_DATA)) {
+        if (entries >= 8) {  // 16-byte entries with i64 fields; UTC data has one i64
+            uint32_t off = FZ_PH_SZ + 8 * random_range_u32(0, entries / 8);
+            fz_mut_field(m, p, plen, off, 8, "entry.i64");
+        }
+    } else if ((tag == JLS_TAG_TRACK_FSR_SUMMARY) && (entries >= 4)) {
+        uint32_t off = FZ_PH_SZ + 4 * random_range_u32(0, entries / 4);
+        fz_wr_u(p + off, 4, F32[random_range_u32(0, sizeof(F32) / sizeof(F32[0]))]);
+        fz_desc_append(m, " summary.f32[@%" PRIu32 "]", off);
+    } else {
+        fz_mut_bitflips(m, p, plen);
+    }
+    fz_resign_payload(m, c->offset, plen);
+}
+
+// Build a resign case file from the pristine file.
+static int32_t fz_make_resign(struct fz_s * fz, const struct fz_scan_s * scan,
+                              const char * pristine_path, const char * case_path,
+                              struct fz_case_s * cs) {
+    struct fz_mut_s m = {.buf = NULL, .size = scan->fend, .scan = scan, .desc = cs->desc};
+    FILE * f = fopen(pristine_path, "rb");
+    if (!f) {
+        return JLS_ERROR_IO;
+    }
+    m.buf = malloc((size_t) m.size);
+    size_t sz = m.buf ? fread(m.buf, 1, (size_t) m.size, f) : 0;
+    fclose(f);
+    if (!m.buf || (sz != (size_t) m.size)) {
+        free(m.buf);
+        return JLS_ERROR_IO;
+    }
+
+    cs->desc[0] = 0;
+    cs->offset = -1;
+    uint32_t count = (fz->mode == FZ_MODE_RESIGN) ? random_range_u32(1, 4) : 1;
+    for (uint32_t i = 0; i < count; ++i) {
+        bool hdr = (fz->mode == FZ_MODE_RESIGN_HEADER)
+                || ((fz->mode == FZ_MODE_RESIGN) && (random_u32() & 1));
+        const struct fz_chunk_s * c = fz_pick_chunk(&m, !hdr);
+        if (!c) {
+            continue;
+        }
+        if (cs->offset < 0) {
+            cs->offset = c->offset;
+        }
+        fz_desc_append(&m, "%s@%" PRIi64 " tag=0x%02x:", i ? " |" : "", c->offset, (unsigned) c->tag);
+        if (hdr) {
+            fz_mutate_header(&m, c);
+        } else {
+            fz_mutate_payload(&m, c);
+        }
+    }
+    if (cs->offset < 0) {
+        cs->offset = 0;
+    }
+
+    remove(case_path);
+    int32_t rc = JLS_ERROR_IO;
+    f = fopen(case_path, "wb");
+    if (f) {
+        if ((size_t) m.size == fwrite(m.buf, 1, (size_t) m.size, f)) {
+            rc = 0;
+        }
+        fclose(f);
+    }
+    free(m.buf);
+    return rc;
+}
+
 // Create the corrupted case file.  For most modes this corrupts a copy
 // of the pristine file, and the pristine scan describes it.  For
 // write_prefix the writer is stopped mid-run, producing a distinct byte
@@ -1094,6 +1666,12 @@ static int32_t fz_make_case(struct fz_s * fz, const struct fz_cfg_s * cfg,
     cs->strict = (fz->mode != FZ_MODE_BITFLIP);
     cs->offset = scan->fend;
     cs->defs_ok = true;
+
+    if (fz_mode_is_resign(fz->mode)) {
+        cs->strict = false;
+        cs->defs_ok = false;  // hostile file: no recovery expectations
+        return fz_make_resign(fz, scan, pristine_path, case_path, cs);
+    }
 
     if (fz->mode == FZ_MODE_WRITE_PREFIX) {
         int64_t budget = (fz->offset_forced >= 0)
@@ -1270,6 +1848,286 @@ static void fz_log_quiet(const char * msg) {
     ++fz_log_quiet_count_;
 }
 
+// Hostile-file callbacks touch every byte they are handed, so an
+// out-of-bounds pointer or length becomes a sanitizer report.
+struct fz_touch_s {
+    uint64_t count;
+    uint64_t sum;
+};
+
+static void fz_touch(struct fz_touch_s * t, const void * data, size_t size) {
+    const uint8_t * p = (const uint8_t *) data;
+    for (size_t i = 0; i < size; ++i) {
+        t->sum += p[i];
+    }
+}
+
+static int32_t fz_touch_ann_cbk(void * user_data, const struct jls_annotation_s * annotation) {
+    struct fz_touch_s * t = (struct fz_touch_s *) user_data;
+    ++t->count;
+    fz_touch(t, annotation, sizeof(*annotation));
+    fz_touch(t, annotation->data, annotation->data_size);
+    return 0;
+}
+
+static int32_t fz_touch_utc_cbk(void * user_data, const struct jls_utc_summary_entry_s * utc, uint32_t size) {
+    struct fz_touch_s * t = (struct fz_touch_s *) user_data;
+    t->count += size;
+    fz_touch(t, utc, sizeof(*utc) * (size_t) size);
+    return 0;
+}
+
+static int32_t fz_touch_ud_cbk(void * user_data, uint16_t chunk_meta,
+                               enum jls_storage_type_e storage_type,
+                               uint8_t * data, uint32_t data_size) {
+    struct fz_touch_s * t = (struct fz_touch_s *) user_data;
+    (void) chunk_meta;
+    (void) storage_type;
+    ++t->count;
+    fz_touch(t, data, data_size);
+    return 0;
+}
+
+static void fz_touch_str(struct fz_touch_s * t, const char * s) {
+    if (s) {
+        fz_touch(t, s, strlen(s));
+    }
+}
+
+// FSR read buffer size per the jls_rd_fsr contract (sub-byte types need
+// one extra byte for shifting).  Sized exactly so ASan sees any overrun.
+static size_t fz_fsr_buf_size(uint32_t entry_bits, int64_t length) {
+    if (length <= 0) {
+        return 1;
+    }
+    if (entry_bits < 8) {
+        return 1 + (size_t) ((length * entry_bits) / 8);
+    }
+    return (size_t) ((length * entry_bits + 7) / 8);
+}
+
+#define FZ_HOSTILE_RD_MAX   (70000)  // samples per read; spans several data chunks
+#define FZ_RC(name_, rc_) do {                                                  \
+    int32_t rcv__ = (rc_);                                                      \
+    if (!fz_error_code_valid(rcv__)) {                                          \
+        FZ_FAIL(FZ_FAIL_ERROR_CODE, "%s: %s rc=%" PRIi32 " out of range",       \
+                label, name_, rcv__);                                           \
+    }                                                                           \
+} while (0)
+
+// Pick a start sample id around [0, n] including out-of-range extremes.
+static int64_t fz_pick_start(int64_t n) {
+    switch (random_range_u32(0, 10)) {
+        case 0: return 0;
+        case 1: return (n > 0) ? (n - 1) : 0;
+        case 2: return n;
+        case 3: return -1;
+        case 4: return (random_u32() & 1) ? INT64_MAX : INT64_MIN;
+        case 5: return (n > 10) ? (n - (int64_t) random_range_u32(1, 10)) : 0;
+        default: return (n > 0) ? random_range_i64(0, n) : 0;
+    }
+}
+
+static int64_t fz_pick_length(int64_t n, int64_t start) {
+    int64_t avail = ((start >= 0) && (start <= n)) ? (n - start) : 0;
+    switch (random_range_u32(0, 8)) {
+        case 0: return 0;
+        case 1: return 1;
+        case 2: return (avail > 0) ? ((avail > FZ_HOSTILE_RD_MAX) ? FZ_HOSTILE_RD_MAX : avail) : 1;
+        case 3: return (avail >= 0) && (avail < FZ_HOSTILE_RD_MAX) ? (avail + 1) : 2;  // one past end
+        default: {
+            int64_t max = (avail > 1) ? avail : 2;
+            if (max > FZ_HOSTILE_RD_MAX) {
+                max = FZ_HOSTILE_RD_MAX;
+            }
+            return random_range_i64(1, max + 1);
+        }
+    }
+}
+
+static uint32_t fz_hostile_fsr(struct jls_rd_s * rd, const struct jls_signal_def_s * def,
+                               struct fz_touch_s * touch, const char * label, char * detail) {
+    uint32_t fails = 0;
+    uint16_t signal_id = def->signal_id;
+    uint32_t entry_bits = jls_datatype_parse_size(def->data_type);
+    int64_t n = 0;
+    int32_t rc = jls_rd_fsr_length(rd, signal_id, &n);
+    FZ_RC("fsr_length", rc);
+    if (rc) {
+        n = 0;
+    }
+
+    for (int k = 0; k < 4; ++k) {  // sample reads, native type
+        int64_t start = fz_pick_start(n);
+        int64_t len = fz_pick_length(n, start);
+        size_t sz = fz_fsr_buf_size(entry_bits ? entry_bits : 64, len);
+        uint8_t * buf = malloc(sz);
+        if (!buf) {
+            continue;
+        }
+        FZ_RC("fsr", jls_rd_fsr(rd, signal_id, start, buf, len));
+        free(buf);
+    }
+    for (int k = 0; k < 2; ++k) {  // sample reads, f32 conversion
+        int64_t start = fz_pick_start(n);
+        int64_t len = fz_pick_length(n, start);
+        float * buf = malloc(sizeof(float) * (size_t) ((len > 0) ? len : 1));
+        if (!buf) {
+            continue;
+        }
+        FZ_RC("fsr_f32", jls_rd_fsr_f32(rd, signal_id, start, buf, len));
+        free(buf);
+    }
+    for (int k = 0; k < 5; ++k) {  // statistics
+        int64_t sdf = def->sample_decimate_factor ? def->sample_decimate_factor : 1;
+        const int64_t incrs[] = {1, 7, sdf, sdf * 3 + 1, (n > 1) ? n : 1};
+        int64_t incr = incrs[k];
+        if (incr > n) {
+            incr = (random_u32() & 1) ? n : incr;
+        }
+        int64_t len = (random_u32() & 1) ? 1 : (int64_t) random_range_u32(1, 9);
+        int64_t start = ((incr <= (n / len)) && (n > incr * len)) ? random_range_i64(0, n - incr * len + 1) : fz_pick_start(n);
+        double * buf = malloc(sizeof(double) * JLS_SUMMARY_FSR_COUNT * (size_t) len);
+        if (!buf) {
+            continue;
+        }
+        FZ_RC("fsr_statistics", jls_rd_fsr_statistics(rd, signal_id, start, incr, buf, len));
+        free(buf);
+    }
+
+    // time conversions and the time map
+    const int64_t sample_ids[] = {0, n / 2, n, -1, INT64_MAX, INT64_MIN};
+    const int64_t timestamps[] = {0, JLS_TIME_YEAR, -JLS_TIME_YEAR, INT64_MAX, INT64_MIN,
+                                  (int64_t) random_u64()};
+    for (size_t k = 0; k < 6; ++k) {
+        int64_t v = 0;
+        FZ_RC("sample_id_to_timestamp", jls_rd_sample_id_to_timestamp(rd, signal_id, sample_ids[k], &v));
+        FZ_RC("timestamp_to_sample_id", jls_rd_timestamp_to_sample_id(rd, signal_id, timestamps[k], &v));
+    }
+    size_t tmap_len = jls_rd_tmap_length(rd, signal_id);
+    const size_t tmap_idx[] = {0, tmap_len ? (tmap_len - 1) : 0, tmap_len, SIZE_MAX};
+    for (size_t k = 0; k < 4; ++k) {
+        struct jls_utc_summary_entry_s entry;
+        FZ_RC("tmap_get", jls_rd_tmap_get(rd, signal_id, tmap_idx[k], &entry));
+    }
+    FZ_RC("utc", jls_rd_utc(rd, signal_id, 0, fz_touch_utc_cbk, touch));
+    FZ_RC("utc_min", jls_rd_utc(rd, signal_id, INT64_MIN, fz_touch_utc_cbk, touch));
+    return fails;
+}
+
+/**
+ * @brief Exercise the full read API on a hostile (CRC-valid) file.
+ *
+ * Pass criteria: no crash, sanitizer report or hang (enforced by the
+ * parent), and every call returns success or a JLS error code.
+ */
+static uint32_t fz_hostile_exercise(const char * path, const char * label, char * detail) {
+    uint32_t fails = 0;
+    struct jls_rd_s * rd = NULL;
+    struct fz_touch_s touch = {0, 0};
+    int32_t rc = jls_rd_open(&rd, path);
+    FZ_RC("open", rc);
+    if (rc) {
+        return fails;
+    }
+
+    struct jls_source_def_s * sources = NULL;
+    uint16_t source_count = 0;
+    rc = jls_rd_sources(rd, &sources, &source_count);
+    FZ_RC("sources", rc);
+    for (uint16_t i = 0; !rc && (i < source_count); ++i) {
+        fz_touch_str(&touch, sources[i].name);
+        fz_touch_str(&touch, sources[i].vendor);
+        fz_touch_str(&touch, sources[i].model);
+        fz_touch_str(&touch, sources[i].version);
+        fz_touch_str(&touch, sources[i].serial_number);
+    }
+
+    // copy the defs: reader calls may invalidate the signals array
+    struct jls_signal_def_s * signals = NULL;
+    uint16_t signal_count = 0;
+    struct jls_signal_def_s defs[16];
+    uint16_t def_count = 0;
+    rc = jls_rd_signals(rd, &signals, &signal_count);
+    FZ_RC("signals", rc);
+    for (uint16_t i = 0; !rc && (i < signal_count); ++i) {
+        fz_touch_str(&touch, signals[i].name);
+        fz_touch_str(&touch, signals[i].units);
+        if (def_count < 16) {
+            defs[def_count++] = signals[i];
+        }
+    }
+
+    for (uint16_t i = 0; i < def_count; ++i) {
+        struct jls_signal_def_s def;
+        FZ_RC("signal", jls_rd_signal(rd, defs[i].signal_id, &def));
+        if (defs[i].signal_type == JLS_SIGNAL_TYPE_FSR) {
+            fails |= fz_hostile_fsr(rd, &defs[i], &touch, label, (0 == fails) ? detail : (char[FZ_DETAIL_SZ]) {0});
+        }
+        FZ_RC("annotations", jls_rd_annotations(rd, defs[i].signal_id, INT64_MIN, fz_touch_ann_cbk, &touch));
+        FZ_RC("annotations_mid", jls_rd_annotations(rd, defs[i].signal_id,
+                                                    (int64_t) random_range_u32(0, 100000),
+                                                    fz_touch_ann_cbk, &touch));
+    }
+    FZ_RC("user_data", jls_rd_user_data(rd, fz_touch_ud_cbk, &touch));
+    jls_rd_close(rd);
+    return fails;
+}
+
+static uint32_t fz_notes_;  // set in the verify child, see fz_result_s
+
+static int64_t fz_file_size(const char * path) {
+    FILE * f = fopen(path, "rb");
+    int64_t sz = 0;
+    if (f) {
+        if (0 == fseek(f, 0, SEEK_END)) {
+            sz = (int64_t) ftell(f);
+        }
+        fclose(f);
+    }
+    return sz;
+}
+
+// Hostile-file verification for the resign modes: exercise the reader on
+// the case file (open may recover it in place), then jls_copy and
+// jls_repair on the untouched copy, exercising each result that opens.
+static uint32_t fz_hostile_verify(struct fz_s * fz, const char * case_path,
+                                  const char * ro_path, char * detail) {
+    uint32_t fails = 0;
+    const char * label = "verify";
+    char copy_path[600];
+    snprintf(copy_path, sizeof(copy_path), "%s/case_copy.jls", fz->workdir);
+
+    fails |= fz_hostile_exercise(case_path, "open", detail);
+
+    remove(copy_path);
+    // A forward sample_id jump in a hostile FSR data chunk makes the
+    // writer fill up to JLS_WR_FSR_SKIP_MAX samples, so jls_copy output
+    // can exceed the source by orders of magnitude.  Bound it with the
+    // backend write budget and record a note rather than fill the disk.
+    int64_t budget = 64 * fz_file_size(ro_path) + (16 << 20);
+    int64_t written = jls_bk_write_total();
+    jls_bk_write_limit_set(budget);
+    int32_t rc = jls_copy(ro_path, copy_path, NULL, NULL, NULL, NULL);
+    jls_bk_write_limit_set(-1);
+    FZ_RC("jls_copy", rc);
+    if ((jls_bk_write_total() - written) >= budget) {
+        fz_notes_ |= (1U << FZ_NOTE_COPY_BUDGET);
+        rc = JLS_ERROR_TOO_BIG;  // the truncated copy is not of interest
+    }
+    if (0 == rc) {
+        fails |= fz_hostile_exercise(copy_path, "copy", (0 == fails) ? detail : (char[FZ_DETAIL_SZ]) {0});
+    }
+    remove(copy_path);
+
+    rc = jls_repair(ro_path, NULL, NULL, NULL, NULL);
+    FZ_RC("jls_repair", rc);
+    if (0 == rc) {
+        fails |= fz_hostile_exercise(ro_path, "repair", (0 == fails) ? detail : (char[FZ_DETAIL_SZ]) {0});
+    }
+    return fails;
+}
+
 // Run the oracle plus the read-only variant.  In an isolated child this
 // runs with logging suppressed; a crash or hang is caught by the parent.
 static uint32_t fz_case_verify(struct fz_s * fz, const struct fz_cfg_s * cfg,
@@ -1278,6 +2136,9 @@ static uint32_t fz_case_verify(struct fz_s * fz, const struct fz_cfg_s * cfg,
                                uint64_t case_seed, char * detail) {
     uint32_t fails = 0;
     detail[0] = 0;
+    if (fz_mode_is_resign(cs->mode)) {
+        return fz_hostile_verify(fz, case_path, ro_path, detail);
+    }
     // Modes that may produce damage beyond tail truncation.  write_prefix
     // belongs here: an in-place head update is two backend writes (payload,
     // then CRC footer), so a crash between them tears the head payload.
@@ -1378,8 +2239,19 @@ static uint32_t fz_case_verify(struct fz_s * fz, const struct fz_cfg_s * cfg,
 
 struct fz_result_s {
     uint32_t fails;
+    uint32_t notes;         // enum fz_note_e bitmask, not failures
     char detail[FZ_DETAIL_SZ];
 };
+
+static void fz_case_verify_r(struct fz_s * fz, const struct fz_cfg_s * cfg,
+                             const struct fz_scan_s * scan, const char * case_path,
+                             const char * ro_path, const struct fz_case_s * cs,
+                             uint64_t case_seed, struct fz_result_s * result) {
+    fz_notes_ = 0;
+    result->fails = fz_case_verify(fz, cfg, scan, case_path, ro_path, cs,
+                                   case_seed, result->detail);
+    result->notes = fz_notes_;
+}
 
 // Run fz_case_verify in a child process so crashes and hangs are
 // recorded instead of killing the campaign.
@@ -1388,20 +2260,18 @@ static void fz_case_run(struct fz_s * fz, const struct fz_cfg_s * cfg,
                         const char * ro_path, const struct fz_case_s * cs,
                         uint64_t case_seed, struct fz_result_s * result) {
     result->fails = 0;
+    result->notes = 0;
     result->detail[0] = 0;
 #if defined(_WIN32)
-    result->fails = fz_case_verify(fz, cfg, scan, case_path, ro_path, cs,
-                                   case_seed, result->detail);
+    fz_case_verify_r(fz, cfg, scan, case_path, ro_path, cs, case_seed, result);
 #else
     if (!fz->isolate) {
-        result->fails = fz_case_verify(fz, cfg, scan, case_path, ro_path, cs,
-                                       case_seed, result->detail);
+        fz_case_verify_r(fz, cfg, scan, case_path, ro_path, cs, case_seed, result);
         return;
     }
     int fds[2];
     if (pipe(fds)) {
-        result->fails = fz_case_verify(fz, cfg, scan, case_path, ro_path, cs,
-                                       case_seed, result->detail);
+        fz_case_verify_r(fz, cfg, scan, case_path, ro_path, cs, case_seed, result);
         return;
     }
     fflush(NULL);
@@ -1409,8 +2279,7 @@ static void fz_case_run(struct fz_s * fz, const struct fz_cfg_s * cfg,
     if (pid < 0) {
         close(fds[0]);
         close(fds[1]);
-        result->fails = fz_case_verify(fz, cfg, scan, case_path, ro_path, cs,
-                                       case_seed, result->detail);
+        fz_case_verify_r(fz, cfg, scan, case_path, ro_path, cs, case_seed, result);
         return;
     }
     if (0 == pid) {  // child
@@ -1418,8 +2287,7 @@ static void fz_case_run(struct fz_s * fz, const struct fz_cfg_s * cfg,
         fz_log_quiet_count_ = 0;
         jls_log_register(fz_log_quiet);  // suppress log flood in bulk runs
         struct fz_result_s r;
-        r.fails = fz_case_verify(fz, cfg, scan, case_path, ro_path, cs,
-                                 case_seed, r.detail);
+        fz_case_verify_r(fz, cfg, scan, case_path, ro_path, cs, case_seed, &r);
         ssize_t wr_rc = write(fds[1], &r, sizeof(r));
         (void) wr_rc;
         _exit(0);
@@ -1467,6 +2335,7 @@ static int32_t fz_run_case(struct fz_s * fz, uint64_t case_seed) {
     char pristine_path[600];
     char case_path[600];
     char ro_path[600];
+    char orig_path[600];  // --keep: the case before verification modified it
     struct fz_cfg_s cfg;
     struct fz_case_s cs;
     struct fz_result_s result;
@@ -1479,7 +2348,12 @@ static int32_t fz_run_case(struct fz_s * fz, uint64_t case_seed) {
     }
     fz_cfg_init(&cfg, cfg_id);
     fz_ref_fill(fz, &cfg);
-    if (fz_ensure_pristine(fz, &cfg)) {
+    // the first-use oracle self-test draws random numbers; restore the
+    // sequence so a --random repro matches a mid-campaign case
+    uint64_t seed_restore = random_seed;
+    int32_t ensure_rc = fz_ensure_pristine(fz, &cfg);
+    random_seed = seed_restore;
+    if (ensure_rc) {
         ++fz->fails[FZ_FAIL_GENERATE];
         ++fz->fail_count;
         return JLS_ERROR_UNSPECIFIED;  // generation/self-test failure is fatal
@@ -1489,6 +2363,7 @@ static int32_t fz_run_case(struct fz_s * fz, uint64_t case_seed) {
 
     snprintf(case_path, sizeof(case_path), "%s/case.jls", fz->workdir);
     snprintf(ro_path, sizeof(ro_path), "%s/case_ro.jls", fz->workdir);
+    snprintf(orig_path, sizeof(orig_path), "%s/case_orig.jls", fz->workdir);
     struct fz_scan_s case_scan = {0};
     if (fz_make_case(fz, &cfg, scan, pristine_path, case_path, &cs, &case_scan)) {
         printf("case create failed\n");
@@ -1497,7 +2372,8 @@ static int32_t fz_run_case(struct fz_s * fz, uint64_t case_seed) {
     }
     // write_prefix produces a distinct layout; verify against its own scan
     const struct fz_scan_s * vscan = (cs.mode == FZ_MODE_WRITE_PREFIX) ? &case_scan : scan;
-    if (fz_copy_truncate(case_path, ro_path, INT64_MAX)) {
+    if (fz_copy_truncate(case_path, ro_path, INT64_MAX)
+            || (fz->keep && fz_copy_truncate(case_path, orig_path, INT64_MAX))) {
         printf("case copy failed\n");
         fz_scan_free(&case_scan);
         return JLS_ERROR_IO;
@@ -1510,6 +2386,15 @@ static int32_t fz_run_case(struct fz_s * fz, uint64_t case_seed) {
     }
     fz_case_run(fz, &cfg, vscan, case_path, ro_path, &cs, case_seed, &result);
     uint32_t fails = result.fails;
+    for (uint32_t bit = 0; bit < FZ_NOTE_COUNT; ++bit) {
+        if (result.notes & (1U << bit)) {
+            ++fz->notes[bit];
+            if (fz->verbose || (fz->notes[bit] <= 3)) {  // a few repro seeds
+                printf("%20" PRIu64 " cfg=%2u %s NOTE %s:%s\n", case_seed, cfg_id,
+                       FZ_MODE_NAMES[cs.mode], FZ_NOTE_NAMES[bit], cs.desc);
+            }
+        }
+    }
 
     ++fz->case_count;
     if (fails) {
@@ -1530,6 +2415,9 @@ static int32_t fz_run_case(struct fz_s * fz, uint64_t case_seed) {
             }
         }
         printf(" ] %s\n", result.detail);
+        if (cs.desc[0]) {
+            printf("    mutation:%s\n", cs.desc);
+        }
         // the seed fully reproduces the case, but forced --cfg/--offset
         // change the random draw sequence so they must match this run
         printf("    repro: jls read_fuzzer --corrupt %s --random %" PRIu64,
@@ -1546,15 +2434,19 @@ static int32_t fz_run_case(struct fz_s * fz, uint64_t case_seed) {
             snprintf(keep_path, sizeof(keep_path), "%s/fail_%" PRIu64 ".jls",
                      fz->workdir, case_seed);
             remove(keep_path);
-            fz_copy_truncate(ro_path, keep_path, INT64_MAX);
+            fz_copy_truncate(orig_path, keep_path, INT64_MAX);
             printf("    kept: %s\n", keep_path);
         }
     } else if (fz->verbose) {
-        printf("PASS %s\n", result.detail);
+        printf("PASS %s%s\n", result.detail, cs.desc);
     }
     fz_scan_free(&case_scan);
     remove(case_path);
     remove(ro_path);
+    remove(orig_path);
+    char copy_path[600];  // resign modes: jls_copy output of a crashed child
+    snprintf(copy_path, sizeof(copy_path), "%s/case_copy.jls", fz->workdir);
+    remove(copy_path);
     return 0;
 }
 
@@ -1600,6 +2492,11 @@ static int fz_campaign(struct fz_s * fz) {
     for (uint32_t bit = 0; bit < FZ_FAIL_COUNT; ++bit) {
         if (fz->fails[bit]) {
             printf("    %-16s %" PRIu64 "\n", FZ_FAIL_NAMES[bit], fz->fails[bit]);
+        }
+    }
+    for (uint32_t bit = 0; bit < FZ_NOTE_COUNT; ++bit) {
+        if (fz->notes[bit]) {
+            printf("    note %-11s %" PRIu64 "\n", FZ_NOTE_NAMES[bit], fz->notes[bit]);
         }
     }
 
