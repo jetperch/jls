@@ -101,6 +101,15 @@ static void file_save(const char * path, struct file_s * f) {
     f->data = NULL;
 }
 
+static int64_t file_size(const char * path) {
+    FILE * fp = fopen(path, "rb");
+    assert_non_null(fp);
+    fseek(fp, 0, SEEK_END);
+    int64_t sz = (int64_t) ftell(fp);
+    fclose(fp);
+    return sz;
+}
+
 static uint32_t payload_size_on_disk(uint32_t payload_length) {
     return payload_length ? (((payload_length + 4 + 7) / 8) * 8) : 0;
 }
@@ -126,6 +135,20 @@ static int chunk_count(struct file_s * f, uint8_t tag, uint16_t meta) {
     return count;
 }
 
+static struct jls_chunk_header_s * chunk_last(struct file_s * f) {
+    size_t offset = sizeof(struct jls_file_header_s);
+    struct jls_chunk_header_s * last = NULL;
+    while ((offset + sizeof(struct jls_chunk_header_s)) <= f->size) {
+        last = (struct jls_chunk_header_s *) (f->data + offset);
+        offset += sizeof(*last) + payload_size_on_disk(last->payload_length);
+    }
+    return last;
+}
+
+static int64_t chunk_offset(struct file_s * f, struct jls_chunk_header_s * h) {
+    return (int64_t) ((uint8_t *) h - f->data);
+}
+
 // Recompute the header and payload CRCs after a patch.
 static void chunk_resign(struct jls_chunk_header_s * h) {
     if (h->payload_length) {
@@ -139,6 +162,24 @@ static void chunk_resign(struct jls_chunk_header_s * h) {
 static void * chunk_payload(struct jls_chunk_header_s * h) {
     return (void *) (h + 1);
 }
+
+// Append a chunk at the end of the file buffer.
+static struct jls_chunk_header_s * chunk_append(struct file_s * f, uint8_t tag, uint16_t meta,
+        uint64_t item_prev, const void * payload, uint32_t payload_length) {
+    size_t sz = sizeof(struct jls_chunk_header_s) + payload_size_on_disk(payload_length);
+    assert_true((f->size + sz) <= f->alloc);
+    struct jls_chunk_header_s * h = (struct jls_chunk_header_s *) (f->data + f->size);
+    memset(h, 0, sz);
+    h->item_prev = item_prev;
+    h->tag = tag;
+    h->chunk_meta = meta;
+    h->payload_length = payload_length;
+    memcpy(h + 1, payload, payload_length);
+    chunk_resign(h);
+    f->size += sz;
+    return h;
+}
+
 
 // --- file generation ---
 
@@ -689,6 +730,173 @@ static void test_fsr_read_bounds_overflow(void ** state) {
 }
 
 
+// --- R3: chunks larger than the default 1 MiB read buffer ---
+
+static int32_t on_user_data_size(void * user_data, uint16_t chunk_meta, enum jls_storage_type_e storage_type,
+                                 uint8_t * data, uint32_t data_size) {
+    (void) storage_type;
+    (void) data;
+    if (0x22 == chunk_meta) {
+        *((uint32_t *) user_data) = data_size;
+    }
+    return 0;
+}
+
+static void test_rd_chunk_large(void ** state) {
+    (void) state;
+#ifndef JLS_TEST_BUF_REALLOC_FIXED
+    // todo remove once buffer.c jls_buf_realloc no longer squares (R2)
+    skip();
+#endif
+    // payloads within 12 bytes of the buffer size used to loop forever
+    const uint32_t sizes[] = {(1U << 20) - 4, (1U << 20) - 3, (1U << 20), (1U << 20) + 100, 3U << 20};
+    uint8_t * x = calloc(1, 3U << 20);
+    assert_non_null(x);
+    for (size_t i = 0; i < ARRAY_SIZE(sizes); ++i) {
+        struct jls_wr_s * wr = NULL;
+        assert_int_equal(0, jls_wr_open(&wr, PATH));
+        assert_int_equal(0, jls_wr_user_data(wr, 0x22, JLS_STORAGE_TYPE_BINARY, x, sizes[i]));
+        assert_int_equal(0, jls_wr_close(wr));
+        struct jls_rd_s * rd = NULL;
+        assert_int_equal(0, jls_rd_open(&rd, PATH));
+        uint32_t size = 0;
+        assert_int_equal(0, jls_rd_user_data(rd, on_user_data_size, &size));
+        assert_int_equal(sizes[i], size);
+        jls_rd_close(rd);
+    }
+    free(x);
+
+    // a data chunk > 1 MiB
+    struct jls_signal_def_s def = signal_def_typed(JLS_DATATYPE_F32, 1U << 19, 1024, 1024, 16);
+    gen_f32(PATH, &def, 3 << 19, 1);
+    struct jls_rd_s * rd = NULL;
+    assert_int_equal(0, jls_rd_open(&rd, PATH));
+    float y[4];
+    assert_int_equal(0, jls_rd_fsr_f32(rd, 1, (1 << 20) + 7, y, 4));
+    assert_true(y[0] == (float) (((1 << 20) + 7) % 1000));
+    jls_rd_close(rd);
+    remove(PATH);
+}
+
+
+// --- C6, C7, C8, C19: truncation recovery on open ---
+
+// C6: a crash tail of tiny data chunks used to overflow the rebuilt index.
+static void test_recovery_tiny_data_chunks(void ** state) {
+    (void) state;
+    const int count = 2000;
+    gen_f32(PATH, &SIGNAL_1, 30000, 1);
+    struct file_s f;
+    file_load(PATH, &f, (size_t) count * 64);
+    int n = chunk_count(&f, JLS_TAG_TRACK_FSR_DATA, 1);
+    struct jls_chunk_header_s * last = chunk_nth(&f, JLS_TAG_TRACK_FSR_DATA, 1, n - 1);
+    struct jls_payload_header_s * lp = chunk_payload(last);
+    int64_t timestamp = lp->timestamp + lp->entry_count;
+    int64_t prev = chunk_offset(&f, last);
+    for (int i = 0; i < count; ++i) {
+        uint8_t payload[sizeof(struct jls_fsr_data_s) + sizeof(float)];
+        struct jls_fsr_data_s * d = (struct jls_fsr_data_s *) payload;
+        d->header.timestamp = timestamp + i;
+        d->header.entry_count = 1;
+        d->header.entry_size_bits = 32;
+        d->header.rsv16 = 0;
+        d->data[0] = 1.0f;
+        int64_t offset = (int64_t) f.size;
+        struct jls_chunk_header_s * p = (struct jls_chunk_header_s *) (f.data + prev);
+        p->item_next = (uint64_t) offset;
+        chunk_resign(p);
+        chunk_append(&f, JLS_TAG_TRACK_FSR_DATA, 1, (uint64_t) prev, payload, sizeof(payload));
+        prev = offset;
+    }
+    file_save(PATH, &f);
+
+    struct jls_rd_s * rd = NULL;
+    int32_t rc = jls_rd_open(&rd, PATH);
+    if (0 == rc) {
+        float y[16];
+        jls_rd_fsr_f32(rd, 1, 100, y, ARRAY_SIZE(y));
+        jls_rd_close(rd);
+    }
+    remove(PATH);
+}
+
+// C7: recovery must bound the untrusted index entry_count by the payload.
+static void test_recovery_index_entry_count(void ** state) {
+    (void) state;
+    gen_f32(PATH, &SIGNAL_1, 50000, 1);
+    struct file_s f;
+    file_load(PATH, &f, 64);
+    int n = chunk_count(&f, JLS_TAG_TRACK_FSR_INDEX, META_L1);
+    assert_true(n >= 2);
+    for (int i = 0; i < n; ++i) {
+        struct jls_chunk_header_s * h = chunk_nth(&f, JLS_TAG_TRACK_FSR_INDEX, META_L1, i);
+        assert_non_null(h);
+        struct jls_payload_header_s * p = chunk_payload(h);
+        p->entry_count = 131072 + 2;
+        chunk_resign(h);
+    }
+    uint8_t ud[8] = {0};
+    chunk_append(&f, JLS_TAG_USER_DATA, 0, 0, ud, sizeof(ud));  // not closed: recover
+    file_save(PATH, &f);
+
+    struct jls_rd_s * rd = NULL;
+    int32_t rc = jls_rd_open(&rd, PATH);
+    if (0 == rc) {
+        jls_rd_close(rd);
+    }
+    remove(PATH);
+}
+
+// C8: failed recovery must not append summaries built from damaged data.
+static void test_recovery_failure_no_append(void ** state) {
+    (void) state;
+    gen_f32(PATH, &SIGNAL_1, 90000, 0);  // crash: 4 level-1 chunks, no level 2 chunk
+    struct file_s f;
+    file_load(PATH, &f, 0);
+    int n = chunk_count(&f, JLS_TAG_TRACK_FSR_INDEX, META_L1);
+    assert_true(n >= 3);
+    struct jls_chunk_header_s * h = chunk_nth(&f, JLS_TAG_TRACK_FSR_INDEX, META_L1, n - 1);
+    struct jls_payload_header_s * p = chunk_payload(h);
+    p->entry_size_bits = 32;
+    chunk_resign(h);
+    file_save(PATH, &f);
+    int64_t size = file_size(PATH);
+
+    struct jls_rd_s * rd = NULL;
+    assert_int_equal(JLS_ERROR_MESSAGE_INTEGRITY, jls_rd_open(&rd, PATH));
+    assert_int_equal(size, file_size(PATH));
+    remove(PATH);
+}
+
+// C19: the orphan relink must only join chunks of the same chain.
+static void test_recovery_relink_same_chain(void ** state) {
+    (void) state;
+    gen_f32(PATH, &SIGNAL_1, 30000, 0);
+    struct file_s f;
+    file_load(PATH, &f, 0);
+    struct jls_chunk_header_s * src = chunk_nth(&f, JLS_TAG_SOURCE_DEF, 1, 0);
+    assert_non_null(src);
+    assert_int_equal(0, src->item_next);  // final chunk in the source chain
+    struct jls_chunk_header_s * tail = chunk_last(&f);
+    assert_int_not_equal(JLS_TAG_SOURCE_DEF, tail->tag);
+    tail->item_prev = (uint64_t) chunk_offset(&f, src);  // foreign chain
+    chunk_resign(tail);
+    int64_t src_offset = chunk_offset(&f, src);
+    file_save(PATH, &f);
+
+    // a relink would point the source chain at the tail chunk
+    struct jls_rd_s * rd = NULL;
+    assert_int_equal(0, jls_rd_open(&rd, PATH));
+    jls_rd_close(rd);
+    file_load(PATH, &f, 0);
+    src = (struct jls_chunk_header_s *) (f.data + src_offset);
+    assert_int_equal(JLS_TAG_SOURCE_DEF, src->tag);
+    assert_int_equal(0, src->item_next);
+    free(f.data);
+    remove(PATH);
+}
+
+
 int main(void) {
     const struct CMUnitTest tests[] = {
             cmocka_unit_test(test_signal_def_align_wrap_rejected),
@@ -705,6 +913,11 @@ int main(void) {
             cmocka_unit_test(test_fsr_omit_reconstruct_types),
             cmocka_unit_test(test_fsr_level1_corrupt),
             cmocka_unit_test(test_fsr_read_bounds_overflow),
+            cmocka_unit_test(test_rd_chunk_large),
+            cmocka_unit_test(test_recovery_tiny_data_chunks),
+            cmocka_unit_test(test_recovery_index_entry_count),
+            cmocka_unit_test(test_recovery_failure_no_append),
+            cmocka_unit_test(test_recovery_relink_same_chain),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);

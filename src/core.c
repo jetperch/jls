@@ -105,6 +105,15 @@ static inline bool range_contains(int64_t base, int64_t count, int64_t x) {
     return (x >= base) && (count > 0) && (((uint64_t) x - (uint64_t) base) < (uint64_t) count);
 }
 
+// On-disk payload size (payload + pad + CRC), matching raw.c.
+// todo replace with jls_raw_payload_size_on_disk() once raw.h exports it.
+static int64_t raw_payload_size_on_disk(uint32_t payload_size) {
+    if (!payload_size) {
+        return 0;
+    }
+    return (((int64_t) payload_size + 4 + 7) / 8) * 8;
+}
+
 int32_t jls_core_f64_buf_alloc(size_t length, struct jls_core_f64_buf_s ** buf) {
     if (*buf) {
         if ((*buf)->alloc_length >= (size_t) length) {
@@ -508,11 +517,27 @@ int32_t jls_core_wr_end(struct jls_core_s * self) {
 }
 
 int32_t jls_core_rd_chunk(struct jls_core_s * self) {
-    while (1) {
+    // at most one grow: the header gives the exact on-disk size
+    for (int attempt = 0; attempt < 2; ++attempt) {
         self->chunk_cur.offset = jls_raw_chunk_tell(self->raw);
-        int32_t rc = jls_raw_rd(self->raw, &self->chunk_cur.hdr, (uint32_t) self->buf->alloc_size, self->buf->start);
+        size_t alloc_size = self->buf->alloc_size;
+        uint32_t rd_max = (alloc_size > UINT32_MAX) ? UINT32_MAX : (uint32_t) alloc_size;
+        int32_t rc = jls_raw_rd(self->raw, &self->chunk_cur.hdr, rd_max, self->buf->start);
         if (rc == JLS_ERROR_TOO_BIG) {
-            ROE(jls_buf_realloc(self->buf, self->chunk_cur.hdr.payload_length));
+            if (attempt) {
+                break;
+            }
+            int64_t sz = raw_payload_size_on_disk(self->chunk_cur.hdr.payload_length);
+            int64_t fend = jls_raw_backend(self->raw)->fend;
+            if ((self->chunk_cur.offset + (int64_t) sizeof(struct jls_chunk_header_s) + sz) > fend) {
+                // the read would fail anyway: never allocate for a payload past EOF
+                JLS_LOGW("chunk at %" PRIi64 " payload past end of file", self->chunk_cur.offset);
+                return JLS_ERROR_IO;
+            }
+            if ((uint64_t) sz > SIZE_MAX) {
+                return JLS_ERROR_NOT_ENOUGH_MEMORY;
+            }
+            ROE(jls_buf_realloc(self->buf, (size_t) sz));
         } else if (rc == 0) {
             self->buf->cur = self->buf->start;
             self->buf->length = self->chunk_cur.hdr.payload_length;
@@ -522,6 +547,8 @@ int32_t jls_core_rd_chunk(struct jls_core_s * self) {
             return rc;
         }
     }
+    JLS_LOGW("chunk at %" PRIi64 " too big after realloc", self->chunk_cur.offset);
+    return JLS_ERROR_TOO_BIG;
 }
 
 int32_t jls_core_rd_chunk_validate(struct jls_core_s * self, uint8_t tag, uint16_t chunk_meta) {
@@ -589,6 +616,22 @@ int32_t jls_core_rd_chunk_end(struct jls_core_s * self) {
 }
 
 
+// The chain class of a chunk: chunks link item_prev/item_next only within a class.
+static uint32_t chunk_chain_class(const struct jls_chunk_header_s * hdr) {
+    if (hdr->tag & JLS_TRACK_TAG_FLAG) {
+        switch (jls_core_tag_parse_track_chunk(hdr->tag)) {
+            case JLS_TRACK_CHUNK_DEF:  // intentional fall-through
+            case JLS_TRACK_CHUNK_HEAD: return JLS_TAG_SIGNAL_DEF;
+            default: return (((uint32_t) hdr->chunk_meta) << 8) | hdr->tag;  // per signal, track & level
+        }
+    }
+    return hdr->tag;  // SOURCE_DEF, SIGNAL_DEF, USER_DATA
+}
+
+static bool chunk_same_chain(const struct jls_chunk_header_s * a, const struct jls_chunk_header_s * b) {
+    return chunk_chain_class(a) == chunk_chain_class(b);
+}
+
 int32_t jls_core_truncate_tail(struct jls_core_s * self, int64_t pos, struct jls_core_chunk_s * tail) {
     // remove the partial write after the last valid chunk
     ROE(jls_raw_chunk_seek(self->raw, pos));
@@ -607,6 +650,7 @@ int32_t jls_core_truncate_tail(struct jls_core_s * self, int64_t pos, struct jls
     if (tail_prev && (tail_prev < pos)
             && (0 == jls_raw_chunk_seek(self->raw, tail_prev))
             && (0 == jls_core_rd_chunk(self))
+            && chunk_same_chain(&self->chunk_cur.hdr, &tail->hdr)
             && (0 == self->chunk_cur.hdr.item_next)) {
         JLS_LOGI("relink orphan final chunk at %" PRIi64, pos);
         self->chunk_cur.hdr.item_next = (uint64_t) pos;
@@ -821,7 +865,9 @@ int32_t jls_core_scan_fsr_sample_id(struct jls_core_s * self) {
         }
         if (jls_raw_chunk_seek(self->raw, offset)
                 || jls_core_rd_chunk(self)
-                || (self->chunk_cur.hdr.tag != JLS_TAG_TRACK_FSR_DATA)) {
+                || (self->chunk_cur.hdr.tag != JLS_TAG_TRACK_FSR_DATA)
+                || (self->chunk_cur.hdr.chunk_meta != signal_id)
+                || (self->buf->length < sizeof(struct jls_fsr_data_s))) {
             // interior damage: offline jls_repair required
             JLS_LOGW("jls_core_scan_fsr_sample_id signal %d: data head unreadable", (int) signal_id);
             return JLS_ERROR_MESSAGE_INTEGRITY;
@@ -1601,16 +1647,58 @@ int32_t jls_core_repair_chain(struct jls_core_s * self, int64_t offset, uint8_t 
     return 0;
 }
 
+// Discard the rebuild without writing: closing normally would append
+// summaries built from damaged data to the user's file.
+static void repair_fsr_abort(struct jls_core_signal_s * signal_info) {
+    struct jls_core_fsr_s * fsr = signal_info->track_fsr;
+    if (NULL == fsr) {
+        return;
+    }
+    jls_core_fsr_sample_buffer_free(fsr);  // no final data chunk
+    for (size_t i = 1; i < JLS_SUMMARY_LEVEL_COUNT; ++i) {
+        if (fsr->level[i]) {  // empty levels write nothing on close
+            fsr->level[i]->index->header.entry_count = 0;
+            fsr->level[i]->summary->header.entry_count = 0;
+        }
+    }
+    jls_fsr_close(fsr);
+    signal_info->track_fsr = NULL;
+}
+
+// Room for one more index entry plus entries summary entries at level.
+// summary1/summaryN append without bounds checks, so damaged chains
+// (short chunks, partial summaries) must stop before they overflow.
+static bool repair_fsr_has_room(struct jls_core_fsr_s * fsr, int level, uint64_t entries) {
+    struct jls_core_fsr_level_s * lvl = fsr->level[level];
+    if (NULL == lvl) {
+        return entries <= fsr->parent->signal_def.entries_per_summary;  // allocated on demand
+    }
+    return (lvl->index->header.entry_count < lvl->index_entries)
+           && ((lvl->summary->header.entry_count + entries) <= lvl->summary_entries);
+}
+
+// Validate a loaded data, index or summary payload against its capacity.
+// stored_bits is the minimum on-disk entry size, see summary_payload_min().
+static bool repair_fsr_payload_valid(struct jls_core_s * self, uint16_t entry_size_bits, uint16_t stored_bits,
+                                     uint32_t entries_max) {
+    struct jls_payload_header_s * hdr = (struct jls_payload_header_s *) self->buf->start;
+    return (self->buf->length >= sizeof(*hdr))
+           && (hdr->entry_size_bits == entry_size_bits)
+           && (hdr->entry_count <= entries_max)
+           && ((sizeof(*hdr) + ((uint64_t) hdr->entry_count * stored_bits + 7) / 8) <= self->buf->length);
+}
+
 int32_t jls_core_repair_fsr(struct jls_core_s * self, uint16_t signal_id) {
     ROE(jls_core_signal_validate_typed(self, signal_id, JLS_SIGNAL_TYPE_FSR));
     struct jls_core_signal_s * signal_info = &self->signal_info[signal_id];
     signal_info->parent = self;
     ROE(jls_fsr_open(&signal_info->track_fsr, signal_info));
-    struct jls_core_track_s * track = &signal_info->tracks[JLS_SIGNAL_TYPE_FSR];
+    struct jls_core_fsr_s * fsr = signal_info->track_fsr;
+    struct jls_core_track_s * track = &signal_info->tracks[JLS_TRACK_TYPE_FSR];
     track->parent = signal_info;
 
     // find first non-empty level
-    int64_t * offsets = signal_info->tracks[JLS_TRACK_TYPE_FSR].head_offsets;
+    int64_t * offsets = track->head_offsets;
     int level = JLS_SUMMARY_LEVEL_COUNT - 1;
     for (; (level > 0); --level) {
         if (offsets[level]) {
@@ -1623,6 +1711,10 @@ int32_t jls_core_repair_fsr(struct jls_core_s * self, uint16_t signal_id) {
     }
 
     struct jls_signal_def_s * signal_def = &signal_info->signal_def;
+    const uint16_t index_bits = sizeof(int64_t) * 8;
+    const uint16_t summary_bits = (uint16_t) (JLS_SUMMARY_FSR_COUNT
+            * jls_core_fsr_summary_entry_size_bits(signal_def->data_type));
+    const uint8_t sample_bits = jls_datatype_parse_size(signal_def->data_type);
     int64_t offset_index_next = 0;
     int64_t offset = offsets[level];
     struct jls_core_chunk_s index_head;
@@ -1631,22 +1723,26 @@ int32_t jls_core_repair_fsr(struct jls_core_s * self, uint16_t signal_id) {
     while (level > 0) {
         JLS_LOGI("repair_fsr signal_id %d, level %d, offset %" PRIi64, (int) signal_id, (int) level, offset);
         // read into the current level's buffers; the level above accumulates the rebuilt summary
-        struct jls_core_fsr_level_s * lvl = signal_info->track_fsr->level[level];
+        struct jls_core_fsr_level_s * lvl = fsr->level[level];
         if (NULL == lvl) {
-            if (jls_core_fsr_summary_level_alloc(signal_info->track_fsr, (uint8_t) level)) {
+            if (jls_core_fsr_summary_level_alloc(fsr, (uint8_t) level)) {
                 break;
             }
-            lvl = signal_info->track_fsr->level[level];
+            lvl = fsr->level[level];
         }
         uint16_t meta = (uint16_t) ((signal_id & SIGNAL_MASK) | (level << 12));
         size_t index_sz = sizeof(struct jls_fsr_index_s) + lvl->index_entries * sizeof(int64_t);
         size_t summary_sz = sizeof(struct jls_fsr_f32_summary_s)
-                + ((size_t) lvl->summary_entries * JLS_SUMMARY_FSR_COUNT
-                   * jls_core_fsr_summary_entry_size_bits(signal_def->data_type)) / 8;
+                + ((size_t) lvl->summary_entries * summary_bits) / 8;
 
         if (jls_core_rd_chunk_validate(self, JLS_TAG_TRACK_FSR_INDEX, meta)
                 || (self->chunk_cur.hdr.payload_length > index_sz)) {  // read index
             break;
+        }
+        if (!repair_fsr_payload_valid(self, index_bits, index_bits, lvl->index_entries)) {
+            JLS_LOGW("repair_fsr signal_id %d: invalid index at %" PRIi64, (int) signal_id, self->chunk_cur.offset);
+            repair_fsr_abort(signal_info);
+            return JLS_ERROR_MESSAGE_INTEGRITY;
         }
         index_head = self->chunk_cur;
         memcpy(lvl->index, self->buf->start, self->chunk_cur.hdr.payload_length);
@@ -1655,25 +1751,27 @@ int32_t jls_core_repair_fsr(struct jls_core_s * self, uint16_t signal_id) {
                 || (self->chunk_cur.hdr.payload_length > summary_sz)) {  // read summary
             break;
         }
+        if (!repair_fsr_payload_valid(self, summary_bits, JLS_SUMMARY_FSR_COUNT * sizeof(float) * 8,
+                                      lvl->summary_entries)) {
+            JLS_LOGW("repair_fsr signal_id %d: invalid summary at %" PRIi64, (int) signal_id, self->chunk_cur.offset);
+            repair_fsr_abort(signal_info);
+            return JLS_ERROR_MESSAGE_INTEGRITY;
+        }
         track->index_head[level] = index_head;
         offset_index_next = index_head.hdr.item_next;
         track->summary_head[level] = self->chunk_cur;
         memcpy(lvl->summary, self->buf->start, self->chunk_cur.hdr.payload_length);
 
         struct jls_fsr_index_s * r = lvl->index;
-        if (r->header.entry_size_bits != (sizeof(r->offsets[0]) * 8)) {
-            JLS_LOGE("invalid FSR index entry size: %d bits", (int) r->header.entry_size_bits);
-            return JLS_ERROR_PARAMETER_INVALID;
-        }
-        size_t sz = sizeof(r->header) + r->header.entry_count * sizeof(r->offsets[0]);
-        if (sz > index_sz) {
-            JLS_LOGE("invalid payload length");
-            return JLS_ERROR_PARAMETER_INVALID;
-        }
-
         jls_raw_seek_end(self->raw);
-        if (!skip_summary && jls_core_fsr_summaryN(signal_info->track_fsr, (uint8_t) (level + 1), offset)) {
-            JLS_LOGE("repair_fsr signal_id %d could not create summary - cannot repair this track", (int) signal_id);
+        uint64_t summary_entries = lvl->summary->header.entry_count / signal_def->summary_decimate_factor;
+        if (!skip_summary && ((level + 1) < JLS_SUMMARY_LEVEL_COUNT)) {
+            if (!repair_fsr_has_room(fsr, level + 1, summary_entries)) {
+                JLS_LOGW("repair_fsr signal_id %d level %d: inconsistent summaries", (int) signal_id, level);
+                break;
+            } else if (jls_core_fsr_summaryN(fsr, (uint8_t) (level + 1), offset)) {
+                JLS_LOGE("repair_fsr signal_id %d could not create summary - cannot repair this track", (int) signal_id);
+            }
         }
         skip_summary = false;
 
@@ -1693,18 +1791,19 @@ int32_t jls_core_repair_fsr(struct jls_core_s * self, uint16_t signal_id) {
                 }
             } else {
                 JLS_LOGE("Empty index.  Cannot repair.");
+                repair_fsr_abort(signal_info);
                 return JLS_ERROR_NOT_SUPPORTED;
             }
         }
     }
 
     // update level 0 (data)
-    if (jls_core_fsr_sample_buffer_alloc(signal_info->track_fsr)) {
+    if (jls_core_fsr_sample_buffer_alloc(fsr)) {
         signal_info->track_fsr = NULL;  // freed by the failed alloc
         return JLS_ERROR_NOT_ENOUGH_MEMORY;
     }
     size_t data_sz = sizeof(struct jls_fsr_data_s)
-            + ((size_t) signal_def->samples_per_data * jls_datatype_parse_size(signal_def->data_type)) / 8;
+            + ((size_t) signal_def->samples_per_data * sample_bits) / 8;
     while (offset) {
         if (jls_raw_chunk_seek(self->raw, offset)
                 || jls_core_rd_chunk_validate(self, JLS_TAG_TRACK_FSR_DATA, (uint16_t) signal_id)
@@ -1712,22 +1811,28 @@ int32_t jls_core_repair_fsr(struct jls_core_s * self, uint16_t signal_id) {
             break;
         }
         struct jls_fsr_data_s * d = (struct jls_fsr_data_s *) self->buf->start;
-        if (d->header.entry_count > signal_def->samples_per_data) {
-            JLS_LOGW("repair_fsr signal_id %d invalid entry_count %" PRIu32,
-                     (int) signal_id, d->header.entry_count);
+        if ((self->buf->length < sizeof(d->header))
+                || (0 == d->header.entry_count)
+                || (d->header.entry_count > signal_def->samples_per_data)
+                || !repair_fsr_payload_valid(self, sample_bits, sample_bits, signal_def->samples_per_data)) {
+            JLS_LOGW("repair_fsr signal_id %d invalid data chunk at %" PRIi64, (int) signal_id, offset);
             break;
         }
-        memcpy(signal_info->track_fsr->data, self->buf->start, self->buf->length);
-        JLS_LOGI("repair_fsr signal_id %d, level %d, offset %" PRIi64 " sample_id %" PRIi64 " to %" PRIi64 " data[0]=%f",
+        uint64_t summary_entries = d->header.entry_count / signal_def->sample_decimate_factor;
+        if (!skip_summary && !repair_fsr_has_room(fsr, 1, summary_entries)) {
+            JLS_LOGW("repair_fsr signal_id %d: inconsistent data chunk at %" PRIi64, (int) signal_id, offset);
+            break;
+        }
+        memcpy(fsr->data, self->buf->start, self->buf->length);
+        JLS_LOGI("repair_fsr signal_id %d, level %d, offset %" PRIi64 " sample_id %" PRIi64 " to %" PRIi64,
                  (int) signal_id, (int) level, offset,
-                 signal_info->track_fsr->data->header.timestamp,
-                 signal_info->track_fsr->data->header.timestamp + signal_info->track_fsr->data->header.entry_count,
-                 signal_info->track_fsr->data->data[0]);
-        signal_info->track_fsr->data_length = signal_info->track_fsr->data->header.entry_count;
+                 fsr->data->header.timestamp,
+                 fsr->data->header.timestamp + fsr->data->header.entry_count);
+        fsr->data_length = fsr->data->header.entry_count;
 
         // summary1 may flush; all repair writes must append at the file end
         jls_raw_seek_end(self->raw);
-        if (!skip_summary && jls_core_fsr_summary1(signal_info->track_fsr, offset)) {
+        if (!skip_summary && jls_core_fsr_summary1(fsr, offset)) {
             JLS_LOGW("could not create summary - repair may not work");
         }
         skip_summary = false;
@@ -1736,12 +1841,12 @@ int32_t jls_core_repair_fsr(struct jls_core_s * self, uint16_t signal_id) {
         }
         offset = (int64_t) self->chunk_cur.hdr.item_next;
     }
-    jls_core_fsr_sample_buffer_free(signal_info->track_fsr);
+    jls_core_fsr_sample_buffer_free(fsr);
 
     JLS_LOGI("repair_fsr signal_id %d finalizing", (int) signal_id);
     jls_raw_seek_end(self->raw);
 
-    ROE(jls_fsr_close(signal_info->track_fsr));
     signal_info->track_fsr = NULL;
+    ROE(jls_fsr_close(fsr));
     return 0;
 }

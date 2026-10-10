@@ -238,7 +238,17 @@ int32_t jls_track_repair_pointers(struct jls_core_track_s * track) {
         } else {
             index_chunk_next = core->chunk_cur;
             offset_descend_next = 0;
-            if (JLS_TRACK_TYPE_FSR == track->track_type) {
+            // entry_count is untrusted: it must fit the payload, like data_index_backstep
+            struct jls_payload_header_s * hdr = (struct jls_payload_header_s *) core->buf->start;
+            uint64_t entry_sz = (JLS_TRACK_TYPE_FSR == track->track_type)
+                    ? sizeof(((struct jls_fsr_index_s *) 0)->offsets[0])
+                    : sizeof(((struct jls_index_s *) 0)->entries[0]);
+            bool index_valid = (core->buf->length >= sizeof(*hdr))
+                    && ((sizeof(*hdr) + hdr->entry_count * entry_sz) <= core->buf->length);
+            if (!index_valid) {
+                JLS_LOGW("repair signal_id %d track %d: invalid index at %" PRIi64,
+                         signal_id, (int) track->track_type, index_chunk_next.offset);
+            } else if (JLS_TRACK_TYPE_FSR == track->track_type) {
                 struct jls_fsr_index_s * r = (struct jls_fsr_index_s *) core->buf->start;
                 if (r->header.entry_count > 0) {
                     offset_descend_next = r->offsets[r->header.entry_count - 1];
@@ -249,7 +259,7 @@ int32_t jls_track_repair_pointers(struct jls_core_track_s * track) {
                     offset_descend_next = r->entries[r->header.entry_count - 1].offset;
                 }
             }
-            if (jls_core_rd_chunk_validate(core, summary_tag, meta)) {
+            if (!index_valid || jls_core_rd_chunk_validate(core, summary_tag, meta)) {
                 descend = true;
             } else {
                 index_chunk = index_chunk_next;
