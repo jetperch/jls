@@ -154,7 +154,19 @@ JLS_API int32_t jls_rd_fsr_f32(struct jls_rd_s * self, uint16_t signal_id, int64
  *      of float64 type (8 bytes).
  *      This argument allows efficient computation over many consecutive
  *      windows, as is common for displaying waveforms.
- * @return 0 or error code.
+ * @return 0 or error code.  JLS_ERROR_PARAMETER_INVALID when the
+ *      arguments are invalid or start_sample_id + increment * data_length
+ *      exceeds the signal length.  JLS_ERROR_MESSAGE_INTEGRITY when the
+ *      file data, index or summaries are corrupt.
+ *
+ * Non-finite samples (NaN, +/-inf) are ignored, matching the summaries
+ * the writer computes.  A window without any finite sample reports NaN
+ * for all four statistics.  Integer signals with a fixed-point q scale
+ * each sample by 2^-q, see JLS_DATATYPE_DEF.
+ *
+ * Summary entries do not record their finite sample count.  When
+ * statistics use summaries, an entry that contains some non-finite
+ * samples contributes with the weight of its full sample count.
  *
  * For data_length 1, the statistics are sample-accurate.  For
  * larger data_lengths, the external boundaries for start and end
@@ -172,7 +184,9 @@ JLS_API int32_t jls_rd_fsr_statistics(struct jls_rd_s * self, uint16_t signal_id
  *
  * @param user_data The arbitrary user data.
  * @param annotation The annotation which only remains valid for the duration
- *      of the call.
+ *      of the call.  It points into the reader's internal buffer, so any
+ *      reader call made from within the callback also invalidates it.
+ *      Copy what you need first.
  * @return 0 to continue iteration or any other value to stop.
  * @see jls_rd_annotations
  */
@@ -199,7 +213,10 @@ JLS_API int32_t jls_rd_annotations(struct jls_rd_s * self, uint16_t signal_id, i
  * @param user_data The arbitrary user data.
  * @param chunk_meta The chunk meta value.
  * @param storage_type The data storage type.
- * @param data The data.
+ * @param data The data, which only remains valid for the duration of the
+ *      call.  It points into the reader's internal buffer, so any reader
+ *      call made from within the callback also invalidates it.
+ *      Copy what you need first.
  * @param data_size The size of data in bytes.
  * @return 0 to continue iteration or any other value to stop.
  * @see jls_rd_user_data
@@ -225,6 +242,9 @@ JLS_API int32_t jls_rd_user_data(struct jls_rd_s * self, jls_rd_user_data_cbk_fn
  *
  * @param user_data The arbitrary user data.
  * @param utc The array of utc entries, which are sample_id / timestamp pairs.
+ *      The array only remains valid for the duration of the call.  It may
+ *      point into the reader's internal buffer, so any reader call made
+ *      from within the callback also invalidates it.
  * @param size The number of utc entries for this callback.
  * @return 0 to continue iteration or any other value to stop.
  * @see jls_rd_annotations
@@ -252,7 +272,11 @@ JLS_API int32_t jls_rd_utc(struct jls_rd_s * self, uint16_t signal_id, int64_t s
  *
  * @param self The instance
  * @param signal_id The signal id.
- * @return The number of entries in this instance.
+ * @return The number of entries in this instance, or 0 on error.
+ *
+ * The time map loads on first use.  UTC entries whose sample_id or
+ * timestamp does not increase are omitted.  A failed load is not cached:
+ * the next time map call retries it and returns the error again.
  */
 JLS_API size_t jls_rd_tmap_length(struct jls_rd_s * self, uint16_t signal_id);
 
