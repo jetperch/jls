@@ -8,6 +8,19 @@ This file contains the list of changes made to the JLS project.
 
 2026 Oct 10
 
+**BREAKING CHANGE: pyjls Writer.fsr_omit_data(signal_id, enable) was
+inverted and is now fixed.**  Previously, `enable=True` disabled data
+omission and `enable=False` enabled it, the opposite of the documented
+behavior and of the C API.  Now `enable=True` omits constant data chunks
+and `enable=False` writes all data chunks.  If your code passed `False`
+to enable omission, change it to `True`.  Omission only affects data
+types of 8 bits or less (u1, u4, u8, i4, i8), and readers reconstruct
+omitted data from the summaries, so existing files read the same.  The
+C API, jls_wr_fsr_omit_data() and jls_twr_fsr_omit_data(), is unchanged.
+
+* Fixed the inverted Writer.fsr_omit_data() enable argument (see above).
+  Corrected the jls_twr_fsr_omit_data() documentation, which said these
+  data types are omitted regardless of the setting.
 * Fixed a crash on calling Writer.close() or Reader.close() twice, or on
   using a Writer or Reader after close().  close() freed the native handle
   but kept it, so the interpreter crashed with a segmentation fault.  A

@@ -509,9 +509,19 @@ cdef class Writer:
         _handle_rc('fsr', rc)
 
     def fsr_omit_data(self, signal_id, enable):
+        """Omit constant level 0 data chunks from an FSR signal.
+
+        :param signal_id: The FSR signal id.
+        :param enable: True to omit constant data chunks, False to
+            write all data chunks (default).
+        :raise: On error.
+
+        See jls_twr_fsr_omit_data() for the data types this affects.
+        On read, omitted data is reconstructed from the summaries.
+        """
         cdef c_jls.jls_twr_s * wr = self._wr_get()
         cdef uint16_t signal_id_u16
-        cdef uint32_t enable_u32 = 0 if bool(enable) else 1
+        cdef uint32_t enable_u32 = 1 if bool(enable) else 0
         cdef int32_t rc
         signal_id_u16 = signal_id
         rc = c_jls.jls_twr_fsr_omit_data(wr, signal_id_u16, enable_u32)

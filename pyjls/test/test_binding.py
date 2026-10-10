@@ -315,6 +315,26 @@ class TestBinding(unittest.TestCase):
             self._write_fsr_100(w)
             w.signal_def(4, source_id=1, signal_type=SignalType.VSR, name='vsr', units='A')
 
+    def _fsr_omit_size(self, enable):
+        # Constant u8 data, so every chunk can be omitted when enabled.
+        with Writer(self._path) as w:
+            w.source_def(source_id=1, name='n')
+            w.signal_def(3, source_id=1, sample_rate=100000, data_type='u8', samples_per_data=1000)
+            if enable is not None:
+                w.fsr_omit_data(3, enable)
+            for sample_id in range(0, 200000, 1000):
+                w.fsr(3, sample_id, np.full(1000, 7, dtype=np.uint8))
+        with Reader(self._path) as r:
+            d = r.fsr(3, 0, r.signals[3].length)
+        self.assertEqual(200000, len(d))
+        np.testing.assert_equal(7, d)
+        return os.path.getsize(self._path)
+
+    def test_fsr_omit_data(self):
+        size_default = self._fsr_omit_size(None)
+        self.assertEqual(size_default, self._fsr_omit_size(False))
+        self.assertLess(self._fsr_omit_size(True), size_default // 10)
+
     def test_writer_signal_id_invalid(self):
         # signal_id values that fit uint16 are validated by the JLS library
         x = np.zeros(10, dtype=np.float32)

@@ -145,6 +145,11 @@ JLS_API int32_t jls_wr_fsr_f32(struct jls_wr_s * self, uint16_t signal_id,
  * data is writen.  Disable takes effect immediately.
  *
  * On read, the level 0 data is reconstructed using the summaries.
+ *
+ * When enabled, the writer omits a data chunk only when the signal's
+ * data type is 8 bits or less (u1, u4, u8, i4, i8) and every sample in
+ * the chunk has the same value.  The setting has no effect on other
+ * data types.
  */
 JLS_API int32_t jls_wr_fsr_omit_data(struct jls_wr_s * self, uint16_t signal_id, uint32_t enable);
 
