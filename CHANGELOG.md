@@ -94,7 +94,7 @@ This file contains the list of changes made to the JLS project.
     buffer.  These reads now return MESSAGE_INTEGRITY.  Found by the
     read_fuzzer bitflip campaign under AddressSanitizer.
 * Fixed memory safety and logic defects found by a full design review
-  (see doc/plans/design_review_2026_10.md).  Defects reachable from valid
+  (see doc/plans/completed/design_review_2026_10.md).  Defects reachable from valid
   files or normal API use:
   * Reading u1 and u4 samples could write past the caller's buffer,
     returned wrong samples, and failed some valid reads across chunks.

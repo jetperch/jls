@@ -16,7 +16,7 @@
 
 /*
  * Regression tests for the core read, signal definition and recovery
- * findings in doc/plans/design_review_2026_10.md (D*, R3, C1-C8, C15, C19).
+ * findings in doc/plans/completed/design_review_2026_10.md (D*, R3, C1-C8, C15, C19).
  *
  * Most tests write a valid file, patch chunk fields, and then re-sign the
  * chunk CRCs so that the reader sees hostile-but-CRC-valid content.
