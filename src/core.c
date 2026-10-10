@@ -1799,7 +1799,8 @@ int32_t jls_core_repair_fsr(struct jls_core_s * self, uint16_t signal_id) {
 
     // update level 0 (data)
     if (jls_core_fsr_sample_buffer_alloc(fsr)) {
-        signal_info->track_fsr = NULL;  // freed by the failed alloc
+        // the failed alloc no longer frees fsr (writer W5 fix)
+        repair_fsr_abort(signal_info);
         return JLS_ERROR_NOT_ENOUGH_MEMORY;
     }
     size_t data_sz = sizeof(struct jls_fsr_data_s)
