@@ -50,7 +50,9 @@ This file contains the list of changes made to the JLS project.
    rejects definitions above the documented size caps (format.h)
    instead of crashing, and jls_wr_user_data() rejects chunk_meta values
    that use the reserved bits 15:12 instead of silently clearing them.
-   Readers skip invalid or duplicate signal definitions.
+   Annotation and UTC decimate factors below 10 are raised to 10, and
+   factors above 65536 are rejected.  Readers skip invalid or duplicate
+   signal definitions.
 6. **Fixed-point signals are scaled.**  Statistics and writer summaries
    for data types with a nonzero fixed-point q now apply the documented
    2**-q scale.  Previously the scale was never applied.
@@ -129,10 +131,17 @@ This file contains the list of changes made to the JLS project.
   errors return MESSAGE_INTEGRITY, so pyjls raises RuntimeError, not
   ValueError, for them.
 * Statistics skip NaN samples, and windows with no finite samples return
-  NaN.  UTC time maps ignore entries whose timestamps do not increase.
+  NaN.  UTC time maps ignore entries whose timestamps do not increase,
+  so after a backward clock step, entries are skipped until UTC passes
+  the last accepted entry.
 * pyjls accepts os.PathLike paths, raises ValueError for out-of-range
   integer arguments, returns int64 sample_ids from time maps, and
-  releases the GIL while opening, copying, and repairing files.
+  releases the GIL while opening, copying, and repairing files.  Library
+  log messages, including those from the writer thread, reach the pyjls
+  logger on the next pyjls call rather than immediately, and are counted
+  and dropped beyond 256 pending messages.  This prevents a deadlock.
+* On Windows, closing a threaded writer waits for its thread to finish,
+  as on other platforms, instead of freeing it after 1 second.
 
 * Errors that the JLS library returns for invalid arguments
   (PARAMETER_INVALID, NOT_FOUND, NOT_SUPPORTED, TOO_BIG, ALREADY_EXISTS)
