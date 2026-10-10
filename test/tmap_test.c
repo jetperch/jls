@@ -21,6 +21,8 @@
 #include "jls/ec.h"
 #include "jls/tmap.h"
 #include "jls/time.h"
+#include <math.h>
+#include <stdint.h>
 
 
 #define SECOND  JLS_TIME_SECOND
@@ -119,6 +121,73 @@ static void test_interp_full_allocation(void **state) {
     jls_tmap_free(s);
 }
 
+// Growth past the initial allocation keeps every entry (realloc paths).
+static void test_grow(void **state) {
+    (void) state;
+    int64_t v;
+    const int64_t count = 5000;
+    struct jls_tmap_s * s = jls_tmap_alloc(1000.0);
+    for (int64_t i = 0; i < count; ++i) {
+        assert_int_equal(0, jls_tmap_add(s, i * 1000, YEAR + i * SECOND));
+    }
+    assert_int_equal(count, jls_tmap_length(s));
+    assert_int_equal(0, jls_tmap_sample_id_to_timestamp(s, 4321500, &v));
+    assert_int_equal(YEAR + 4321 * SECOND + SECOND / 2, v);
+    assert_int_equal(0, jls_tmap_timestamp_to_sample_id(s, YEAR + 4999 * SECOND, &v));
+    assert_int_equal(4999000, v);
+    jls_tmap_free(s);
+}
+
+// Non-increasing UTC breaks the timestamp search and divides by zero.
+static void test_utc_not_monotonic(void **state) {
+    (void) state;
+    int64_t v;
+    struct jls_utc_summary_entry_s entry;
+    struct jls_tmap_s * s = jls_tmap_alloc(1000.0);
+    assert_int_equal(0, jls_tmap_add(s, 1000, YEAR));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_tmap_add(s, 2000, YEAR));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_tmap_add(s, 3000, YEAR - SECOND));
+    assert_int_equal(1, jls_tmap_length(s));
+    assert_int_equal(0, jls_tmap_add(s, 2000, YEAR + SECOND));
+    assert_int_equal(0, jls_tmap_add(s, 2000, YEAR + 2 * SECOND));  // overwrite last
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_tmap_add(s, 2000, YEAR));  // overwrite checks prior
+    assert_int_equal(2, jls_tmap_length(s));
+    assert_int_equal(0, jls_tmap_get(s, 1, &entry));
+    assert_int_equal(YEAR + 2 * SECOND, entry.timestamp);
+    assert_int_equal(0, jls_tmap_timestamp_to_sample_id(s, YEAR + SECOND, &v));
+    assert_int_equal(1500, v);
+    jls_tmap_free(s);
+}
+
+// Hostile extremes saturate instead of overflowing (UBSan aborts on UB).
+static void test_extreme_values(void **state) {
+    (void) state;
+    int64_t v;
+    struct jls_tmap_s * s = jls_tmap_alloc(1000.0);
+    assert_int_equal(0, jls_tmap_add(s, 0, 0));
+    assert_int_equal(0, jls_tmap_sample_id_to_timestamp(s, INT64_MAX, &v));
+    assert_int_equal(INT64_MAX, v);
+    assert_int_equal(0, jls_tmap_sample_id_to_timestamp(s, INT64_MIN, &v));
+    assert_int_equal(INT64_MIN, v);
+    jls_tmap_free(s);
+
+    s = jls_tmap_alloc(1000.0);
+    assert_int_equal(0, jls_tmap_add(s, INT64_MIN, INT64_MIN));
+    assert_int_equal(0, jls_tmap_add(s, INT64_MAX, INT64_MIN + 1));
+    assert_int_equal(0, jls_tmap_sample_id_to_timestamp(s, 0, &v));
+    assert_int_equal(0, jls_tmap_timestamp_to_sample_id(s, INT64_MAX, &v));
+    assert_int_equal(INT64_MAX, v);
+    assert_int_equal(0, jls_tmap_timestamp_to_sample_id(s, INT64_MIN, &v));
+    assert_int_equal(INT64_MIN, v);
+    jls_tmap_free(s);
+
+    s = jls_tmap_alloc(NAN);  // invalid rate: single-entry conversion unavailable
+    assert_int_equal(0, jls_tmap_add(s, 0, 0));
+    assert_int_equal(JLS_ERROR_UNAVAILABLE, jls_tmap_sample_id_to_timestamp(s, 1, &v));
+    assert_int_equal(JLS_ERROR_UNAVAILABLE, jls_tmap_timestamp_to_sample_id(s, 1, &v));
+    jls_tmap_free(s);
+}
+
 int main(void) {
     const struct CMUnitTest tests[] = {
             cmocka_unit_test(test_empty),
@@ -126,6 +195,9 @@ int main(void) {
             cmocka_unit_test(test_interp2),
             cmocka_unit_test(test_interpN),
             cmocka_unit_test(test_interp_full_allocation),
+            cmocka_unit_test(test_grow),
+            cmocka_unit_test(test_utc_not_monotonic),
+            cmocka_unit_test(test_extreme_values),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
