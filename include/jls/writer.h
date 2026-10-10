@@ -34,6 +34,13 @@
  *
  * @brief JLS writer.
  *
+ * Errors: argument validation errors (such as JLS_ERROR_PARAMETER_INVALID,
+ * JLS_ERROR_NOT_FOUND, JLS_ERROR_ALREADY_EXISTS, JLS_ERROR_TOO_BIG) change
+ * nothing, and the caller may continue.  Any other error, such as
+ * JLS_ERROR_IO from a full disk, means a write failed and left the file
+ * inconsistent.  The writer latches this first write error: every later
+ * jls_wr_* call returns it without writing, and jls_wr_close() returns it.
+ *
  * @{
  */
 
@@ -56,8 +63,15 @@ JLS_API int32_t jls_wr_open(struct jls_wr_s ** instance, const char * path);
 /**
  * @brief Close a JLS file.
  *
- * @param self The JLS writer instance from jls_wr_open().
- * @return 0 or error code.
+ * @param self The JLS writer instance from jls_wr_open(), which is
+ *      always freed.
+ * @return 0 or the first error.
+ *
+ * Normally, close writes the buffered sample data, the summaries, the END
+ * chunk, and the file header.  After a latched write error, close skips
+ * the buffered data and summaries, attempts only the END chunk and file
+ * header, and returns the latched error.  The reader can recover the
+ * data written before the error.
  */
 JLS_API int32_t jls_wr_close(struct jls_wr_s * self);
 
@@ -66,6 +80,10 @@ JLS_API int32_t jls_wr_close(struct jls_wr_s * self);
  *
  * @param self The JLS writer instance from jls_wr_open().
  * @return 0 or error code.
+ *
+ * Flush makes the file durable up to the last completed chunk.  It does
+ * not write partially filled sample data or summary buffers, which are
+ * written as they fill and on jls_wr_close().
  */
 JLS_API int32_t jls_wr_flush(struct jls_wr_s * self);
 
@@ -94,9 +112,11 @@ JLS_API int32_t jls_wr_signal_def(struct jls_wr_s * self, const struct jls_signa
  * @brief Add arbitrary user data.
  *
  * @param self The writer instance.
- * @param chunk_meta The arbitrary data.  Bits 15:12 are reserved, but
- *      bits 11:0 may be assigned by the application.
- * @param storage_type The storage type for data.
+ * @param chunk_meta The arbitrary data.  Bits 15:12 are reserved and must
+ *      be 0 (else JLS_ERROR_PARAMETER_INVALID), but bits 11:0 may be
+ *      assigned by the application.
+ * @param storage_type The storage type for data, which must be a
+ *      jls_storage_type_e value.
  * @param data The user data to store.
  * @param data_size The size of data for JLS_STORAGE_TYPE_BINARY.  Ignored
  *      for all other storage types.
@@ -116,6 +136,10 @@ JLS_API int32_t jls_wr_user_data(struct jls_wr_s * self, uint16_t chunk_meta,
  *      per byte.
  * @param data_length The length of data in samples.
  * @return 0 or error code
+ *
+ * Samples that duplicate already written sample ids are skipped.  A
+ * forward skip in sample_id fills the gap with NaN for float types and 0
+ * otherwise.  A skip over 2^32 samples returns JLS_ERROR_TOO_BIG.
  */
 JLS_API int32_t jls_wr_fsr(struct jls_wr_s * self, uint16_t signal_id,
                            int64_t sample_id, const void * data, uint32_t data_length);

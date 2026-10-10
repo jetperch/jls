@@ -19,6 +19,8 @@
 #include "jls/cdef.h"
 #include "jls/datatype.h"
 #include "jls/wr_prv.h"
+#include "jls/bit_shift.h"
+#include "jls/tmap.h"
 #include "jls/ec.h"
 #include "jls/log.h"
 #include <inttypes.h>
@@ -38,15 +40,17 @@ static inline uint8_t summary_entry_size(struct jls_core_fsr_s * self) {
 }
 
 int32_t jls_core_fsr_sample_buffer_alloc(struct jls_core_fsr_s * self) {
-    size_t sample_buffer_sz = sizeof(struct jls_payload_header_s) + (sample_size_bits(self) * self->parent->signal_def.samples_per_data) / 8;
-    self->data = malloc(sample_buffer_sz);
-    if (!self->data) {
-        jls_fsr_close(self);
+    // 64-bit size math: a 32-bit product wraps for large samples_per_data.
+    uint64_t spd = self->parent->signal_def.samples_per_data;
+    uint64_t data_sz = (spd * sample_size_bits(self) + 7) / 8;
+    if ((spd * sizeof(double)) > (SIZE_MAX / 2)) {
         return JLS_ERROR_NOT_ENOUGH_MEMORY;
     }
-    self->data_f64 = malloc(self->parent->signal_def.samples_per_data * sizeof(double));
-    if (!self->data_f64) {
-        jls_fsr_close(self);
+    // Free only the buffers on failure: the signal still references self.
+    self->data = malloc(sizeof(struct jls_payload_header_s) + (size_t) data_sz);
+    self->data_f64 = malloc((size_t) (spd * sizeof(double)));
+    if (!self->data || !self->data_f64) {
+        jls_core_fsr_sample_buffer_free(self);
         return JLS_ERROR_NOT_ENOUGH_MEMORY;
     }
     JLS_LOGD1("%d sample_buffer alloc %p", self->parent->signal_def.signal_id, (void *) self->data);
@@ -72,18 +76,22 @@ void jls_core_fsr_sample_buffer_free(struct jls_core_fsr_s * self) {
 int32_t jls_core_fsr_summary_level_alloc(struct jls_core_fsr_s * self, uint8_t level) {
     uint32_t index_entries;
 
-    if (level == 0) {
+    const struct jls_signal_def_s * def = &self->parent->signal_def;
+    if ((level == 0) || (level >= JLS_SUMMARY_LEVEL_COUNT) || !def->sample_decimate_factor) {
         return JLS_ERROR_PARAMETER_INVALID;
     } else if (level == 1) {
-        uint32_t entries_per_data = self->parent->signal_def.samples_per_data / self->parent->signal_def.sample_decimate_factor;
-        index_entries = self->parent->signal_def.entries_per_summary / entries_per_data;
+        uint32_t entries_per_data = def->samples_per_data / def->sample_decimate_factor;
+        index_entries = entries_per_data ? (def->entries_per_summary / entries_per_data) : 0;
     } else {
-        index_entries = self->parent->signal_def.summary_decimate_factor;
+        index_entries = def->summary_decimate_factor;
+    }
+    if (!index_entries) {
+        return JLS_ERROR_PARAMETER_INVALID;  // appends could never fit
     }
 
     size_t dt_sz_bits = summary_entry_size(self);
     size_t buffer_sz = sizeof(struct jls_fsr_f32_summary_s)
-            + (self->parent->signal_def.entries_per_summary * JLS_SUMMARY_FSR_COUNT * dt_sz_bits) / 8;
+            + ((size_t) def->entries_per_summary * JLS_SUMMARY_FSR_COUNT * dt_sz_bits) / 8;
     buffer_sz = ((buffer_sz + 15) / 16) * 16;
 
     size_t index_sz = sizeof(struct jls_fsr_index_s) + index_entries * sizeof(int64_t);
@@ -142,9 +150,14 @@ static int32_t wr_data(struct jls_core_fsr_s * self) {
     }
     if (self->data->header.entry_count > self->data_length) {
         JLS_LOGE("internal memory error");
+        return JLS_ERROR_UNSPECIFIED;
     }
-    uint32_t data_length = (self->data->header.entry_count * sample_size_bits(self) + 7) / 8;
-    uint32_t payload_length = sizeof(struct jls_fsr_data_s) + data_length;
+    uint64_t data_length_u64 = ((uint64_t) self->data->header.entry_count * sample_size_bits(self) + 7) / 8;
+    if ((data_length_u64 + sizeof(struct jls_fsr_data_s)) > UINT32_MAX) {
+        return JLS_ERROR_TOO_BIG;
+    }
+    uint32_t data_length = (uint32_t) data_length_u64;
+    uint32_t payload_length = (uint32_t) sizeof(struct jls_fsr_data_s) + data_length;
     struct jls_core_track_s * track = &self->parent->tracks[JLS_TRACK_TYPE_FSR];
     bool omit_data = (sample_size_bits(self) <= 8) & (self->write_omit_data > 1) & (0 != track->data_head.offset);
 
@@ -186,6 +199,7 @@ static int32_t wr_index(struct jls_core_fsr_s * self, uint8_t level) {
     }
     if (idx->header.entry_count > self->level[level]->index_entries) {
         JLS_LOGE("internal memory error");
+        return JLS_ERROR_UNSPECIFIED;
     }
     uint8_t * p_end = (uint8_t *) &idx->offsets[idx->header.entry_count];
     uint8_t * p_start = (uint8_t *) idx;
@@ -207,7 +221,9 @@ static int32_t wr_summary(struct jls_core_fsr_s * self, uint8_t level) {
     uint32_t payload_len = (uint32_t) (p_end - p_start);
     ROE(jls_core_wr_summary(self->parent->parent, self->parent->signal_def.signal_id, JLS_TRACK_TYPE_FSR, level,
                             p_start, payload_len));
-    ROE(jls_core_fsr_summaryN(self, level + 1, pos_next));
+    if ((level + 1) < JLS_SUMMARY_LEVEL_COUNT) {  // the top level is a sink
+        ROE(jls_core_fsr_summaryN(self, level + 1, pos_next));
+    }
 
     dst->index->header.entry_count = 0;
     dst->summary->header.entry_count = 0;
@@ -236,33 +252,50 @@ int32_t jls_fsr_open(struct jls_core_fsr_s ** instance, struct jls_core_signal_s
     return 0;
 }
 
-int32_t jls_fsr_close(struct jls_core_fsr_s * self) {
-    int32_t rc;
+void jls_wr_fsr_free(struct jls_core_fsr_s * self) {
     if (self) {
-        if (self->data) {
-            self->write_omit_data = 0;  // disable omit for last data chunk
-            rc = wr_data(self);  // write remaining sample data
-            if (rc) {
-                JLS_LOGE("wr_data returned %" PRIi32, rc);
-            }
-            JLS_LOGD1("%d sample_buffer free %p", (int) self->parent->signal_def.signal_id, (void *) self->data);
-            jls_core_fsr_sample_buffer_free(self);
-        }
-
+        jls_core_fsr_sample_buffer_free(self);
         for (size_t i = 1; i < JLS_SUMMARY_LEVEL_COUNT; ++i) {
-            rc = summary_close(self, (uint8_t) i);
-            if (rc) {
-                JLS_LOGE("summary_close(%d) returned %" PRIi32, (int) i, rc);
-            }
+            summary_free(self, (uint8_t) i);
         }
+        jls_tmap_free(self->tmap);  // allocated by the reader
+        self->tmap = NULL;
         free(self);
     }
+}
+
+int32_t jls_wr_fsr_close(struct jls_core_fsr_s * self) {
+    int32_t rc = 0;
+    if (!self) {
+        return 0;
+    }
+    if (self->data) {
+        self->write_omit_data = 0;  // disable omit for last data chunk
+        rc = wr_data(self);  // write remaining sample data
+        if (rc) {
+            JLS_LOGE("wr_data returned %" PRIi32, rc);
+        }
+    }
+    // Stop at the first error: later writes would only add inconsistent summaries.
+    for (size_t i = 1; (0 == rc) && (i < JLS_SUMMARY_LEVEL_COUNT); ++i) {
+        rc = summary_close(self, (uint8_t) i);
+        if (rc) {
+            JLS_LOGE("summary_close(%d) returned %" PRIi32, (int) i, rc);
+        }
+    }
+    jls_wr_fsr_free(self);
+    return rc;
+}
+
+int32_t jls_fsr_close(struct jls_core_fsr_s * self) {
+    // Always 0: core.c callers clear their reference only on success.
+    (void) jls_wr_fsr_close(self);
     return 0;
 }
 
 static void summary_entry_add(struct jls_core_fsr_s * self, uint8_t level,
         double v_mean, double v_min, double v_max, double v_var) {
-    struct jls_core_fsr_level_s * dst = self->level[level];
+    struct jls_core_fsr_level_s * dst = self->level[level];  // capacity checked by caller
     uint32_t dst_offset = dst->summary->header.entry_count * JLS_SUMMARY_FSR_COUNT;
     if (summary_entry_size(self) == 64) {
         double * data = (double *) dst->summary->data;
@@ -314,9 +347,12 @@ static void summary_entry_add(struct jls_core_fsr_s * self, uint8_t level,
             sample_idx = idx * self->parent->signal_def.summary_decimate_factor;                               \
             for (uint32_t sample = 0; sample < self->parent->signal_def.summary_decimate_factor; ++sample) {   \
                 uint32_t offset = sample_idx * JLS_SUMMARY_FSR_COUNT;                           \
-                double v = src_data[offset + JLS_SUMMARY_FSR_MEAN] - v_mean;                    \
-                double std = src_data[offset + JLS_SUMMARY_FSR_STD];                            \
-                v_var += (std * std) + (v * v);                                                 \
+                double v = src_data[offset + JLS_SUMMARY_FSR_MEAN];                             \
+                if (isfinite(v)) {  /* skip gaps, as the mean loop does */                      \
+                    double std = src_data[offset + JLS_SUMMARY_FSR_STD];                        \
+                    v -= v_mean;                                                                \
+                    v_var += (std * std) + (v * v);                                             \
+                }                                                                               \
                 ++sample_idx;                                                                   \
             }                                                                                   \
             v_var /= count;                                                                 \
@@ -340,13 +376,23 @@ int32_t jls_core_fsr_summaryN(struct jls_core_fsr_s * self, uint8_t level, int64
 
     JLS_LOGD2("jls_core_fsr_summaryN %d: entries=%" PRIu32 ", offset=%" PRIi64 ", sample_id=%" PRIi64,
               (int) level, dst->index->header.entry_count, pos, dst->index->header.timestamp);
+    // Bound every append: repair feeds file-provided counts, and a failed flush leaves the buffers full.
+    uint32_t src_count = src->summary->header.entry_count;
+    if (src_count > src->summary_entries) {
+        src_count = src->summary_entries;
+    }
+    uint32_t summaries_per = src_count / self->parent->signal_def.summary_decimate_factor;
+    if ((dst->index->header.entry_count >= dst->index_entries)
+            || (summaries_per > (dst->summary_entries - dst->summary->header.entry_count))) {
+        JLS_LOGE("jls_core_fsr_summaryN %d full", (int) level);
+        return JLS_ERROR_FULL;
+    }
     if (0 == dst->index->header.entry_count) {
         dst->index->header.timestamp = src->index->header.timestamp;
         dst->summary->header.timestamp = src->summary->header.timestamp;
     }
     dst->index->offsets[dst->index->header.entry_count++] = pos;
 
-    uint32_t summaries_per = (uint32_t) (src->summary->header.entry_count / self->parent->signal_def.summary_decimate_factor);
     if (summary_entry_size(self) == 64) {
         double * src_data = ((struct jls_fsr_f64_summary_s *) src->summary)->data[0];
         SUMMARYN_BODY_TEMPLATE();
@@ -355,7 +401,8 @@ int32_t jls_core_fsr_summaryN(struct jls_core_fsr_s * self, uint8_t level, int64
         SUMMARYN_BODY_TEMPLATE();
     }
 
-    if (dst->summary->header.entry_count >= dst->summary_entries) {
+    if ((dst->summary->header.entry_count >= dst->summary_entries)
+            || (dst->index->header.entry_count >= dst->index_entries)) {
         ROE(wr_summary(self, level));
     }
     return 0;
@@ -365,7 +412,12 @@ static void data_to_f64(struct jls_core_fsr_s * self) {
     void * src = &self->data->data[0];
     double * dst = self->data_f64;
     const uint32_t count = self->data->header.entry_count;
-    jls_dt_buffer_to_f64(src, self->parent->signal_def.data_type, dst, count);
+    if (jls_dt_buffer_to_f64(src, self->parent->signal_def.data_type, dst, count)) {
+        // Unsupported conversion: NaN summaries, never uninitialized memory.
+        for (uint32_t idx = 0; idx < count; ++idx) {
+            dst[idx] = NAN;
+        }
+    }
 }
 
 int32_t jls_core_fsr_summary1(struct jls_core_fsr_s * self, int64_t pos) {
@@ -375,17 +427,25 @@ int32_t jls_core_fsr_summary1(struct jls_core_fsr_s * self, int64_t pos) {
         ROE(jls_core_fsr_summary_level_alloc(self, 1));
         dst = self->level[1];
     }
+    if (self->data->header.entry_count > self->parent->signal_def.samples_per_data) {
+        return JLS_ERROR_PARAMETER_INVALID;  // larger than the sample buffer
+    }
+    uint32_t summaries_per = (uint32_t) (self->data->header.entry_count / self->parent->signal_def.sample_decimate_factor);
+    // Bound every append: repair feeds file-provided counts, and a failed flush leaves the buffers full.
+    if ((dst->index->header.entry_count >= dst->index_entries)
+            || (summaries_per > (dst->summary_entries - dst->summary->header.entry_count))) {
+        JLS_LOGE("jls_core_fsr_summary1 full");
+        return JLS_ERROR_FULL;
+    }
     data_to_f64(self);
 
     double * data = self->data_f64;
-    // JLS_LOGI("1 add %" PRIi64 " @ %" PRIi64 " %p", pos, dst->index->offset, &dst->index->data[dst->index->offset]);
     if (0 == dst->index->header.entry_count) {
         dst->index->header.timestamp = self->data->header.timestamp;
         dst->summary->header.timestamp = self->data->header.timestamp;
     }
     dst->index->offsets[dst->index->header.entry_count++] = pos;
 
-    uint32_t summaries_per = (uint32_t) (self->data->header.entry_count / self->parent->signal_def.sample_decimate_factor);
     for (uint32_t idx = 0; idx < summaries_per; ++idx) {
         uint32_t sample_idx = idx * self->parent->signal_def.sample_decimate_factor;
         uint32_t count = 0;
@@ -432,65 +492,94 @@ int32_t jls_core_fsr_summary1(struct jls_core_fsr_s * self, int64_t pos) {
         summary_entry_add(self, 1, v_mean, v_min, v_max, v_var);
     }
 
-    if (dst->summary->header.entry_count >= dst->summary_entries) {
+    if ((dst->summary->header.entry_count >= dst->summary_entries)
+            || (dst->index->header.entry_count >= dst->index_entries)) {
         ROE(wr_summary(self, 1));
     }
     return 0;
 }
 
-static int32_t wr_data_inner(struct jls_core_fsr_s * self, const void * data, uint32_t data_length) {
+/*
+ * Append data_length samples starting at bit src_offset of data.
+ * Sub-byte types keep their partial trailing byte in self->data (upper
+ * bits zero), so close writes it and appends never read past the
+ * caller's buffer.
+ */
+static int32_t wr_data_inner(struct jls_core_fsr_s * self, const uint8_t * data, uint64_t src_offset,
+                             uint64_t data_length) {
     struct jls_fsr_data_s * b = self->data;
-    uint8_t sample_size_bits = jls_datatype_parse_size(self->parent->signal_def.data_type);
-    const uint8_t * src_u8 = (const uint8_t *) (data);
-    uint8_t * dst_u8;
-    uint8_t shift_this = (data_length * sample_size_bits) % 8;
-    uint8_t shift_amount_next = (shift_this + self->shift_amount) % 8;
-
+    uint8_t bits = sample_size_bits(self);
     while (data_length) {
-        dst_u8 = (uint8_t *) &b->data[0];
-        dst_u8 += (b->header.entry_count * sample_size_bits) / 8;
-        uint32_t length = (uint32_t) (self->data_length - b->header.entry_count);
+        uint64_t length = self->data_length - b->header.entry_count;
         if (data_length < length) {
             length = data_length;
         }
-        if (self->shift_amount) {
-            uint8_t mask = (1 << self->shift_amount) - 1;
-            uint32_t bits = length * sample_size_bits + self->shift_amount;
-            while (bits) {
-                uint16_t v = (self->shift_buffer & mask) | (((uint16_t) (*src_u8++)) << self->shift_amount);
-                if (bits >= 8) {
-                    *dst_u8++ = (uint8_t) v;
-                    bits -= 8;
-                    self->shift_buffer = (uint8_t) (v >> 8);
-                } else {
-                    self->shift_buffer = (uint8_t) v;
-                    break;
-                }
-            }
-        } else {
-            size_t byte_length = (length * sample_size_bits) / 8;
-            if (byte_length) {
-                memcpy(dst_u8, src_u8, byte_length);
-            }
-            if ((length * sample_size_bits) & 7) {
-                // partial trailing byte, only present for sub-byte types
-                self->shift_buffer = src_u8[byte_length];
-            }
-            src_u8 += byte_length;
-        }
-        b->header.entry_count += length;
+        jls_bit_copy((uint8_t *) b->data, (uint64_t) b->header.entry_count * bits,
+                     data, src_offset, length * bits);
+        b->header.entry_count += (uint32_t) length;
+        src_offset += length * bits;
         data_length -= length;
         if (b->header.entry_count >= self->data_length) {
             ROE(wr_data(self));
         }
     }
-    self->shift_amount = shift_amount_next;
+    return 0;
+}
+
+/// Fill skipped samples: NaN for float types, 0 otherwise.
+static int32_t wr_fill(struct jls_core_fsr_s * self, uint64_t count) {
+    struct jls_fsr_data_s * b = self->data;
+    uint8_t bits = sample_size_bits(self);
+    uint32_t data_type = self->parent->signal_def.data_type;
+    while (count) {
+        uint64_t length = self->data_length - b->header.entry_count;
+        if (count < length) {
+            length = count;
+        }
+        if (JLS_DATATYPE_F32 == data_type) {
+            float * f32 = ((float *) b->data) + b->header.entry_count;
+            for (uint64_t idx = 0; idx < length; ++idx) {
+                f32[idx] = NAN;
+            }
+        } else if (JLS_DATATYPE_F64 == data_type) {
+            double * f64 = ((double *) b->data) + b->header.entry_count;
+            for (uint64_t idx = 0; idx < length; ++idx) {
+                f64[idx] = NAN;
+            }
+        } else {
+            // A partial trailing byte already has zero upper bits.
+            uint64_t start = ((uint64_t) b->header.entry_count * bits + 7) / 8;
+            uint64_t end = (((uint64_t) b->header.entry_count + length) * bits + 7) / 8;
+            memset(((uint8_t *) b->data) + start, 0, (size_t) (end - start));
+        }
+        b->header.entry_count += (uint32_t) length;
+        count -= length;
+        if (b->header.entry_count >= self->data_length) {
+            ROE(wr_data(self));
+        }
+    }
+    return 0;
+}
+
+int32_t jls_wr_fsr_validate(struct jls_core_fsr_s * self, int64_t sample_id, uint32_t data_length) {
+    if (!self) {
+        return JLS_ERROR_NOT_FOUND;  // signal definition did not complete
+    }
+    if (!data_length || !self->data) {
+        return 0;
+    }
+    int64_t sample_id_next = self->data->header.timestamp + self->data->header.entry_count;
+    if ((sample_id > sample_id_next)
+            && (((uint64_t) sample_id - (uint64_t) sample_id_next) > JLS_WR_FSR_SKIP_MAX)) {
+        JLS_LOGE("fsr %d skip too large: in=%" PRIi64 " expect=%" PRIi64,
+                 (int) self->parent->signal_def.signal_id, sample_id, sample_id_next);
+        return JLS_ERROR_TOO_BIG;
+    }
     return 0;
 }
 
 int32_t jls_wr_fsr_data(struct jls_core_fsr_s * self, int64_t sample_id, const void * data, uint32_t data_length) {
-    uint8_t sample_size_bits = jls_datatype_parse_size(self->parent->signal_def.data_type);
-
+    ROE(jls_wr_fsr_validate(self, sample_id, data_length));
     if (0 == data_length) {
         return 0;
     }
@@ -502,85 +591,25 @@ int32_t jls_wr_fsr_data(struct jls_core_fsr_s * self, int64_t sample_id, const v
     }
 
     struct jls_fsr_data_s * b = self->data;
+    uint8_t bits = sample_size_bits(self);
     int64_t sample_id_next = b->header.timestamp + b->header.entry_count;
+    uint64_t ffwd = 0;
     if (sample_id == sample_id_next) {
         // normal
     } else if (sample_id < sample_id_next) {
         JLS_LOGI("fsr dup: in=%" PRIi64 " expect=%" PRIi64,
                  sample_id, sample_id_next);
-        if ((sample_id + data_length) <= sample_id_next) {
+        ffwd = (uint64_t) sample_id_next - (uint64_t) sample_id;
+        if (ffwd >= data_length) {
             return 0;
         }
-        const uint8_t * data_u8 = (const uint8_t *) data;
-        const uint8_t * data_end_u8 = data_u8 + (data_length * sample_size_bits + 7) / 8;
-        uint32_t ffwd = (uint32_t) (sample_id_next - sample_id);
-        data_length -= ffwd;
-        if (sample_size_bits >= 8) {
-            data = data_u8 + ffwd * (sample_size_bits / 8);
-        } else {
-            uint32_t shift = 0;
-            uint32_t shift_samples = 0;
-            if (sample_size_bits == 4) {
-                shift = (ffwd & 1) ? 4 : 0;
-                shift_samples = 1;
-            } else if (sample_size_bits == 1) {
-                shift = ffwd % sample_size_bits;
-                shift_samples = shift;
-            }
-            if (shift == 0) {
-                data = data_u8 + ffwd * (sample_size_bits / 8);
-            } else {
-                while (data_u8 < data_end_u8) {
-                    size_t sz = data_end_u8 - data_u8;
-                    if (sz > (sizeof(self->buffer_u64) - 8)) {
-                        sz = sizeof(self->buffer_u64) - 8;
-                    }
-                    memcpy(self->buffer_u64, data_u8, sz);
-                    self->buffer_u64[(sz / 8) + 1] = 0;
-                    size_t sz_words = (sz + 7) / 8;
-                    for (uint64_t idx = 0; idx < sz_words; ++idx) {
-                        self->buffer_u64[idx] = (self->buffer_u64[idx] >> shift)
-                                | (self->buffer_u64[idx + 1] << (64 - shift));
-                    }
-                    size_t entries = sz * (8 / sample_size_bits) - shift_samples;
-                    ROE(wr_data_inner(self, self->buffer_u64, (uint32_t) entries));
-                    data_u8 += sz - 1;
-                }
-                return 0;
-            }
-        }
     } else {
-        JLS_LOGW("fsr %d skip: in=%" PRIi64 " expect=%" PRIi64 ", skipped=%" PRIi64,
+        uint64_t skip = (uint64_t) sample_id - (uint64_t) sample_id_next;
+        JLS_LOGW("fsr %d skip: in=%" PRIi64 " expect=%" PRIi64 ", skipped=%" PRIu64,
                  self->parent->signal_def.signal_id,
-                 sample_id, sample_id_next,
-                 sample_id - sample_id_next);
-        size_t skip = (size_t) (sample_id - sample_id_next);
-        size_t buf_sz = 0;
-        if (self->parent->signal_def.data_type == JLS_DATATYPE_F32) {
-            float * f32 = (float *) self->buffer_u64;
-            buf_sz = sizeof(self->buffer_u64);
-            buf_sz /= sizeof(float);
-            for (size_t idx = 0; idx < buf_sz; ++idx) {
-                f32[idx] = NAN;
-            }
-        } else if (self->parent->signal_def.data_type == JLS_DATATYPE_F64) {
-            double * f64 = (double *) self->buffer_u64;
-            buf_sz = sizeof(self->buffer_u64) / sizeof(double);
-            for (size_t idx = 0; idx < sizeof(self->buffer_u64) / sizeof(double); ++idx) {
-                f64[idx] = NAN;
-            }
-        } else {
-            buf_sz = (sizeof(self->buffer_u64) * sample_size_bits) / 8;
-            memset(self->buffer_u64, 0, sizeof(self->buffer_u64));
-        }
-        while (skip) {
-            if (skip < buf_sz) {
-                buf_sz = skip;
-            }
-            ROE(wr_data_inner(self, self->buffer_u64, (uint32_t) buf_sz));
-            skip -= buf_sz;
-        }
+                 sample_id, sample_id_next, skip);
+        ROE(wr_fill(self, skip));
     }
-
-    return wr_data_inner(self, data, data_length);
+    // Skip duplicates by bit offset: sub-byte types can start mid-byte.
+    return wr_data_inner(self, (const uint8_t *) data, ffwd * bits, data_length - ffwd);
 }

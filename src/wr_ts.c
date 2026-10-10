@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <float.h>
+#include <stdbool.h>
 
 
 enum commit_mode_e {
@@ -115,6 +116,11 @@ int32_t jls_wr_ts_open(
         struct jls_core_signal_s * parent,
         enum jls_track_type_e track_type,
         uint32_t decimate_factor) {
+    if (decimate_factor < 2) {
+        // 0 has no room for any entry, and 1 commits every level per entry.
+        JLS_LOGE("invalid decimate_factor %" PRIu32, decimate_factor);
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
     struct jls_core_ts_s * self = calloc(1, sizeof(struct jls_core_ts_s));
     if (!self) {
         return JLS_ERROR_NOT_ENOUGH_MEMORY;
@@ -127,7 +133,7 @@ int32_t jls_wr_ts_open(
 }
 
 static int32_t commit(struct jls_core_ts_s * self, int level, int mode) {
-    if ((level < 1) || (level > JLS_SUMMARY_LEVEL_COUNT)) {
+    if ((level < 1) || (level >= JLS_SUMMARY_LEVEL_COUNT)) {
         JLS_LOGE("invalid level");
         return JLS_ERROR_PARAMETER_INVALID;
     }
@@ -136,8 +142,18 @@ static int32_t commit(struct jls_core_ts_s * self, int level, int mode) {
 
     if (!index || !summary_header || !index->header.entry_count) {
         return 0;
-    } else if (mode == COMMIT_MODE_NORMAL) {
-        ROE(alloc(self, level + 1));
+    }
+    bool has_up = (level + 1) < JLS_SUMMARY_LEVEL_COUNT;  // the top level is a sink
+    if (has_up && (mode == COMMIT_MODE_NORMAL)) {
+        ROE(alloc(self, (uint8_t) (level + 1)));
+    }
+    struct jls_index_s * index_up = has_up ? self->index[level + 1] : NULL;
+    struct jls_payload_header_s * summary_header_up = has_up ? self->summary[level + 1] : NULL;
+    if (!index_up || !summary_header_up) {
+        index_up = NULL;
+        summary_header_up = NULL;
+    } else if (index_up->header.entry_count >= self->decimate_factor) {
+        return JLS_ERROR_FULL;  // a failed parent commit left it full
     }
 
     // update headers
@@ -150,56 +166,70 @@ static int32_t commit(struct jls_core_ts_s * self, int level, int mode) {
     uint32_t len = (uint32_t) (p_end - p_start);
     uint64_t offset = jls_raw_chunk_tell(self->parent->parent->raw);
     ROE(jls_core_wr_index(self->parent->parent, self->parent->signal_def.signal_id,
-                          self->track_type, level, p_start, len));
+                          self->track_type, (uint8_t) level, p_start, len));
 
-    // add to upper level and compute summary write
-    struct jls_index_s * index_up = self->index[level + 1];
-    struct jls_payload_header_s * summary_header_up = self->summary[level + 1];
+    // write summary
+    if (self->track_type == JLS_TRACK_TYPE_ANNOTATION) {
+        struct jls_annotation_summary_s * summary = (struct jls_annotation_summary_s *) summary_header;
+        p_end = (uint8_t *) &summary->entries[summary->header.entry_count];
+    } else if (self->track_type == JLS_TRACK_TYPE_UTC) {
+        struct jls_utc_summary_s * summary = (struct jls_utc_summary_s *) summary_header;
+        p_end = (uint8_t *) &summary->entries[summary->header.entry_count];
+    } else {
+        return JLS_ERROR_NOT_SUPPORTED;
+    }
+    p_start = (uint8_t *) summary_header;
+    len = (uint32_t) (p_end - p_start);
+    ROE(jls_core_wr_summary(self->parent->parent, self->parent->signal_def.signal_id,
+                            self->track_type, (uint8_t) level, p_start, len));
+
+    // add to the upper level, keeping its index and summary counts equal
     if (index_up) {
         struct jls_index_entry_s * index_up_entry = &index_up->entries[index_up->header.entry_count++];
         index_up_entry->timestamp = index->entries[0].timestamp;
         index_up_entry->offset = offset;
-    }
-    if (self->track_type == JLS_TRACK_TYPE_ANNOTATION) {
-        struct jls_annotation_summary_s * summary = (struct jls_annotation_summary_s *) summary_header;
-        p_end = (uint8_t *) &summary->entries[summary->header.entry_count];
-        p_start = (uint8_t *) summary;
-        if (mode != COMMIT_MODE_CLOSE) {
-            struct jls_annotation_summary_s *summary_up = (struct jls_annotation_summary_s *) summary_header_up;
+        if (self->track_type == JLS_TRACK_TYPE_ANNOTATION) {
+            struct jls_annotation_summary_s * summary = (struct jls_annotation_summary_s *) summary_header;
+            struct jls_annotation_summary_s * summary_up = (struct jls_annotation_summary_s *) summary_header_up;
+            summary_up->entries[summary_up->header.entry_count++] = summary->entries[0];
+        } else {
+            struct jls_utc_summary_s * summary = (struct jls_utc_summary_s *) summary_header;
+            struct jls_utc_summary_s * summary_up = (struct jls_utc_summary_s *) summary_header_up;
             summary_up->entries[summary_up->header.entry_count++] = summary->entries[0];
         }
-    } else if (self->track_type == JLS_TRACK_TYPE_UTC) {
-        struct jls_utc_summary_s * summary = (struct jls_utc_summary_s *) summary_header;
-        p_end = (uint8_t *) &summary->entries[summary->header.entry_count];
-        p_start = (uint8_t *) summary;
-        if (mode != COMMIT_MODE_CLOSE) {
-            struct jls_utc_summary_s *summary_up = (struct jls_utc_summary_s *) summary_header_up;
-            summary_up->entries[summary_up->header.entry_count++] = summary->entries[0];
-        }
-    }
-
-    // write summary.
-    len = (uint32_t) (p_end - p_start);
-    ROE(jls_core_wr_summary(self->parent->parent, self->parent->signal_def.signal_id,
-                            self->track_type, level, p_start, len));
-
-    // When up is full, commit it
-    if (index_up && (index_up->header.entry_count >= self->decimate_factor)) {
-        ROE(commit(self, level + 1, mode));
     }
 
     // Reset our entry count since all have been written.
     index->header.entry_count = 0;
     summary_header->entry_count = 0;
+
+    // When up is full, commit it
+    if (index_up && (index_up->header.entry_count >= self->decimate_factor)) {
+        ROE(commit(self, level + 1, mode));
+    }
     return 0;
 }
 
+void jls_wr_ts_free(struct jls_core_ts_s * self) {
+    ts_free(self);
+}
+
 int32_t jls_wr_ts_close(struct jls_core_ts_s * self) {
+    int32_t rc = 0;
     if (self) {
-        for (uint8_t level = 1; level < JLS_SUMMARY_LEVEL_COUNT; ++level) {
-            commit(self, level, COMMIT_MODE_CLOSE);
+        for (uint8_t level = 1; (0 == rc) && (level < JLS_SUMMARY_LEVEL_COUNT); ++level) {
+            rc = commit(self, level, COMMIT_MODE_CLOSE);
         }
         ts_free(self);
+    }
+    return rc;
+}
+
+/// Allocate level 1 and verify room for one more entry.
+static int32_t level1_prepare(struct jls_core_ts_s * self) {
+    ROE(alloc(self, 1));
+    if (self->index[1]->header.entry_count >= self->decimate_factor) {
+        return JLS_ERROR_FULL;  // a failed commit left it full
     }
     return 0;
 }
@@ -210,7 +240,7 @@ int32_t jls_wr_ts_anno(struct jls_core_ts_s * self, int64_t timestamp, int64_t o
         JLS_LOGE("track_type mismatch");
         return JLS_ERROR_PARAMETER_INVALID;
     }
-    ROE(alloc(self, 1));
+    ROE(level1_prepare(self));
     struct jls_index_s * index = self->index[1];
     struct jls_annotation_summary_s * summary = (struct jls_annotation_summary_s *) self->summary[1];
 
@@ -238,7 +268,7 @@ int32_t jls_wr_ts_utc(struct jls_core_ts_s * self, int64_t sample_id, int64_t of
         JLS_LOGE("track_type mismatch");
         return JLS_ERROR_PARAMETER_INVALID;
     }
-    ROE(alloc(self, 1));
+    ROE(level1_prepare(self));
     struct jls_index_s * index = self->index[1];
     struct jls_utc_summary_s * summary = (struct jls_utc_summary_s *) self->summary[1];
 
