@@ -36,7 +36,15 @@
  *
  * This module wraps writer.  For normal operation while recording signals,
  * prefer this threaded writer over writer.
- * 
+ *
+ * Errors: each call validates its arguments synchronously, and a
+ * validation error changes nothing.  The writer thread performs the
+ * writes, so their errors are asynchronous.  The first asynchronous error
+ * latches: the thread keeps draining its queue but drops all data
+ * messages, and every later jls_twr_* call, jls_twr_flush(), and
+ * jls_twr_close() returns the latched error.  Call jls_twr_flush() to
+ * confirm that all queued writes succeeded.
+ *
  * @{
  */
 
@@ -66,8 +74,12 @@ JLS_API int32_t jls_twr_open(struct jls_twr_s ** instance, const char * path);
 /**
  * @brief Close a JLS file.
  *
- * @param self The JLS writer instance from jls_twr_open().
- * @return 0 or error code.
+ * @param self The JLS writer instance from jls_twr_open(), which is
+ *      always freed.
+ * @return 0, the latched error, or the jls_wr_close() error.
+ *
+ * Close writes all queued messages before closing the file, even when
+ * the queue is full.  See jls_wr_close().
  */
 JLS_API int32_t jls_twr_close(struct jls_twr_s * self);
 
@@ -93,7 +105,11 @@ JLS_API int32_t jls_twr_flags_set(struct jls_twr_s * self, uint32_t flags);
  * @brief Flush a JLS file to disk.
  *
  * @param self The JLS writer instance from jls_twr_open().
- * @return 0 or error code.
+ * @return 0 when all previously queued messages were written and flushed,
+ *      the latched error, JLS_ERROR_BUSY if the flush could not be queued,
+ *      or JLS_ERROR_TIMED_OUT.
+ *
+ * See jls_wr_flush() for the durability provided.
  */
 JLS_API int32_t jls_twr_flush(struct jls_twr_s * self);
 
@@ -122,13 +138,16 @@ JLS_API int32_t jls_twr_signal_def(struct jls_twr_s * self, const struct jls_sig
  * @brief Add arbitrary user data.
  *
  * @param self The writer instance.
- * @param chunk_meta The arbitrary data.  Bits 15:12 are reserved, but
- *      bits 11:0 may be assigned by the application.
- * @param storage_type The storage type for data.
+ * @param chunk_meta The arbitrary data.  Bits 15:12 are reserved and must
+ *      be 0 (else JLS_ERROR_PARAMETER_INVALID), but bits 11:0 may be
+ *      assigned by the application.
+ * @param storage_type The storage type for data, which must be a
+ *      jls_storage_type_e value.
  * @param data The user data to store.
- * @param data_size The size of data for JLS_STORAGE_TYPE_BINARY.  Ignored
- *      for all other storage types.
- * @return 0 or error code.
+ * @param data_size The size of data in bytes.  For STRING and JSON, 0
+ *      means strlen(data) + 1, and a nonzero size must include the NUL.
+ * @return 0 or error code.  JLS_ERROR_TOO_BIG when the message exceeds
+ *      the internal queue.
  */
 JLS_API int32_t jls_twr_user_data(struct jls_twr_s * self, uint16_t chunk_meta,
         enum jls_storage_type_e storage_type, const uint8_t * data, uint32_t data_size);
@@ -143,7 +162,8 @@ JLS_API int32_t jls_twr_user_data(struct jls_twr_s * self, uint16_t chunk_meta,
  *      between samples.  u1 stores 8 samples per byte, and u4 stores 2 samples
  *      per byte.
  * @param data_length The length of data in samples.
- * @return 0 or error code
+ * @return 0 or error code.  JLS_ERROR_TOO_BIG when the data exceeds the
+ *      internal queue (about 64 MiB).
  */
 JLS_API int32_t jls_twr_fsr(struct jls_twr_s * self, uint16_t signal_id,
                             int64_t sample_id, const void * data, uint32_t data_length);
@@ -192,9 +212,10 @@ JLS_API int32_t jls_twr_fsr_omit_data(struct jls_twr_s * self, uint16_t signal_i
  * @param group_id The optional group identifier.  If unused, set to 0.
  * @param storage_type The storage type.
  * @param data The data for the annotation.
- * @param data_size The length of data for JLS_STORAGE_TYPE_BINARY storage_type.
- *      Set to 0 for all other storage types.
- * @return 0 or error code.
+ * @param data_size The length of data in bytes.  For STRING and JSON, 0
+ *      means strlen(data) + 1, and a nonzero size must include the NUL.
+ * @return 0 or error code.  JLS_ERROR_TOO_BIG when the message exceeds
+ *      the internal queue.
  */
 JLS_API int32_t jls_twr_annotation(struct jls_twr_s * self, uint16_t signal_id, int64_t timestamp,
         float y,
