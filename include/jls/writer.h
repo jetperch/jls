@@ -139,7 +139,7 @@ JLS_API int32_t jls_wr_user_data(struct jls_wr_s * self, uint16_t chunk_meta,
  *
  * Samples that duplicate already written sample ids are skipped.  A
  * forward skip in sample_id fills the gap with NaN for float types and 0
- * otherwise.  A skip over 2^32 samples returns JLS_ERROR_TOO_BIG.
+ * otherwise.
  */
 JLS_API int32_t jls_wr_fsr(struct jls_wr_s * self, uint16_t signal_id,
                            int64_t sample_id, const void * data, uint32_t data_length);

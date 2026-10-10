@@ -566,16 +566,8 @@ int32_t jls_wr_fsr_validate(struct jls_core_fsr_s * self, int64_t sample_id, uin
     if (!self) {
         return JLS_ERROR_NOT_FOUND;  // signal definition did not complete
     }
-    if (!data_length || !self->data) {
-        return 0;
-    }
-    int64_t sample_id_next = self->data->header.timestamp + self->data->header.entry_count;
-    if ((sample_id > sample_id_next)
-            && (((uint64_t) sample_id - (uint64_t) sample_id_next) > JLS_WR_FSR_SKIP_MAX)) {
-        JLS_LOGE("fsr %d skip too large: in=%" PRIi64 " expect=%" PRIi64,
-                 (int) self->parent->signal_def.signal_id, sample_id, sample_id_next);
-        return JLS_ERROR_TOO_BIG;
-    }
+    (void) sample_id;
+    (void) data_length;
     return 0;
 }
 

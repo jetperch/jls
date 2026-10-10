@@ -320,19 +320,6 @@ static void test_skip_f32_nan(void **state) {
     remove(filename);
 }
 
-// A huge forward skip is rejected without latching an error.
-static void test_skip_too_big(void **state) {
-    (void) state;
-    struct jls_signal_def_s s = signal_def(JLS_DATATYPE_F32);
-    struct jls_wr_s * wr = wr_open(&s);
-    float d[4] = {1.0f, 2.0f, 3.0f, 4.0f};
-    assert_int_equal(0, jls_wr_fsr_f32(wr, 1, 0, d, 4));
-    assert_int_equal(JLS_ERROR_TOO_BIG, jls_wr_fsr_f32(wr, 1, 4 + (1LL << 40), d, 4));
-    assert_int_equal(0, jls_wr_fsr_f32(wr, 1, 4, d, 4));
-    assert_int_equal(0, jls_wr_close(wr));
-    remove(filename);
-}
-
 // D3: the sample buffer size does not wrap in 32 bits.
 static void test_f64_large_samples_per_data(void **state) {
     (void) state;
@@ -655,7 +642,6 @@ int main(void) {
             cmocka_unit_test(test_duplicates),
             cmocka_unit_test(test_skip),
             cmocka_unit_test(test_skip_f32_nan),
-            cmocka_unit_test(test_skip_too_big),
             cmocka_unit_test(test_f64_large_samples_per_data),
             cmocka_unit_test(test_signal_def_null_strings),
             cmocka_unit_test(test_payload_validation),

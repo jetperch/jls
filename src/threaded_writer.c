@@ -252,7 +252,8 @@ int32_t jls_twr_run(struct jls_twr_s * self) {
                          (int) hdr.msg_type,
                          (hdr.msg_type < MSG_ITEM_COUNT) ? message_str[hdr.msg_type] : "unknown",
                          (int) rc, jls_error_code_name(rc));
-                error_latch(self, rc);
+                // Latch only what the writer latched: write failures, not validation errors.
+                error_latch(self, jls_wr_error(self->wr));
             }
         }
     }

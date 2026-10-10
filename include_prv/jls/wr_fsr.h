@@ -43,22 +43,15 @@ extern "C" {
 
 
 /**
- * @brief The maximum forward sample_id skip, in samples.
- *
- * The writer fills skipped samples synchronously (NaN for float types,
- * 0 otherwise).  Larger skips, such as from a corrupt sample_id, return
- * JLS_ERROR_TOO_BIG rather than fill the disk.
- */
-#define JLS_WR_FSR_SKIP_MAX (1ULL << 32)
-
-/**
  * @brief Validate a write without modifying any state.
  *
  * @param self The instance, which may be NULL.
  * @param sample_id The starting sample id for this data.
  * @param data_length The length of data in samples.
- * @return 0, JLS_ERROR_NOT_FOUND if self is NULL, or JLS_ERROR_TOO_BIG
- *      if the skip exceeds JLS_WR_FSR_SKIP_MAX.
+ * @return 0 or JLS_ERROR_NOT_FOUND if self is NULL.
+ *
+ * The writer fills skipped samples (NaN for float types, 0 otherwise)
+ * regardless of size: jls_copy() replays omitted constant chunks as skips.
  */
 int32_t jls_wr_fsr_validate(struct jls_core_fsr_s * self, int64_t sample_id, uint32_t data_length);
 
