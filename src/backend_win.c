@@ -242,7 +242,8 @@ void jls_bkt_finalize(struct jls_bkt_s * self) {
 
 int jls_bkt_msg_lock(struct jls_bkt_s * self) {
     DWORD rc = WaitForSingleObject(self->msg_mutex, JLS_BK_MSG_LOCK_TIMEOUT_MS);
-    if (WAIT_OBJECT_0 != rc) {
+    // WAIT_ABANDONED grants ownership: the caller must still unlock.
+    if ((WAIT_OBJECT_0 != rc) && (WAIT_ABANDONED != rc)) {
         JLS_LOGE("jls_bkt_msg_lock failed %d", (int) rc);
         return rc;
     }
@@ -259,8 +260,9 @@ int jls_bkt_msg_unlock(struct jls_bkt_s * self) {
 
 int jls_bkt_process_lock(struct jls_bkt_s * self) {
     DWORD rc = WaitForSingleObject(self->process_mutex, JLS_BK_PROCESS_LOCK_TIMEOUT_MS);
-    if (WAIT_OBJECT_0 != rc) {
-        JLS_LOGE("jls_bkt_msg_lock failed %d", (int) rc);
+    // WAIT_ABANDONED grants ownership: the caller must still unlock.
+    if ((WAIT_OBJECT_0 != rc) && (WAIT_ABANDONED != rc)) {
+        JLS_LOGE("jls_bkt_process_lock failed %d", (int) rc);
         return rc;
     }
     return 0;
@@ -268,7 +270,7 @@ int jls_bkt_process_lock(struct jls_bkt_s * self) {
 
 int jls_bkt_process_unlock(struct jls_bkt_s * self) {
     if (!ReleaseMutex(self->process_mutex)) {
-        JLS_LOGE("jls_bkt_msg_unlock failed");
+        JLS_LOGE("jls_bkt_process_unlock failed");
         return 1;
     }
     return 0;

@@ -399,10 +399,7 @@ static int32_t fsr_statistics(struct jls_core_s * self, uint16_t signal_id,
               (int) signal_id, start_sample_id, increment, (int) level, data_length);
     bool is_f32 = true;
     struct jls_signal_def_s * signal_def = &self->signal_info[signal_id].signal_def;
-    int64_t step_size = signal_def->sample_decimate_factor;  // <= increment, see level selection
-    for (uint8_t lvl = 2; lvl <= level; ++lvl) {
-        step_size *= signal_def->summary_decimate_factor;
-    }
+    int64_t step_size = jls_core_fsr_step_size(signal_def, level);  // <= increment, see level selection
     double f64_tmp4[JLS_SUMMARY_FSR_COUNT];
     const int64_t sample_id_offset = signal_def->sample_id_offset;
 

@@ -78,9 +78,6 @@ struct jls_core_fsr_s {
     double * data_f64;             // for level 0 sample data summarization statistics computation
     int64_t sample_id_offset;
     uint8_t write_omit_data;      // omit level 0 sample data. >1=enabled, else disabled
-    uint8_t shift_amount;
-    uint8_t shift_buffer;
-    uint64_t buffer_u64[4096];     // for shifting incoming sample data on skips & duplicates
     struct jls_core_fsr_level_s * level[JLS_SUMMARY_LEVEL_COUNT];  // level 0 unused
 
     struct jls_tmap_s * tmap;     // on read, map UTC to sample_id
