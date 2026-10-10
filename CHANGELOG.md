@@ -8,15 +8,31 @@ This file contains the list of changes made to the JLS project.
 
 2026 Oct 10
 
-**BREAKING CHANGE: pyjls Writer.fsr_omit_data(signal_id, enable) was
-inverted and is now fixed.**  Previously, `enable=True` disabled data
-omission and `enable=False` enabled it, the opposite of the documented
-behavior and of the C API.  Now `enable=True` omits constant data chunks
-and `enable=False` writes all data chunks.  If your code passed `False`
-to enable omission, change it to `True`.  Omission only affects data
-types of 8 bits or less (u1, u4, u8, i4, i8), and readers reconstruct
-omitted data from the summaries, so existing files read the same.  The
-C API, jls_wr_fsr_omit_data() and jls_twr_fsr_omit_data(), is unchanged.
+**BREAKING CHANGES**
+
+1. **pyjls Writer.fsr_omit_data(signal_id, enable) was inverted and is
+   now fixed.**  Previously, `enable=True` disabled data omission and
+   `enable=False` enabled it, the opposite of the documented behavior
+   and of the C API.  Now `enable=True` omits constant data chunks and
+   `enable=False` writes all data chunks.  If your code passed `False`
+   to enable omission, change it to `True`.  Omission only affects data
+   types of 8 bits or less (u1, u4, u8, i4, i8), and readers reconstruct
+   omitted data from the summaries, so existing files read the same.
+   The C API, jls_wr_fsr_omit_data() and jls_twr_fsr_omit_data(), is
+   unchanged.
+2. **pyjls raises ValueError, not RuntimeError, for invalid arguments.**
+   When the JLS library rejects an argument with PARAMETER_INVALID,
+   NOT_FOUND, NOT_SUPPORTED, TOO_BIG, or ALREADY_EXISTS, Writer and
+   Reader methods now raise ValueError.  Examples: an undefined
+   signal_id, a non-FSR signal where FSR is required, reading past the
+   end of a signal, or defining a signal twice.  Other library errors,
+   such as IO and MESSAGE_INTEGRITY, still raise RuntimeError.  Code
+   that catches RuntimeError for these cases must also catch
+   ValueError.  The C API now also returns PARAMETER_INVALID for
+   negative lengths in jls_rd_fsr(), jls_rd_fsr_f32(), and
+   jls_rd_fsr_statistics(), which previously succeeded without
+   reading, and for an out-of-range jls_rd_tmap_get() index, which
+   previously returned UNAVAILABLE.
 
 * Fixed the inverted Writer.fsr_omit_data() enable argument (see above).
   Corrected the jls_twr_fsr_omit_data() documentation, which said these
@@ -76,6 +92,9 @@ C API, jls_wr_fsr_omit_data() and jls_twr_fsr_omit_data(), is unchanged.
   now stops the iteration and is logged.  Previously, user_data() and
   utc() continued.
 * Writer.annotation() now stores a non-finite y as NAN, as intended.
+* Added example/recovery_fuzz.py, which damages pyjls-written files and
+  reads them back through the pyjls Reader, for use with an
+  AddressSanitizer build.
 
 
 ## 0.18.0
