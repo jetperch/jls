@@ -1430,6 +1430,15 @@ static void test_fsr_statistics_u4_entry_count(void **state) {
     assert_int_equal(0, jls_wr_fsr(wr, 5, 0, src, 1000));
     assert_int_equal(0, jls_wr_close(wr));
 
+    // The single data chunk holds 1000 entries, fewer than samples_per_data.
+    double stats[JLS_SUMMARY_FSR_COUNT];
+    assert_int_equal(0, jls_rd_open(&rd, filename));
+    assert_int_equal(0, jls_rd_fsr_statistics(rd, 5, 3, 13, stats, 1));  // odd start and length
+    assert_float_equal(9.0, stats[JLS_SUMMARY_FSR_MEAN], 1e-12);  // 3 .. 15
+    assert_float_equal(3.0, stats[JLS_SUMMARY_FSR_MIN], 0.0);
+    assert_float_equal(15.0, stats[JLS_SUMMARY_FSR_MAX], 0.0);
+    jls_rd_close(rd);
+
     size_t size = 0;
     uint8_t * data = file_read_all(filename, &size);
     struct jls_chunk_header_s * hdr = chunk_find(data, size, JLS_TAG_SIGNAL_DEF, 5);
@@ -1441,12 +1450,9 @@ static void test_fsr_statistics_u4_entry_count(void **state) {
     file_write_all(filename, data, size);
     free(data);
 
-    double stats[JLS_SUMMARY_FSR_COUNT];
+    // Signal definition validation rejects the hostile definition on open.
     assert_int_equal(0, jls_rd_open(&rd, filename));
-    assert_int_equal(0, jls_rd_fsr_statistics(rd, 5, 3, 13, stats, 1));  // odd start and length
-    assert_float_equal(9.0, stats[JLS_SUMMARY_FSR_MEAN], 1e-12);  // 3 .. 15
-    assert_float_equal(3.0, stats[JLS_SUMMARY_FSR_MIN], 0.0);
-    assert_float_equal(15.0, stats[JLS_SUMMARY_FSR_MAX], 0.0);
+    assert_int_equal(JLS_ERROR_NOT_FOUND, jls_rd_fsr_statistics(rd, 5, 3, 13, stats, 1));
     jls_rd_close(rd);
     remove(filename);
 }

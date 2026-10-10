@@ -744,10 +744,6 @@ static int32_t on_user_data_size(void * user_data, uint16_t chunk_meta, enum jls
 
 static void test_rd_chunk_large(void ** state) {
     (void) state;
-#ifndef JLS_TEST_BUF_REALLOC_FIXED
-    // todo remove once buffer.c jls_buf_realloc no longer squares (R2)
-    skip();
-#endif
     // payloads within 12 bytes of the buffer size used to loop forever
     const uint32_t sizes[] = {(1U << 20) - 4, (1U << 20) - 3, (1U << 20), (1U << 20) + 100, 3U << 20};
     uint8_t * x = calloc(1, 3U << 20);

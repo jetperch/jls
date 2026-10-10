@@ -105,15 +105,6 @@ static inline bool range_contains(int64_t base, int64_t count, int64_t x) {
     return (x >= base) && (count > 0) && (((uint64_t) x - (uint64_t) base) < (uint64_t) count);
 }
 
-// On-disk payload size (payload + pad + CRC), matching raw.c.
-// todo replace with jls_raw_payload_size_on_disk() once raw.h exports it.
-static int64_t raw_payload_size_on_disk(uint32_t payload_size) {
-    if (!payload_size) {
-        return 0;
-    }
-    return (((int64_t) payload_size + 4 + 7) / 8) * 8;
-}
-
 int32_t jls_core_f64_buf_alloc(size_t length, struct jls_core_f64_buf_s ** buf) {
     if (*buf) {
         if ((*buf)->alloc_length >= (size_t) length) {
@@ -527,7 +518,7 @@ int32_t jls_core_rd_chunk(struct jls_core_s * self) {
             if (attempt) {
                 break;
             }
-            int64_t sz = raw_payload_size_on_disk(self->chunk_cur.hdr.payload_length);
+            int64_t sz = jls_raw_payload_size_on_disk(self->chunk_cur.hdr.payload_length);
             int64_t fend = jls_raw_backend(self->raw)->fend;
             if ((self->chunk_cur.offset + (int64_t) sizeof(struct jls_chunk_header_s) + sz) > fend) {
                 // the read would fail anyway: never allocate for a payload past EOF
