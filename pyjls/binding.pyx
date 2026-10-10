@@ -274,6 +274,12 @@ cdef class Writer:
     """Create a new JLS writer.
 
     :param path: The output JLS file path.
+
+    Not thread-safe: call each Writer's methods from one thread at a
+    time.  In particular, calling close() while another thread is
+    inside a method may crash the interpreter.  Garbage collection
+    closes a Writer left open, but call close() or use a `with`
+    block to finalize the file at a known time.
     """
     cdef c_jls.jls_twr_s * _wr
     cdef c_jls.jls_signal_def_s _signals[_JLS_SIGNAL_COUNT]
@@ -309,21 +315,27 @@ cdef class Writer:
 
     cdef c_jls.jls_twr_s * _wr_get(self) except NULL:
         if self._wr == NULL:
-            raise RuntimeError('Writer is closed')
+            raise ValueError('I/O operation on closed Writer')
         return self._wr
 
-    def close(self):
-        """Close the JLS file and release all resources.
-
-        Safe to call repeatedly.  Afterwards, the other methods raise
-        RuntimeError.
-        """
+    cdef void _close(self) noexcept:
         cdef c_jls.jls_twr_s * wr = self._wr
         if wr == NULL:
             return
         self._wr = NULL
         with nogil:
             c_jls.jls_twr_close(wr)
+
+    def __dealloc__(self):
+        self._close()
+
+    def close(self):
+        """Close the JLS file and release all resources.
+
+        Safe to call repeatedly.  Afterwards, the other methods raise
+        ValueError.
+        """
+        self._close()
 
     def flush(self):
         """Flush any pending data to the JLS file."""
@@ -552,6 +564,11 @@ cdef class Reader:
     """Open a JLS v2 file for reading.
 
     :param path: The path to the JLS file.
+
+    Not thread-safe: call each Reader's methods from one thread at a
+    time.  In particular, calling close() while another thread is
+    inside a method may crash the interpreter.  Garbage collection
+    closes a Reader left open.
     """
     cdef c_jls.jls_rd_s * _rd
     cdef object _sources
@@ -613,20 +630,26 @@ cdef class Reader:
 
     cdef c_jls.jls_rd_s * _rd_get(self) except NULL:
         if self._rd == NULL:
-            raise RuntimeError('Reader is closed')
+            raise ValueError('I/O operation on closed Reader')
         return self._rd
 
-    def close(self):
-        """Close the JLS file and release all resources.
-
-        Safe to call repeatedly.  Afterwards, the other methods raise
-        RuntimeError.
-        """
+    cdef void _close(self) noexcept:
         cdef c_jls.jls_rd_s * rd = self._rd
         if rd == NULL:
             return
         self._rd = NULL
         c_jls.jls_rd_close(rd)
+
+    def __dealloc__(self):
+        self._close()
+
+    def close(self):
+        """Close the JLS file and release all resources.
+
+        Safe to call repeatedly.  Afterwards, the other methods raise
+        ValueError.
+        """
+        self._close()
 
     @property
     def sources(self) -> Mapping[int, SourceDef]:

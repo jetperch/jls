@@ -14,6 +14,7 @@
 
 from pyjls.binding import Writer, Reader, SummaryFSR, DataType, jls_inject_log, copy, repair, TimeMap
 from pyjls.time64 import SECOND, YEAR
+import gc
 import io
 import logging
 from logging import StreamHandler
@@ -65,21 +66,44 @@ class TestBinding(unittest.TestCase):
             self.assertEqual('', s.model)
             self.assertEqual('', s.version)
 
-    def test_close_twice_and_use_after_close(self):
-        # Previously crashed the interpreter: close() freed the handle and kept it.
-        w = Writer(self._path)
+    def _write_fsr_100(self, w):
         w.source_def(source_id=1, name='n', vendor='v', model='m', version='1', serial_number='s')
         w.signal_def(3, source_id=1, sample_rate=1000, name='current', units='A')
         w.fsr(3, 0, np.zeros(100, dtype=np.float32))
+
+    def test_close_twice_and_use_after_close(self):
+        # Previously crashed the interpreter: close() freed the handle and kept it.
+        w = Writer(self._path)
+        self._write_fsr_100(w)
         w.close()
         w.close()
-        with self.assertRaisesRegex(RuntimeError, 'Writer is closed'):
+        with self.assertRaisesRegex(ValueError, 'I/O operation on closed Writer'):
             w.fsr(3, 100, np.zeros(100, dtype=np.float32))
         with Reader(self._path) as r:
             self.assertEqual(100, r.signals[3].length)
             r.close()  # inside the with block, which closes again
-        with self.assertRaisesRegex(RuntimeError, 'Reader is closed'):
+        with self.assertRaisesRegex(ValueError, 'I/O operation on closed Reader'):
             r.fsr(3, 0, 10)
+        del w, r  # __dealloc__ after close must not close again
+
+    def test_writer_dealloc_closes(self):
+        w = Writer(self._path)
+        self._write_fsr_100(w)
+        del w
+        gc.collect()
+        with Reader(self._path) as r:
+            self.assertEqual(100, r.signals[3].length)
+
+    @unittest.skipUnless(os.path.isdir('/proc/self/fd'), 'requires /proc/self/fd')
+    def test_reader_dealloc_closes(self):
+        with Writer(self._path) as w:
+            self._write_fsr_100(w)
+        fd_count = len(os.listdir('/proc/self/fd'))
+        r = Reader(self._path)
+        self.assertGreater(len(os.listdir('/proc/self/fd')), fd_count)
+        del r
+        gc.collect()
+        self.assertEqual(fd_count, len(os.listdir('/proc/self/fd')))
 
     def test_fsr_f32(self):
         data = np.arange(110000, dtype=np.float32)
