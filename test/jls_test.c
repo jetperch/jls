@@ -625,9 +625,9 @@ static void test_fsr_f32_len_N(void **state) {
     assert_int_equal(sample_count, samples);
 
     for (uint32_t i = 0; i < sample_count; ++i) {
-        data[0] = 0.0f;
+        data[i] = 0.0f;
     }
-    assert_int_equal(0, jls_rd_fsr(rd, 5, 0, data, 1));
+    assert_int_equal(0, jls_rd_fsr(rd, 5, 0, data, sample_count));  // spans both chunks
     for (uint32_t i = 0; i < sample_count; ++i) {
         assert_float_equal(expect[i], data[i], 1e-7f);
     }
