@@ -319,7 +319,8 @@ static void * close_thread(void * arg) {
     return NULL;
 }
 
-// W7: close completes even when the ring stays full past the send timeout.
+// W7: close completes with the ring full and the writer thread blocked.
+// Close sets quit_req rather than sending a message, so it cannot time out.
 static void test_close_ring_full(void **state) {
     (void) state;
     struct jls_twr_s * wr = NULL;
@@ -332,20 +333,17 @@ static void test_close_ring_full(void **state) {
     jls_bkt_process_lock(bk);  // block the writer thread
     assert_int_equal(0, jls_twr_flags_set(wr, JLS_TWR_FLAG_DROP_ON_OVERFLOW));
     int64_t sample_id = 0;
-    for (uint32_t sz = length; sz; sz /= 10) {  // fill the ring completely
+    for (uint32_t sz = length; sz; sz /= 10) {  // fill the ring, never blocking
         while (0 == jls_twr_fsr_f32(wr, 5, sample_id, data, sz)) {
             sample_id += sz;
         }
-    }
-    while (0 == jls_twr_utc(wr, 5, 0, 0)) {
-        // header-only messages, same size as a close message
     }
 
     struct close_arg_s c = {.wr = wr, .rc = -1, .done = 0};
     pthread_mutex_init(&c.mutex, NULL);
     pthread_t thread;
     assert_int_equal(0, pthread_create(&thread, NULL, close_thread, &c));
-    usleep((JLS_BK_MSG_WRITE_TIMEOUT_MS + 500) * 1000);
+    usleep(200000);  // let close start while the writer thread is blocked
     jls_bkt_process_unlock(bk);
     int done = 0;
     for (int i = 0; !done && (i < 300); ++i) {
