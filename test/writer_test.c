@@ -161,7 +161,9 @@ static void check_samples(uint32_t (*value_fn)(uint64_t), uint8_t bits, int64_t 
     for (uint64_t i = 0; i < length; ++i) {
         uint32_t expect = value_fn((uint64_t) (start + (int64_t) i));
         if (expect != sample_get(out, i, bits)) {
-            fail_msg("sample %" PRIu64 ": expect %u, got %u", i, expect, sample_get(out, i, bits));
+            // not fail_msg(): clang -Wpedantic rejects its GNU ##__VA_ARGS__
+            print_error("sample %" PRIu64 ": expect %u, got %u\n", i, expect, sample_get(out, i, bits));
+            fail();
         }
     }
     free(out);

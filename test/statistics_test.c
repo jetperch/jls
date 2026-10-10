@@ -270,6 +270,7 @@ static void test_combine_invalid_order_independent(void **state) {
 static void test_null_arguments(void **state) {
     (void) state;
     struct jls_statistics_s s;
+    jls_statistics_reset(&s);
     jls_statistics_reset(NULL);
     jls_statistics_invalid(NULL);
     jls_statistics_compute_f32(NULL, F32_0, 1);

@@ -463,7 +463,9 @@ static void packed_read_check(struct jls_rd_s * rd, const uint8_t * ref, int bit
     assert_int_equal(0, jls_rd_fsr(rd, 1, start, y, length));
     for (int64_t i = 0; i < length; ++i) {
         if (sample_get(y, bits, i) != sample_get(ref, bits, start + i)) {
-            fail_msg("bits=%d start=%d length=%d: mismatch at %d", bits, (int) start, (int) length, (int) i);
+            // not fail_msg(): clang -Wpedantic rejects its GNU ##__VA_ARGS__
+            print_error("bits=%d start=%d length=%d: mismatch at %d\n", bits, (int) start, (int) length, (int) i);
+            fail();
         }
     }
     uint32_t tail_bits = (uint32_t) ((length * bits) & 7);
@@ -529,9 +531,10 @@ static void test_fsr_u4_sweep(void ** state) {
 
 static void test_fsr_u4_exhaustive(void ** state) {
     (void) state;
-    const uint32_t n = 64 * 2 + 10;
+    enum { N = 64 * 2 + 10 };  // a constant: MSVC does not support variable length arrays
+    const uint32_t n = N;
     struct jls_signal_def_s def = signal_def_typed(JLS_DATATYPE_U4, 64, 64, 10, 10);
-    uint8_t ref[n / 2 + 8];
+    uint8_t ref[N / 2 + 8];
     for (size_t i = 0; i < sizeof(ref); ++i) {
         ref[i] = (uint8_t) (i * 37 + 11);
     }
@@ -644,7 +647,10 @@ static void test_fsr_omit_reconstruct_corrupt(void ** state) {
         assert_int_equal(0, jls_rd_open(&rd, PATH));
         uint8_t y[16];
         int32_t rc = jls_rd_fsr(rd, 1, 64 * 3 + 5, y, sizeof(y));
-        if (rc != JLS_ERROR_MESSAGE_INTEGRITY) { fail_msg("mode %d rc %d", mode, rc); }
+        if (rc != JLS_ERROR_MESSAGE_INTEGRITY) {
+            print_error("mode %d rc %d\n", mode, rc);
+            fail();
+        }
         jls_rd_close(rd);
     }
     remove(PATH);
