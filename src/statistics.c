@@ -46,49 +46,8 @@ void jls_statistics_compute_f32(struct jls_statistics_s * s, const float * x, ui
     if (!x) {
         length = 0;
     }
-    if (length <= 0) {
-        jls_statistics_reset(s);
-        return;
-    }
-    float v;
-    double v_mean = 0.0;
-    float v_min = FLT_MAX;
-    float v_max = -FLT_MAX;
-    double v_var = 0.0;
-    for (uint64_t i = 0; i < length; ++i) {
-        v = x[i];
-        v_mean += v;
-        if (v < v_min) {
-            v_min = v;
-        }
-        if (v > v_max) {
-            v_max = v;
-        }
-    }
-    v_mean /= length;
-    double m;
-    for (uint64_t i = 0; i < length; ++i) {
-        m = x[i] - v_mean;
-        v_var += (m * m);
-    }
-    s->k = length;
-    s->mean = v_mean;
-    s->s = v_var;
-    s->min = v_min;
-    s->max = v_max;
-}
-
-void jls_statistics_compute_f64(struct jls_statistics_s * s, const double * x, uint64_t length)  {
-    if (!s) {
-        return;
-    }
-    if (!x) {
-        length = 0;
-    }
-    if (length <= 0) {
-        jls_statistics_reset(s);
-        return;
-    }
+    // NaN marks a missing sample: skip it so mean, min and max agree
+    uint64_t k = 0;
     double v;
     double v_mean = 0.0;
     double v_min = DBL_MAX;
@@ -96,6 +55,10 @@ void jls_statistics_compute_f64(struct jls_statistics_s * s, const double * x, u
     double v_var = 0.0;
     for (uint64_t i = 0; i < length; ++i) {
         v = x[i];
+        if (isnan(v)) {
+            continue;
+        }
+        ++k;
         v_mean += v;
         if (v < v_min) {
             v_min = v;
@@ -104,13 +67,68 @@ void jls_statistics_compute_f64(struct jls_statistics_s * s, const double * x, u
             v_max = v;
         }
     }
-    v_mean /= length;
+    if (0 == k) {
+        jls_statistics_reset(s);
+        return;
+    }
+    v_mean /= k;
     double m;
     for (uint64_t i = 0; i < length; ++i) {
-        m = x[i] - v_mean;
-        v_var += (m * m);
+        v = x[i];
+        if (!isnan(v)) {
+            m = v - v_mean;
+            v_var += (m * m);
+        }
     }
-    s->k = length;
+    s->k = k;
+    s->mean = v_mean;
+    s->s = v_var;
+    s->min = v_min;
+    s->max = v_max;
+}
+
+void jls_statistics_compute_f64(struct jls_statistics_s * s, const double * x, uint64_t length) {
+    if (!s) {
+        return;
+    }
+    if (!x) {
+        length = 0;
+    }
+    // NaN marks a missing sample: skip it so mean, min and max agree
+    uint64_t k = 0;
+    double v;
+    double v_mean = 0.0;
+    double v_min = DBL_MAX;
+    double v_max = -DBL_MAX;
+    double v_var = 0.0;
+    for (uint64_t i = 0; i < length; ++i) {
+        v = x[i];
+        if (isnan(v)) {
+            continue;
+        }
+        ++k;
+        v_mean += v;
+        if (v < v_min) {
+            v_min = v;
+        }
+        if (v > v_max) {
+            v_max = v;
+        }
+    }
+    if (0 == k) {
+        jls_statistics_reset(s);
+        return;
+    }
+    v_mean /= k;
+    double m;
+    for (uint64_t i = 0; i < length; ++i) {
+        v = x[i];
+        if (!isnan(v)) {
+            m = v - v_mean;
+            v_var += (m * m);
+        }
+    }
+    s->k = k;
     s->mean = v_mean;
     s->s = v_var;
     s->min = v_min;
@@ -120,8 +138,8 @@ void jls_statistics_compute_f64(struct jls_statistics_s * s, const double * x, u
 void jls_statistics_add(struct jls_statistics_s *s, double x) {
     double m_old;
     double m_new;
-    if (!s) {
-        return;
+    if (!s || isnan(x)) {
+        return;  // NaN marks a missing sample
     }
     ++s->k;
     m_old = s->mean;
@@ -175,6 +193,10 @@ void jls_statistics_combine(struct jls_statistics_s *tgt,
         jls_statistics_copy(tgt, b);
     } else if (b->k == 0) {
         jls_statistics_copy(tgt, a);
+    } else if (isnan(a->mean) || isnan(b->mean)) {
+        // invalid (see jls_statistics_invalid) taints the result regardless of order
+        jls_statistics_invalid(tgt);
+        tgt->k = kt;
     } else {
         f1 = a->k / (double) kt;
         double mean_new = f1 * a->mean + (1.0 - f1) * b->mean;

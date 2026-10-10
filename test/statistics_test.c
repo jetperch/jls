@@ -218,6 +218,55 @@ static void test_combine_in_place(void **state) {
     assert_stats_equal(ref, t2);
 }
 
+static void test_nan_skipped(void **state) {
+    (void) state;
+    const double x64[] = {NAN, 1.0, 2.0, NAN, 3.0};
+    const float x32[] = {NAN, 1.0f, 2.0f, NAN, 3.0f};
+    struct jls_statistics_s s;
+    jls_statistics_compute_f64(&s, x64, 5);
+    assert_int_equal(3, s.k);
+    assert_float_equal(2.0, s.mean, 1e-15);
+    assert_float_equal(1.0, jls_statistics_var(&s), 1e-15);
+    assert_float_equal(1.0, s.min, 0.0);
+    assert_float_equal(3.0, s.max, 0.0);
+
+    jls_statistics_compute_f32(&s, x32, 5);
+    assert_int_equal(3, s.k);
+    assert_float_equal(2.0, s.mean, 1e-15);
+    assert_float_equal(1.0, s.min, 0.0);
+    assert_float_equal(3.0, s.max, 0.0);
+
+    jls_statistics_reset(&s);
+    for (int i = 0; i < 5; ++i) {
+        jls_statistics_add(&s, x64[i]);
+    }
+    assert_int_equal(3, s.k);
+    assert_float_equal(2.0, s.mean, 1e-15);
+    assert_float_equal(1.0, jls_statistics_var(&s), 1e-15);
+    assert_float_equal(1.0, s.min, 0.0);
+    assert_float_equal(3.0, s.max, 0.0);
+
+    const double all_nan[] = {NAN, NAN};
+    jls_statistics_compute_f64(&s, all_nan, 2);
+    assert_int_equal(0, s.k);
+}
+
+static void test_combine_invalid_order_independent(void **state) {
+    (void) state;
+    struct jls_statistics_s a = {.k=10, .mean=1.0, .s=0.5, .min=-2, .max=4};
+    struct jls_statistics_s b;
+    jls_statistics_invalid(&b);
+    b.k = 5;
+    struct jls_statistics_s t1;
+    struct jls_statistics_s t2;
+    jls_statistics_combine(&t1, &a, &b);
+    jls_statistics_combine(&t2, &b, &a);
+    assert_int_equal(15, t1.k);
+    assert_int_equal(15, t2.k);
+    assert_true(isnan(t1.mean) && isnan(t1.min) && isnan(t1.max));
+    assert_true(isnan(t2.mean) && isnan(t2.min) && isnan(t2.max));
+}
+
 static void test_null_arguments(void **state) {
     (void) state;
     struct jls_statistics_s s;
@@ -251,6 +300,8 @@ int main(void) {
             cmocka_unit_test(test_combine_f32_in_two_parts),
             cmocka_unit_test(test_combine_f64_in_two_parts),
             cmocka_unit_test(test_combine_in_place),
+            cmocka_unit_test(test_nan_skipped),
+            cmocka_unit_test(test_combine_invalid_order_independent),
             cmocka_unit_test(test_null_arguments),
     };
 

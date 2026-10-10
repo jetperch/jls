@@ -42,6 +42,12 @@ JLS_CPP_GUARD_START
  * @see https://en.wikipedia.org/wiki/Unbiased_estimation_of_standard_deviation
  * @see https://www.johndcook.com/blog/standard_deviation/
  * @see https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
+ *
+ * NaN marks a missing sample.  jls_statistics_add() and
+ * jls_statistics_compute_f32/f64() skip NaN values, so k counts only the
+ * non-NaN samples.  With no samples (k == 0), the instance is in its
+ * reset state.  An instance marked with jls_statistics_invalid() and
+ * k > 0 makes jls_statistics_combine() produce an invalid (all NaN) result.
  */
 struct jls_statistics_s {
     uint64_t k;    ///< Number of samples.
@@ -83,7 +89,7 @@ JLS_API void jls_statistics_compute_f32(struct jls_statistics_s * s, const float
  *
  * @param s The statistics instance.
  * @param x The value array.
- * @param length The number of elements in x.
+ * @param length The number of elements in x.  NaN elements are skipped.
  */
 JLS_API void jls_statistics_compute_f64(struct jls_statistics_s * s, const double * x, uint64_t length);
 
@@ -91,7 +97,7 @@ JLS_API void jls_statistics_compute_f64(struct jls_statistics_s * s, const doubl
  * @brief Add a new sample into the statistics.
  *
  * @param s The statistics instance.
- * @param x The new value.
+ * @param x The new value.  NaN is ignored.
  */
 JLS_API void jls_statistics_add(struct jls_statistics_s * s, double x);
 
