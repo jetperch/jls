@@ -19,6 +19,7 @@
 #include <setjmp.h>
 #include <cmocka.h>
 #include "jls/statistics.h"
+#include <math.h>
 
 
 const float F32_0[] = {0.0f, 1.0f, 2.0f, 7.7f, -2.0f, 3.1f, -3.1f, 4.2f, -4.2f, -1.0f, 5.4f, -5.4f, 6.3f, -6.3f, -7.7f};
@@ -217,6 +218,26 @@ static void test_combine_in_place(void **state) {
     assert_stats_equal(ref, t2);
 }
 
+static void test_null_arguments(void **state) {
+    (void) state;
+    struct jls_statistics_s s;
+    jls_statistics_reset(NULL);
+    jls_statistics_invalid(NULL);
+    jls_statistics_compute_f32(NULL, F32_0, 1);
+    jls_statistics_compute_f64(NULL, F64_0, 1);
+    jls_statistics_add(NULL, 1.0);
+    assert_true(isnan(jls_statistics_var(NULL)));
+    jls_statistics_copy(NULL, &s);
+    jls_statistics_copy(&s, NULL);
+    jls_statistics_combine(NULL, &s, &s);
+    jls_statistics_combine(&s, NULL, &s);
+    jls_statistics_combine(&s, &s, NULL);
+    jls_statistics_compute_f32(&s, NULL, 10);  // NULL data is empty
+    assert_int_equal(0, s.k);
+    jls_statistics_compute_f64(&s, NULL, 10);
+    assert_int_equal(0, s.k);
+}
+
 int main(void) {
     const struct CMUnitTest tests[] = {
             cmocka_unit_test(test_initialize),
@@ -230,6 +251,7 @@ int main(void) {
             cmocka_unit_test(test_combine_f32_in_two_parts),
             cmocka_unit_test(test_combine_f64_in_two_parts),
             cmocka_unit_test(test_combine_in_place),
+            cmocka_unit_test(test_null_arguments),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);

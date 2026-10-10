@@ -537,6 +537,9 @@ uint32_t jls_crc32c_hdr(const struct jls_chunk_header_s * hdr) {
 
 uint32_t jls_crc32c(uint8_t const *data, uint32_t length) {
     uint32_t crc = 0xFFFFFFFF;
+    if (!data) {
+        length = 0;
+    }
     crc = crc32cSlicingBy8(crc, data, length);
     return (crc ^ 0xFFFFFFFF);
 }

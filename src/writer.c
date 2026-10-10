@@ -89,6 +89,7 @@ int32_t jls_wr_open(struct jls_wr_s ** instance, const char * path) {
 
     int32_t rc = jls_raw_open(&core->raw, path, "w");
     if (rc) {
+        jls_buf_free(core->buf);
         free(self);
         return rc;
     }
@@ -123,6 +124,9 @@ int32_t jls_wr_close(struct jls_wr_s * self) {
 }
 
 int32_t jls_wr_flush(struct jls_wr_s * self) {
+    if (!self) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
     return jls_raw_flush(self->core.raw);
 }
 
@@ -294,9 +298,7 @@ int32_t jls_wr_user_data(struct jls_wr_s * self, uint16_t chunk_meta,
     if (!self) {
         return JLS_ERROR_PARAMETER_INVALID;
     }
-    if (data_size && !data) {
-        return JLS_ERROR_PARAMETER_INVALID;
-    }
+    ROE(jls_wr_payload_validate(storage_type, data, data_size));
     if (chunk_meta & 0xf000) {
         JLS_LOGW("chunk_meta[15:12] nonzero.  Will be modified.");
         chunk_meta &= 0x0fff;
@@ -334,6 +336,9 @@ int32_t jls_wr_user_data(struct jls_wr_s * self, uint16_t chunk_meta,
 
 int32_t jls_wr_fsr(struct jls_wr_s * self, uint16_t signal_id,
                            int64_t sample_id, const void * data, uint32_t data_length) {
+    if (!self || (data_length && !data)) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
     ROE(jls_core_signal_validate_typed(&self->core, signal_id, JLS_SIGNAL_TYPE_FSR));
     struct jls_core_signal_s * info = &self->core.signal_info[signal_id];
     return jls_wr_fsr_data(info->track_fsr, sample_id, data, data_length);
@@ -341,6 +346,9 @@ int32_t jls_wr_fsr(struct jls_wr_s * self, uint16_t signal_id,
 
 int32_t jls_wr_fsr_f32(struct jls_wr_s * self, uint16_t signal_id,
                        int64_t sample_id, const float * data, uint32_t data_length) {
+    if (!self || (data_length && !data)) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
     ROE(jls_core_signal_validate_typed(&self->core, signal_id, JLS_SIGNAL_TYPE_FSR));
     struct jls_core_signal_s * info = &self->core.signal_info[signal_id];
     if (info->signal_def.data_type != JLS_DATATYPE_F32) {
@@ -350,12 +358,32 @@ int32_t jls_wr_fsr_f32(struct jls_wr_s * self, uint16_t signal_id,
 }
 
 int32_t jls_wr_fsr_omit_data(struct jls_wr_s * self, uint16_t signal_id, uint32_t enable) {
+    if (!self) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
     ROE(jls_core_signal_validate_typed(&self->core, signal_id, JLS_SIGNAL_TYPE_FSR));
     struct jls_core_signal_s * info = &self->core.signal_info[signal_id];
     if (enable) {
         info->track_fsr->write_omit_data |= 1;
     } else {
         info->track_fsr->write_omit_data = 0;
+    }
+    return 0;
+}
+
+int32_t jls_wr_payload_validate(uint32_t storage_type, const uint8_t * data, uint32_t data_size) {
+    if (data_size && !data) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
+    switch (storage_type) {
+        case JLS_STORAGE_TYPE_STRING:  // intentional fall-through
+        case JLS_STORAGE_TYPE_JSON:
+            if (!data) {  // strlen(data)
+                return JLS_ERROR_PARAMETER_INVALID;
+            }
+            break;
+        default:
+            break;
     }
     return 0;
 }
@@ -378,12 +406,16 @@ int32_t jls_wr_annotation(struct jls_wr_s * self, uint16_t signal_id, int64_t ti
                           uint8_t group_id,
                           enum jls_storage_type_e storage_type,
                           const uint8_t * data, uint32_t data_size) {
+    if (!self) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
     ROE(jls_core_signal_validate(&self->core, signal_id));
     struct jls_core_s * core = &self->core;
     struct jls_buf_s * buf = self->core.buf;
     struct jls_core_signal_s * signal_info = &core->signal_info[signal_id];
     struct jls_core_track_s * track = &signal_info->tracks[JLS_TRACK_TYPE_ANNOTATION];
     ROE(jls_wr_annotation_type_validate(annotation_type));
+    ROE(jls_wr_payload_validate(storage_type, data, data_size));
     if ((storage_type & 0xff) != storage_type) {
         return JLS_ERROR_PARAMETER_INVALID;
     }
@@ -437,6 +469,9 @@ int32_t jls_wr_annotation(struct jls_wr_s * self, uint16_t signal_id, int64_t ti
 }
 
 int32_t jls_wr_utc(struct jls_wr_s * self, uint16_t signal_id, int64_t sample_id, int64_t utc) {
+    if (!self) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
     ROE(jls_core_signal_validate_typed(&self->core, signal_id, JLS_SIGNAL_TYPE_FSR));
     struct jls_core_signal_s * signal_info = &self->core.signal_info[signal_id];
     struct jls_core_track_s * track = &signal_info->tracks[JLS_TRACK_TYPE_UTC];

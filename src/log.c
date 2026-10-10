@@ -45,6 +45,9 @@ static jls_log_cbk cbk_ = cbk_default;
 void jls_log_printf(const char * fmt, ...) {
     char buffer[1024];
     va_list arg;
+    if (!fmt) {
+        return;
+    }
     va_start(arg, fmt);
     vsnprintf(buffer, sizeof(buffer), fmt, arg);
     va_end(arg);

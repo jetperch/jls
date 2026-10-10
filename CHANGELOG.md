@@ -42,6 +42,16 @@ This file contains the list of changes made to the JLS project.
   signal_id and annotation_type, and the threaded writer now reports
   these errors synchronously, rather than only logging them from its
   thread.  Reader.utc() now rejects VSR signals.
+* All C API functions now validate their arguments: NULL instances,
+  output pointers, and data with a nonzero length return
+  PARAMETER_INVALID instead of crashing, as do negative lengths for
+  jls_rd_fsr(), jls_rd_fsr_f32(), and jls_rd_fsr_statistics(), which
+  previously succeeded without reading.  jls_rd_tmap_get() returns
+  PARAMETER_INVALID, not UNAVAILABLE, for an index out of range.
+  jls_twr_fsr_f32() rejects non-f32 signals, which read past the caller's
+  buffer.  STRING and JSON user_data and annotations require data.  The
+  statistics functions, jls_crc32c(), and jls_log_printf() ignore NULL.
+* Fixed memory leaks when jls_wr_open() or jls_copy() fail to open a file.
 * Empty data now works: Writer.annotation() with data None or b'',
   Writer.fsr() with an empty array, and Reader.fsr() or
   Reader.fsr_statistics() with length 0.

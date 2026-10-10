@@ -56,6 +56,16 @@ int32_t jls_twr_run(struct jls_twr_s * self);
  */
 int32_t jls_wr_annotation_type_validate(uint32_t annotation_type);
 
+/**
+ * @brief Validate a user_data or annotation payload.
+ *
+ * @param storage_type The jls_storage_type_e.
+ * @param data The payload, which STRING and JSON require.
+ * @param data_size The payload size in bytes, which BINARY requires.
+ * @return 0 or JLS_ERROR_PARAMETER_INVALID.
+ */
+int32_t jls_wr_payload_validate(uint32_t storage_type, const uint8_t * data, uint32_t data_size);
+
 /** @} */
 
 #ifdef __cplusplus

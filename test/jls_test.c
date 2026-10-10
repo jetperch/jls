@@ -21,6 +21,7 @@
 #include "jls.h"
 #include "jls/writer.h"
 #include "jls/crc32c.h"
+#include "jls/log.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1122,6 +1123,17 @@ static int32_t on_utc_unexpected(void * user_data, const struct jls_utc_summary_
     return 1;
 }
 
+static int32_t on_user_data_unexpected(void * user_data, uint16_t chunk_meta, enum jls_storage_type_e storage_type,
+                                       uint8_t * data, uint32_t data_size) {
+    (void) user_data;
+    (void) chunk_meta;
+    (void) storage_type;
+    (void) data;
+    (void) data_size;
+    fail();
+    return 1;
+}
+
 static void test_signal_id_validation(void **state) {
     (void) state;
     struct jls_wr_s * wr = NULL;
@@ -1224,6 +1236,107 @@ static void test_annotation_data_size_corrupt(void **state) {
     remove(filename);
 }
 
+static void test_wr_null_arguments(void **state) {
+    (void) state;
+    struct jls_wr_s * wr = NULL;
+    float data[10] = {0};
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_wr_open(NULL, filename));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_wr_open(&wr, NULL));
+    assert_int_equal(0, jls_wr_close(NULL));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_wr_flush(NULL));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_wr_source_def(NULL, &SOURCE_3));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_wr_signal_def(NULL, &SIGNAL_5));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_wr_user_data(NULL, 1, JLS_STORAGE_TYPE_BINARY, NULL, 0));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_wr_fsr(NULL, 5, 0, data, 10));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_wr_fsr_f32(NULL, 5, 0, data, 10));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_wr_fsr_omit_data(NULL, 5, 1));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_wr_annotation(NULL, 5, 0, NAN, JLS_ANNOTATION_TYPE_TEXT, 0,
+                                                                    JLS_STORAGE_TYPE_STRING, (const uint8_t *) STRING_1, 0));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_wr_utc(NULL, 5, 0, 0));
+    jls_log_printf(NULL);
+
+    assert_int_equal(0, jls_wr_open(&wr, filename));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_wr_source_def(wr, NULL));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_wr_signal_def(wr, NULL));
+    assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_3));
+    assert_int_equal(0, jls_wr_signal_def(wr, &SIGNAL_5));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_wr_fsr(wr, 5, 0, NULL, 10));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_wr_fsr_f32(wr, 5, 0, NULL, 10));
+    // STRING and JSON payloads are NUL-terminated strings
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_wr_user_data(wr, 1, JLS_STORAGE_TYPE_STRING, NULL, 0));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_wr_user_data(wr, 1, JLS_STORAGE_TYPE_JSON, NULL, 0));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_wr_user_data(wr, 1, JLS_STORAGE_TYPE_BINARY, NULL, 4));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_wr_annotation(wr, 5, 0, NAN, JLS_ANNOTATION_TYPE_TEXT, 0,
+                                                                    JLS_STORAGE_TYPE_STRING, NULL, 0));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_wr_annotation(wr, 5, 0, NAN, JLS_ANNOTATION_TYPE_USER, 0,
+                                                                    JLS_STORAGE_TYPE_BINARY, NULL, 4));
+    assert_int_equal(0, jls_wr_user_data(wr, 1, JLS_STORAGE_TYPE_BINARY, NULL, 0));
+    assert_int_equal(0, jls_wr_fsr_f32(wr, 5, 0, data, ARRAY_SIZE(data)));
+    assert_int_equal(0, jls_wr_close(wr));
+    remove(filename);
+}
+
+static void test_rd_null_arguments(void **state) {
+    (void) state;
+    struct jls_wr_s * wr = NULL;
+    struct jls_rd_s * rd = NULL;
+    float data[10] = {0};
+    double stats[JLS_SUMMARY_FSR_COUNT];
+    int64_t i64 = 0;
+    uint16_t count = 0;
+    struct jls_source_def_s * sources = NULL;
+    struct jls_signal_def_s * signals = NULL;
+    struct jls_signal_def_s signal;
+    struct jls_utc_summary_entry_s entry;
+
+    assert_int_equal(0, jls_wr_open(&wr, filename));
+    assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_3));
+    assert_int_equal(0, jls_wr_signal_def(wr, &SIGNAL_5));
+    assert_int_equal(0, jls_wr_fsr_f32(wr, 5, 0, data, ARRAY_SIZE(data)));
+    assert_int_equal(0, jls_wr_close(wr));
+
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_open(NULL, filename));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_open(&rd, NULL));
+    jls_rd_close(NULL);
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_sources(NULL, &sources, &count));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_signals(NULL, &signals, &count));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_signal(NULL, 5, &signal));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_fsr_length(NULL, 5, &i64));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_fsr(NULL, 5, 0, data, 1));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_fsr_f32(NULL, 5, 0, data, 1));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_fsr_statistics(NULL, 5, 0, 1, stats, 1));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_annotations(NULL, 5, 0, on_annotation_unexpected, NULL));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_user_data(NULL, on_user_data_unexpected, NULL));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_utc(NULL, 5, 0, on_utc_unexpected, NULL));
+    assert_int_equal(0, jls_rd_tmap_length(NULL, 5));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_sample_id_to_timestamp(NULL, 5, 0, &i64));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_timestamp_to_sample_id(NULL, 5, 0, &i64));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_tmap_get(NULL, 5, 0, &entry));
+
+    assert_int_equal(0, jls_rd_open(&rd, filename));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_sources(rd, NULL, &count));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_signals(rd, &signals, NULL));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_fsr_length(rd, 5, NULL));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_fsr(rd, 5, 0, NULL, 1));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_fsr(rd, 5, 0, data, -1));
+    assert_int_equal(0, jls_rd_fsr(rd, 5, 0, NULL, 0));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_fsr_f32(rd, 5, 0, NULL, 1));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_fsr_statistics(rd, 5, 0, 1, NULL, 1));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_fsr_statistics(rd, 5, 0, 1, stats, -1));
+    assert_int_equal(0, jls_rd_fsr_statistics(rd, 5, 0, 1, NULL, 0));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_annotations(rd, 5, 0, NULL, NULL));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_user_data(rd, NULL, NULL));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_utc(rd, 5, 0, NULL, NULL));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_sample_id_to_timestamp(rd, 5, 0, NULL));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_timestamp_to_sample_id(rd, 5, 0, NULL));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_tmap_get(rd, 5, 0, NULL));
+    assert_int_equal(1, jls_rd_tmap_length(rd, 5));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_tmap_get(rd, 5, 1, &entry));  // index out of range
+    assert_int_equal(0, jls_rd_tmap_get(rd, 5, 0, &entry));
+    jls_rd_close(rd);
+    remove(filename);
+}
+
 #if !SKIP_REALWORLD
 static void test_fsr_f32_statistics_real(void **state) {
     (void) state;
@@ -1290,6 +1403,8 @@ int main(void) {
             cmocka_unit_test(test_fsr_u1_auto_def),
             cmocka_unit_test(test_signal_id_validation),
             cmocka_unit_test(test_annotation_data_size_corrupt),
+            cmocka_unit_test(test_wr_null_arguments),
+            cmocka_unit_test(test_rd_null_arguments),
 
 #if !SKIP_REALWORLD
             cmocka_unit_test(test_fsr_f32_statistics_real),

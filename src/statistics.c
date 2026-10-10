@@ -19,6 +19,9 @@
 #include <math.h>
 
 void jls_statistics_reset(struct jls_statistics_s *s) {
+    if (!s) {
+        return;
+    }
     s->k = 0;
     s->mean = 0.0;
     s->s = 0.0;
@@ -27,6 +30,9 @@ void jls_statistics_reset(struct jls_statistics_s *s) {
 }
 
 void jls_statistics_invalid(struct jls_statistics_s *s) {
+    if (!s) {
+        return;
+    }
     s->mean = NAN;
     s->s = NAN;
     s->min = NAN;
@@ -34,6 +40,12 @@ void jls_statistics_invalid(struct jls_statistics_s *s) {
 }
 
 void jls_statistics_compute_f32(struct jls_statistics_s * s, const float * x, uint64_t length) {
+    if (!s) {
+        return;
+    }
+    if (!x) {
+        length = 0;
+    }
     if (length <= 0) {
         jls_statistics_reset(s);
         return;
@@ -67,6 +79,12 @@ void jls_statistics_compute_f32(struct jls_statistics_s * s, const float * x, ui
 }
 
 void jls_statistics_compute_f64(struct jls_statistics_s * s, const double * x, uint64_t length)  {
+    if (!s) {
+        return;
+    }
+    if (!x) {
+        length = 0;
+    }
     if (length <= 0) {
         jls_statistics_reset(s);
         return;
@@ -102,6 +120,9 @@ void jls_statistics_compute_f64(struct jls_statistics_s * s, const double * x, u
 void jls_statistics_add(struct jls_statistics_s *s, double x) {
     double m_old;
     double m_new;
+    if (!s) {
+        return;
+    }
     ++s->k;
     m_old = s->mean;
     m_new = s->mean + (x - s->mean) / (double) s->k;
@@ -116,6 +137,9 @@ void jls_statistics_add(struct jls_statistics_s *s, double x) {
 }
 
 double jls_statistics_var(struct jls_statistics_s *s) {
+    if (!s) {
+        return NAN;
+    }
     if (s->k <= 1) {
         return 0.0;
     }
@@ -124,6 +148,9 @@ double jls_statistics_var(struct jls_statistics_s *s) {
 
 void jls_statistics_copy(struct jls_statistics_s *tgt,
                          const struct jls_statistics_s *src) {
+    if (!tgt || !src) {
+        return;
+    }
     tgt->k = src->k;
     tgt->mean = src->mean;
     tgt->s = src->s;
@@ -138,6 +165,9 @@ void jls_statistics_combine(struct jls_statistics_s *tgt,
     double f1;
     double m1_diff;
     double m2_diff;
+    if (!tgt || !a || !b) {
+        return;
+    }
     kt = a->k + b->k;
     if (kt == 0) {
         jls_statistics_reset(tgt);

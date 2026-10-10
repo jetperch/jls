@@ -169,10 +169,55 @@ static void test_validation(void **state) {
     remove(filename);
 }
 
+static void test_null_arguments(void **state) {
+    (void) state;
+    struct jls_twr_s * wr = NULL;
+    float data[10] = {0};
+    const char str[] = "hello";
+    struct jls_signal_def_s signal_6 = SIGNAL_5;
+    signal_6.signal_id = 6;
+    signal_6.data_type = JLS_DATATYPE_F64;
+
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_twr_open(NULL, filename));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_twr_open(&wr, NULL));
+    assert_int_equal(0, jls_twr_flags_get(NULL));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_twr_flags_set(NULL, 0));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_twr_flush(NULL));
+    assert_int_equal(0, jls_twr_close(NULL));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_twr_source_def(NULL, &SOURCE_3));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_twr_signal_def(NULL, &SIGNAL_5));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_twr_user_data(NULL, 1, JLS_STORAGE_TYPE_BINARY, NULL, 0));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_twr_fsr(NULL, 5, 0, data, 10));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_twr_fsr_f32(NULL, 5, 0, data, 10));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_twr_fsr_omit_data(NULL, 5, 1));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_twr_annotation(NULL, 5, 0, 0.0f, JLS_ANNOTATION_TYPE_TEXT, 0,
+                                                                     JLS_STORAGE_TYPE_STRING, (const uint8_t *) str, sizeof(str)));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_twr_utc(NULL, 5, 0, 0));
+
+    assert_int_equal(0, jls_twr_open(&wr, filename));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_twr_source_def(wr, NULL));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_twr_signal_def(wr, NULL));
+    assert_int_equal(0, jls_twr_source_def(wr, &SOURCE_3));
+    assert_int_equal(0, jls_twr_signal_def(wr, &SIGNAL_5));
+    assert_int_equal(0, jls_twr_signal_def(wr, &signal_6));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_twr_fsr(wr, 5, 0, NULL, 10));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_twr_fsr_f32(wr, 5, 0, NULL, 10));
+    // a float buffer for an f64 signal is too small
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_twr_fsr_f32(wr, 6, 0, data, 10));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_twr_annotation(wr, 5, 0, 0.0f, JLS_ANNOTATION_TYPE_USER, 0,
+                                                                     JLS_STORAGE_TYPE_BINARY, NULL, 4));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_twr_annotation(wr, 5, 0, 0.0f, JLS_ANNOTATION_TYPE_TEXT, 0,
+                                                                     JLS_STORAGE_TYPE_STRING, NULL, 0));
+    assert_int_equal(0, jls_twr_fsr_f32(wr, 5, 0, data, 10));
+    assert_int_equal(0, jls_twr_close(wr));
+    remove(filename);
+}
+
 int main(void) {
     const struct CMUnitTest tests[] = {
             cmocka_unit_test(test_data),
             cmocka_unit_test(test_validation),
+            cmocka_unit_test(test_null_arguments),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);

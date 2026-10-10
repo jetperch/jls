@@ -39,7 +39,7 @@ struct jls_twr_s {
     uint32_t flags;  // jls_twr_flags_e bits
     volatile uint64_t flush_send_id;
     volatile uint64_t flush_processed_id;
-    uint8_t fsr_entry_size_bits[JLS_SIGNAL_COUNT];
+    uint32_t data_type[JLS_SIGNAL_COUNT];   // jls_datatype_e
     uint8_t signal_type[JLS_SIGNAL_COUNT];  // jls_signal_type_e or SIGNAL_TYPE_UNDEFINED
     struct jls_mrb_s mrb;
     uint8_t mrb_buffer[];
@@ -207,6 +207,9 @@ int32_t jls_twr_run(struct jls_twr_s * self) {
 int32_t jls_twr_open(struct jls_twr_s ** instance, const char * path) {
     struct jls_wr_s * wr;
     struct jls_twr_s * self;
+    if (!instance) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
     ROE(jls_wr_open(&wr, path));
 
     self = malloc(sizeof(struct jls_twr_s) + MRB_BUFFER_SIZE);
@@ -220,7 +223,7 @@ int32_t jls_twr_open(struct jls_twr_s ** instance, const char * path) {
     self->wr = wr;
     self->flush_send_id = 0;
     self->flush_processed_id = 0;
-    memset(self->fsr_entry_size_bits, 0, sizeof(self->fsr_entry_size_bits));
+    memset(self->data_type, 0, sizeof(self->data_type));
     memset(self->signal_type, SIGNAL_TYPE_UNDEFINED, sizeof(self->signal_type));
     self->signal_type[0] = JLS_SIGNAL_TYPE_VSR;  // jls_wr_open defines signal 0
 
@@ -238,10 +241,13 @@ int32_t jls_twr_open(struct jls_twr_s ** instance, const char * path) {
 }
 
 uint32_t jls_twr_flags_get(struct jls_twr_s * self) {
-    return self->flags;
+    return self ? self->flags : 0;
 }
 
 int32_t jls_twr_flags_set(struct jls_twr_s * self, uint32_t flags) {
+    if (!self) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
     self->flags = flags;
     return 0;
 }
@@ -279,6 +285,9 @@ static int32_t msg_send(struct jls_twr_s * self, const struct msg_header_s * hdr
 int32_t jls_twr_flush(struct jls_twr_s * self) {
     uint64_t flush_id;
     struct msg_header_s hdr = { .msg_type = MSG_FLUSH };
+    if (!self) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
     jls_bkt_msg_lock(self->bk);
     flush_id = self->flush_send_id + 1;
     self->flush_send_id = flush_id;
@@ -316,6 +325,9 @@ int32_t jls_twr_close(struct jls_twr_s * self) {
 }
 
 int32_t jls_twr_source_def(struct jls_twr_s * self, const struct jls_source_def_s * source) {
+    if (!self) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
     jls_bkt_process_lock(self->bk);
     int32_t rv = jls_wr_source_def(self->wr, source);
     jls_bkt_process_unlock(self->bk);
@@ -323,10 +335,13 @@ int32_t jls_twr_source_def(struct jls_twr_s * self, const struct jls_source_def_
 }
 
 int32_t jls_twr_signal_def(struct jls_twr_s * self, const struct jls_signal_def_s * signal) {
+    if (!self) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
     jls_bkt_process_lock(self->bk);
     int32_t rv = jls_wr_signal_def(self->wr, signal);
-    if (0 == rv) {  // jls_wr_signal_def validated signal_id
-        self->fsr_entry_size_bits[signal->signal_id] = jls_datatype_parse_size(signal->data_type);
+    if (0 == rv) {  // jls_wr_signal_def validated signal and signal_id
+        self->data_type[signal->signal_id] = signal->data_type;
         self->signal_type[signal->signal_id] = signal->signal_type;
     }
     jls_bkt_process_unlock(self->bk);
@@ -338,7 +353,7 @@ int32_t jls_twr_signal_def(struct jls_twr_s * self, const struct jls_signal_def_
  * Matches jls_core_signal_validate_typed() return codes.
  */
 static int32_t signal_validate(struct jls_twr_s * self, uint16_t signal_id, bool fsr_only) {
-    if (signal_id >= JLS_SIGNAL_COUNT) {
+    if (!self || (signal_id >= JLS_SIGNAL_COUNT)) {
         return JLS_ERROR_PARAMETER_INVALID;
     }
     uint8_t signal_type = self->signal_type[signal_id];
@@ -356,9 +371,7 @@ static int32_t signal_validate(struct jls_twr_s * self, uint16_t signal_id, bool
  * on STRING and JSON payloads, so they must be NUL-terminated within it.
  */
 static int32_t payload_validate(enum jls_storage_type_e storage_type, const uint8_t * data, uint32_t data_size) {
-    if (data_size && !data) {
-        return JLS_ERROR_PARAMETER_INVALID;
-    }
+    ROE(jls_wr_payload_validate(storage_type, data, data_size));
     switch (storage_type) {
         case JLS_STORAGE_TYPE_STRING:  // intentional fall-through
         case JLS_STORAGE_TYPE_JSON:
@@ -384,6 +397,9 @@ int32_t jls_twr_user_data(struct jls_twr_s * self, uint16_t chunk_meta,
             },
             .d = 0
     };
+    if (!self) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
     ROE(payload_validate(storage_type, data, data_size));
     return msg_send(self, &hdr, data, data_size);
 }
@@ -402,7 +418,11 @@ int32_t jls_twr_fsr(struct jls_twr_s * self, uint16_t signal_id,
             .d = 0
     };
     ROE(signal_validate(self, signal_id, true));
-    uint64_t length_u64 = ((uint64_t) data_length * self->fsr_entry_size_bits[signal_id] + 7) / 8;
+    if (data_length && !data) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
+    uint8_t entry_size_bits = jls_datatype_parse_size(self->data_type[signal_id]);
+    uint64_t length_u64 = ((uint64_t) data_length * entry_size_bits + 7) / 8;
     if (length_u64 > MRB_BUFFER_SIZE) {
         return JLS_ERROR_TOO_BIG;
     }
@@ -422,6 +442,10 @@ int32_t jls_twr_fsr(struct jls_twr_s * self, uint16_t signal_id,
 
 int32_t jls_twr_fsr_f32(struct jls_twr_s * self, uint16_t signal_id,
                         int64_t sample_id, const float * data, uint32_t data_length) {
+    ROE(signal_validate(self, signal_id, true));
+    if (JLS_DATATYPE_F32 != self->data_type[signal_id]) {  // data is float[data_length]
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
     return jls_twr_fsr(self, signal_id, sample_id, data, data_length);
 }
 

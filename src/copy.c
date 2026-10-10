@@ -56,6 +56,7 @@ int32_t jls_copy(const char * src, const char * dst,
 
     rc = jls_raw_open(&rd, src, "r");
     if (rc && (rc != JLS_ERROR_TRUNCATED)) {
+        jls_buf_free(buf);
         return rc;
     }
     offset = jls_raw_chunk_tell(rd);
@@ -66,6 +67,7 @@ int32_t jls_copy(const char * src, const char * dst,
     rc = jls_wr_open(&wr, dst);
     if (rc) {
         jls_raw_close(rd);
+        jls_buf_free(buf);
         return rc;
     }
 

@@ -407,17 +407,20 @@ class TestBinding(unittest.TestCase):
             self.assertEqual((0, ), d.shape)
             self.assertEqual(np.float32, d.dtype)
             self.assertEqual((0, SummaryFSR.COUNT), r.fsr_statistics(3, 0, 10, 0).shape)
-            with self.assertRaisesRegex(ValueError, 'invalid length'):
+            with self.assertRaisesRegex(ValueError, 'PARAMETER_INVALID'):
                 r.fsr(3, 0, -1)
-            with self.assertRaisesRegex(ValueError, 'invalid length'):
+            with self.assertRaisesRegex(ValueError, 'PARAMETER_INVALID'):
                 r.fsr_statistics(3, 0, 10, -1)
 
     def test_time_map_get_index_out_of_range(self):
         signal_id = 3
         self._utc_gen(signal_id)
         with Reader(self._path) as r:
-            for index in [100, -101, (-200, 1), (0, 101)]:
+            for index in [-101, (-200, 1)]:
                 with self.assertRaisesRegex(ValueError, 'index out of range'):
+                    r.time_map_get(signal_id, index)
+            for index in [100, (0, 101), (0, 1 << 40)]:  # rejected by the JLS library
+                with self.assertRaisesRegex(ValueError, 'PARAMETER_INVALID'):
                     r.time_map_get(signal_id, index)
 
     def test_callback_exception_stops_iteration(self):

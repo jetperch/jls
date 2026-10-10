@@ -183,8 +183,8 @@ int32_t jls_tmap_timestamp_to_sample_id(struct jls_tmap_s * self, int64_t timest
 }
 
 int32_t jls_tmap_get(struct jls_tmap_s * self, size_t index, struct jls_utc_summary_entry_s * entry) {
-    if (index >= self->entries_length) {
-        return JLS_ERROR_UNAVAILABLE;
+    if (!entry || (index >= self->entries_length)) {
+        return JLS_ERROR_PARAMETER_INVALID;
     }
     entry->sample_id = self->sample_id[index];
     entry->timestamp = self->utc[index];

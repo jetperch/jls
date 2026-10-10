@@ -249,28 +249,46 @@ void jls_rd_close(struct jls_rd_s * self) {
 }
 
 int32_t jls_rd_sources(struct jls_rd_s * self, struct jls_source_def_s ** sources, uint16_t * count) {
+    if (!self) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
     return jls_core_sources(&self->core, sources, count);
 }
 
 int32_t jls_rd_signals(struct jls_rd_s * self, struct jls_signal_def_s ** signals, uint16_t * count) {
+    if (!self) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
     return jls_core_signals(&self->core, signals, count);
 }
 
 int32_t jls_rd_signal(struct jls_rd_s * self, uint16_t signal_id, struct jls_signal_def_s * signal) {
+    if (!self) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
     return jls_core_signal(&self->core, signal_id, signal);
 }
 
 JLS_API int32_t jls_rd_fsr_length(struct jls_rd_s * self, uint16_t signal_id, int64_t * samples) {
+    if (!self) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
     return jls_core_fsr_length(&self->core, signal_id, samples);
 }
 
 int32_t jls_rd_fsr(struct jls_rd_s * self, uint16_t signal_id, int64_t start_sample_id,
                    void * data, int64_t data_length) {
+    if (!self) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
     return jls_core_fsr(&self->core, signal_id, start_sample_id, data, data_length);
 }
 
 JLS_API int32_t jls_rd_fsr_f32(struct jls_rd_s * self, uint16_t signal_id, int64_t start_sample_id,
                                float * data, int64_t data_length) {
+    if (!self) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
     return jls_core_fsr_f32(&self->core, signal_id, start_sample_id, data, data_length);
 }
 
@@ -473,9 +491,13 @@ int32_t jls_core_fsr_statistics(struct jls_core_s * self, uint16_t signal_id,
     if (increment <= 0) {
         JLS_LOGW("invalid increment: %" PRIi64, increment);
         return JLS_ERROR_PARAMETER_INVALID;
-    } else if (data_length <= 0) {
+    } else if (data_length < 0) {
         JLS_LOGW("invalid length: %" PRIi64, data_length);
+        return JLS_ERROR_PARAMETER_INVALID;
+    } else if (data_length == 0) {
         return 0;
+    } else if (!data) {
+        return JLS_ERROR_PARAMETER_INVALID;
     } else if (start_sample_id < 0) {
         JLS_LOGW("invalid start_sample_id: %" PRIi64, start_sample_id);
         return JLS_ERROR_PARAMETER_INVALID;
@@ -593,6 +615,9 @@ int32_t jls_core_fsr_statistics(struct jls_core_s * self, uint16_t signal_id,
 JLS_API int32_t jls_rd_fsr_statistics(struct jls_rd_s * self, uint16_t signal_id,
                                       int64_t start_sample_id, int64_t increment,
                                       double * data, int64_t data_length) {
+    if (!self) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
     return jls_core_fsr_statistics(&self->core, signal_id, start_sample_id, increment, data, data_length);
 }
 
@@ -647,6 +672,9 @@ int32_t jls_core_annotations(struct jls_core_s * self, uint16_t signal_id, int64
 
 JLS_API int32_t jls_rd_annotations(struct jls_rd_s * self, uint16_t signal_id, int64_t timestamp,
                                    jls_rd_annotation_cbk_fn cbk_fn, void * cbk_user_data) {
+    if (!self) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
     return jls_core_annotations(&self->core, signal_id, timestamp, cbk_fn, cbk_user_data);
 }
 
@@ -691,6 +719,9 @@ int32_t jls_core_user_data(struct jls_core_s * self, jls_rd_user_data_cbk_fn cbk
 }
 
 JLS_API int32_t jls_rd_user_data(struct jls_rd_s * self, jls_rd_user_data_cbk_fn cbk_fn, void * cbk_user_data) {
+    if (!self) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
     return jls_core_user_data(&self->core, cbk_fn, cbk_user_data);
 }
 
@@ -791,6 +822,9 @@ int32_t jls_core_utc(struct jls_core_s * self, uint16_t signal_id, int64_t sampl
 
 JLS_API int32_t jls_rd_utc(struct jls_rd_s * self, uint16_t signal_id, int64_t sample_id,
                            jls_rd_utc_cbk_fn cbk_fn, void * cbk_user_data) {
+    if (!self) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
     return jls_core_utc(&self->core, signal_id, sample_id, cbk_fn, cbk_user_data);
 }
 
@@ -817,12 +851,13 @@ static int32_t utc_load(struct jls_core_s * self, uint16_t signal_id) {
 }
 
 #define fsr_tmap() \
+    if (!self) { return JLS_ERROR_PARAMETER_INVALID; } \
     ROE(utc_load(&self->core, signal_id)); \
     struct jls_tmap_s * fsr = self->core.signal_info[signal_id].track_fsr->tmap
 
 
 size_t jls_rd_tmap_length(struct jls_rd_s * self, uint16_t signal_id) {
-    if (utc_load(&self->core, signal_id)) {
+    if (!self || utc_load(&self->core, signal_id)) {
         return 0;
     }
     return jls_tmap_length(self->core.signal_info[signal_id].track_fsr->tmap);
@@ -831,16 +866,25 @@ size_t jls_rd_tmap_length(struct jls_rd_s * self, uint16_t signal_id) {
 int32_t jls_rd_sample_id_to_timestamp(struct jls_rd_s * self, uint16_t signal_id,
                                                int64_t sample_id, int64_t * timestamp) {
     fsr_tmap();
+    if (!timestamp) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
     return jls_tmap_sample_id_to_timestamp(fsr, sample_id, timestamp);
 }
 
 int32_t jls_rd_timestamp_to_sample_id(struct jls_rd_s * self, uint16_t signal_id,
                                               int64_t timestamp, int64_t * sample_id) {
     fsr_tmap();
+    if (!sample_id) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
     return jls_tmap_timestamp_to_sample_id(fsr, timestamp, sample_id);
 }
 
 int32_t jls_rd_tmap_get(struct jls_rd_s * self, uint16_t signal_id, size_t index, struct jls_utc_summary_entry_s * entry) {
     fsr_tmap();
+    if (!entry) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
     return jls_tmap_get(fsr, index, entry);
 }

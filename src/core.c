@@ -890,6 +890,9 @@ int32_t jls_core_fsr_seek(struct jls_core_s * self, uint16_t signal_id, uint8_t 
 
 int32_t jls_core_fsr_length(struct jls_core_s * self, uint16_t signal_id, int64_t * samples) {
     ROE(jls_core_signal_validate_typed(self, signal_id, JLS_SIGNAL_TYPE_FSR));
+    if (!samples) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
     int64_t * signal_length = &self->signal_info[signal_id].track_fsr->signal_length;
     struct jls_signal_def_s * signal_def = &self->signal_info[signal_id].signal_def;
     if (*signal_length >= 0) {
@@ -1176,8 +1179,13 @@ int32_t jls_core_fsr(struct jls_core_s * self, uint16_t signal_id, int64_t start
     int64_t samples = 0;
     ROE(jls_core_fsr_length(self, signal_id, &samples));
     struct jls_signal_def_s * signal_def = &self->signal_info[signal_id].signal_def;
-    if (data_length <= 0) {
+    if (data_length < 0) {
+        JLS_LOGW("rd_fsr %d %s: length invalid %" PRIi64, (int) signal_id, signal_def->name, data_length);
+        return JLS_ERROR_PARAMETER_INVALID;
+    } else if (data_length == 0) {
         return 0;
+    } else if (!data) {
+        return JLS_ERROR_PARAMETER_INVALID;
     } else if (start_sample_id < 0) {
         JLS_LOGW("rd_fsr %d %s: start_sample_id invalid %" PRIi64 " length=%" PRIi64,
                  (int) signal_id, signal_def->name,

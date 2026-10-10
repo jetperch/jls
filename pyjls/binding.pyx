@@ -783,18 +783,16 @@ cdef class Reader:
         cdef c_jls.jls_signal_def_s signal_def
         cdef c_jls.jls_rd_s * rd = self._rd_get()
 
-        if length < 0:  # jls_rd_fsr() accepts and ignores negative lengths
-            raise ValueError(f'invalid length {length}')
         rc = c_jls.jls_rd_signal(rd, signal_id_u16, &signal_def)
         _handle_rc('rd_fsr', rc)
         data_type = signal_def.data_type
         entry_size_bits = (data_type >> 8) & 0xff
         np_type = _data_type_map[data_type & 0xffff]
-        # Python int: the C buffer size must not wrap
-        u8_length = (length * entry_size_bits + 7) // 8
+        # Python int: the C buffer size must not wrap.  jls_rd_fsr() rejects length < 0.
+        u8_length = (max(length, 0) * entry_size_bits + 7) // 8
         data_u8 = np.empty(u8_length, dtype=np.uint8)
         data = data_u8.view(dtype=np_type)
-        if length:
+        if length > 0:
             u8 = data_u8
             data_ptr = &u8[0]
         with nogil:
@@ -836,10 +834,9 @@ cdef class Reader:
         cdef int64_t length_i64 = length
         cdef c_jls.jls_rd_s * rd = self._rd_get()
 
-        if length < 0:  # jls_rd_fsr_statistics() accepts and ignores negative lengths
-            raise ValueError(f'invalid length {length}')
-        data = np.empty((length, c_jls.JLS_SUMMARY_FSR_COUNT), dtype=np.float64)
-        if length:
+        # jls_rd_fsr_statistics() rejects length < 0
+        data = np.empty((max(length, 0), c_jls.JLS_SUMMARY_FSR_COUNT), dtype=np.float64)
+        if length > 0:
             c_data = data
             data_ptr = &c_data[0, 0]
         with nogil:
@@ -972,9 +969,12 @@ cdef class Reader:
             i1 = i0 + 1
         if i0 > i1:
             i0, i1 = 0, 0
-        elif i0 < 0 or i1 > n:
+        elif i0 < 0:  # size_t index cannot represent it
             raise ValueError(f'index out of range: {index}')
         k = i1 - i0
+        if k:  # jls_rd_tmap_get() validates the last index before allocation
+            rc = c_jls.jls_rd_tmap_get(self._rd_get(), signal_id, i1 - 1, &time_map)
+            _handle_rc('time_map_get', rc)
         out = np.empty(k, dtype=_TIME_MAP_GET_DTYPE)
         for i in range(k):
             rc = c_jls.jls_rd_tmap_get(self._rd_get(), signal_id, i + i0, &time_map)

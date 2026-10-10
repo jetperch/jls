@@ -48,9 +48,16 @@ static void test_hdr(void **state) {
     assert_int_equal(c, jls_crc32c_hdr(&hdr));
 }
 
+static void test_null(void **state) {
+    (void) state;
+    const uint8_t data[1] = {0};
+    assert_int_equal(jls_crc32c(data, 0), jls_crc32c(NULL, 16));  // NULL data is empty
+}
+
 int main(void) {
     const struct CMUnitTest tests[] = {
             cmocka_unit_test(test_bytes),
+            cmocka_unit_test(test_null),
             cmocka_unit_test(test_hdr),
     };
 

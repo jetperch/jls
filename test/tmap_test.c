@@ -37,7 +37,7 @@ static void test_empty(void **state) {
     assert_int_equal(0, jls_tmap_length(s));
     assert_int_equal(JLS_ERROR_UNAVAILABLE, jls_tmap_sample_id_to_timestamp(s, 1000, &v));
     assert_int_equal(JLS_ERROR_UNAVAILABLE, jls_tmap_timestamp_to_sample_id(s, YEAR, &v));
-    assert_int_equal(JLS_ERROR_UNAVAILABLE, jls_tmap_get(s, 0, &entry));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_tmap_get(s, 0, &entry));
     jls_tmap_free(s);
 }
 
