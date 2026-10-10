@@ -1457,6 +1457,68 @@ static void test_fsr_statistics_u4_entry_count(void **state) {
     remove(filename);
 }
 
+// 32-bit integer and 64-bit types use 64-bit summaries, which writers before
+// 0.19.0 truncated to half their payload length.
+static void test_fsr_statistics_64bit_summaries(void **state) {
+    (void) state;
+    const uint32_t data_types[] = {JLS_DATATYPE_I32, JLS_DATATYPE_U32, JLS_DATATYPE_I64,
+                                   JLS_DATATYPE_U64, JLS_DATATYPE_F64};
+    const int64_t sample_count = 100000;
+    uint8_t * src = malloc((size_t) sample_count * 8);
+    assert_non_null(src);
+    for (size_t t = 0; t < ARRAY_SIZE(data_types); ++t) {
+        struct jls_wr_s * wr = NULL;
+        struct jls_rd_s * rd = NULL;
+        struct jls_signal_def_s signal_def = SIGNAL_5;
+        signal_def.data_type = data_types[t];
+        for (int64_t i = 0; i < sample_count; ++i) {
+            switch (data_types[t]) {
+                case JLS_DATATYPE_I32: ((int32_t *) src)[i] = (int32_t) i; break;
+                case JLS_DATATYPE_U32: ((uint32_t *) src)[i] = (uint32_t) i; break;
+                case JLS_DATATYPE_I64: ((int64_t *) src)[i] = i; break;
+                case JLS_DATATYPE_U64: ((uint64_t *) src)[i] = (uint64_t) i; break;
+                default: ((double *) src)[i] = (double) i; break;
+            }
+        }
+        assert_int_equal(0, jls_wr_open(&wr, filename));
+        assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_3));
+        assert_int_equal(0, jls_wr_signal_def(wr, &signal_def));
+        assert_int_equal(0, jls_wr_fsr(wr, 5, 0, src, (uint32_t) sample_count));
+        assert_int_equal(0, jls_wr_close(wr));
+
+        // the level 1 summary payload holds the full 4 x 64-bit entries
+        size_t size = 0;
+        uint8_t * data = file_read_all(filename, &size);
+        struct jls_chunk_header_s * hdr = chunk_find(data, size, JLS_TAG_TRACK_FSR_SUMMARY, 5 | (1 << 12));
+        assert_non_null(hdr);
+        struct jls_payload_header_s * payload = (struct jls_payload_header_s *) (hdr + 1);
+        assert_int_equal(JLS_SUMMARY_FSR_COUNT * 64, payload->entry_size_bits);
+        assert_int_equal(sizeof(*payload) + payload->entry_count * JLS_SUMMARY_FSR_COUNT * 8, hdr->payload_length);
+        free(data);
+
+        double stats[10 * JLS_SUMMARY_FSR_COUNT];
+        struct jls_signal_def_s * signals = NULL;
+        uint16_t signals_count = 0;
+        assert_int_equal(0, jls_rd_open(&rd, filename));
+        assert_int_equal(0, jls_rd_signals(rd, &signals, &signals_count));
+        assert_int_equal(2, signals_count);
+        // align windows to the (writer-aligned) level 1 summary entries: exact
+        int64_t incr = (int64_t) signals[1].sample_decimate_factor * 10;
+        assert_int_equal(0, jls_rd_fsr_statistics(rd, 5, 0, incr, stats, 10));  // summaries
+        for (int k = 0; k < 10; ++k) {
+            double * e = &stats[k * JLS_SUMMARY_FSR_COUNT];
+            assert_float_equal(k * incr + (incr - 1) / 2.0, e[JLS_SUMMARY_FSR_MEAN], 1e-6);
+            assert_float_equal(k * incr, e[JLS_SUMMARY_FSR_MIN], 0.0);
+            assert_float_equal(k * incr + incr - 1, e[JLS_SUMMARY_FSR_MAX], 0.0);
+        }
+        assert_int_equal(0, jls_rd_fsr_statistics(rd, 5, 3, 7, stats, 1));  // samples
+        assert_float_equal(6.0, stats[JLS_SUMMARY_FSR_MEAN], 1e-12);
+        jls_rd_close(rd);
+    }
+    free(src);
+    remove(filename);
+}
+
 // A reloaded chunk that does not contain the next sample (corrupt index or
 // timestamp) must not silently restart at its first sample.
 static void test_fsr_statistics_reload_corrupt_index(void **state) {
@@ -1840,6 +1902,7 @@ int main(void) {
             cmocka_unit_test(test_fsr_statistics_24bit),
             cmocka_unit_test(test_fsr_statistics_fixed_point),
             cmocka_unit_test(test_fsr_statistics_u4_entry_count),
+            cmocka_unit_test(test_fsr_statistics_64bit_summaries),
             cmocka_unit_test(test_fsr_statistics_reload_corrupt_index),
             cmocka_unit_test(test_fsr_statistics_summary_ends_early),
             cmocka_unit_test(test_fsr_statistics_nan),

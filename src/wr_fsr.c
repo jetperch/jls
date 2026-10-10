@@ -217,8 +217,9 @@ static int32_t wr_summary(struct jls_core_fsr_s * self, uint8_t level) {
     ROE(wr_index(self, level));
 
     uint8_t * p_start = (uint8_t *) dst->summary;
-    uint8_t * p_end = (uint8_t *) dst->summary->data[dst->summary->header.entry_count];
-    uint32_t payload_len = (uint32_t) (p_end - p_start);
+    // Size by the actual entry size: 64-bit summaries are twice the f32 layout.
+    uint32_t payload_len = (uint32_t) (sizeof(dst->summary->header)
+            + ((uint64_t) dst->summary->header.entry_count * JLS_SUMMARY_FSR_COUNT * summary_entry_size(self)) / 8);
     ROE(jls_core_wr_summary(self->parent->parent, self->parent->signal_def.signal_id, JLS_TRACK_TYPE_FSR, level,
                             p_start, payload_len));
     if ((level + 1) < JLS_SUMMARY_LEVEL_COUNT) {  // the top level is a sink

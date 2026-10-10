@@ -362,6 +362,12 @@ static int32_t rd_stats_chunk(struct jls_core_s * self, uint16_t signal_id, uint
         return JLS_ERROR_MESSAGE_INTEGRITY;
     }
     uint64_t sz_bytes = ((uint64_t) s->header.entry_count * s->header.entry_size_bits + 7) / 8;
+    if (!*is_f32 && s->header.entry_count
+            && ((sizeof(struct jls_payload_header_s) + sz_bytes / 2) == self->buf->length)) {
+        // Writers before 0.19.0 stored only the first half of each 64-bit summary.
+        JLS_LOGI("legacy truncated 64-bit summary at %" PRIi64, self->chunk_cur.offset);
+        return JLS_ERROR_UNSUPPORTED_FILE;
+    }
     if ((0 == s->header.entry_count)
             || ((sizeof(struct jls_payload_header_s) + sz_bytes) > self->buf->length)) {
         JLS_LOGW("invalid summary chunk at %" PRIi64 ": entry_count=%" PRIu32,
@@ -493,7 +499,8 @@ static int32_t fsr_statistics(struct jls_core_s * self, uint16_t signal_id,
             incr_remaining = increment - incr;
         } else {
             summary_to_stats(self, is_f32, src_offset, step_size, &stats_next);
-            jls_statistics_combine(&stats_accum, &stats_accum, &stats_next);            incr_remaining -= step_size;
+            jls_statistics_combine(&stats_accum, &stats_accum, &stats_next);
+            incr_remaining -= step_size;
         }
         start_sample_id += step_size;
         ++src_offset;
@@ -536,12 +543,6 @@ static int32_t fsr_statistics_samples(struct jls_core_s * self, uint16_t signal_
                                       double * data, int64_t data_length) {
     JLS_LOGD2("f32(signal_id=%d, start_id=%" PRIi64 ", incr=%" PRIi64 ", level=0, len=%" PRIi64 ")",
               (int) signal_id, start_sample_id, increment, data_length);
-    struct jls_signal_def_s * signal_def = &self->signal_info[signal_id].signal_def;
-    uint8_t entry_size_bits = jls_datatype_parse_size(signal_def->data_type);
-    if (entry_size_bits > 32) {
-        JLS_LOGE("entry_size > 64 (float64 stats) not yet supported");
-        return JLS_ERROR_UNSUPPORTED_FILE;
-    }
     if ((uint64_t) increment > (SIZE_MAX / sizeof(double))) {
         return JLS_ERROR_NOT_ENOUGH_MEMORY;
     }
@@ -578,7 +579,11 @@ static int32_t fsr_statistics_level(struct jls_core_s * self, uint16_t signal_id
                                     int64_t start_sample_id, int64_t increment, uint8_t level,
                                     double * data, int64_t data_length) {
     if (level) {
-        return fsr_statistics(self, signal_id, start_sample_id, increment, level, data, data_length);
+        int32_t rc = fsr_statistics(self, signal_id, start_sample_id, increment, level, data, data_length);
+        if (rc != JLS_ERROR_UNSUPPORTED_FILE) {
+            return rc;
+        }
+        // legacy truncated 64-bit summaries: compute exactly from the samples
     }
     return fsr_statistics_samples(self, signal_id, start_sample_id, increment, data, data_length);
 }
