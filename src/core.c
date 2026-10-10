@@ -1383,6 +1383,38 @@ int32_t jls_core_rd_fsr_data0(struct jls_core_s * self, uint16_t signal_id, int6
     return 0;
 }
 
+// Copy n_bits from src at bit src_bit to dst at bit dst_bit, LSB first.
+// Writes only the bytes holding destination bits and clears the bits
+// above the copied range in the final destination byte.
+static void bits_copy(uint8_t * dst, uint64_t dst_bit, const uint8_t * src, uint64_t src_bit, uint64_t n_bits) {
+    dst += dst_bit >> 3;
+    dst_bit &= 7;
+    src += src_bit >> 3;
+    src_bit &= 7;
+    while (n_bits) {
+        uint32_t take = 8 - (uint32_t) dst_bit;
+        if (take > n_bits) {
+            take = (uint32_t) n_bits;
+        }
+        uint32_t v = ((uint32_t) src[0]) >> src_bit;
+        if (take > (8 - src_bit)) {
+            v |= ((uint32_t) src[1]) << (8 - src_bit);
+        }
+        v &= (1U << take) - 1;
+        uint8_t keep = (uint8_t) ((1U << dst_bit) - 1);
+        *dst = (uint8_t) ((*dst & keep) | (v << dst_bit));
+        n_bits -= take;
+        dst_bit += take;
+        if (dst_bit >= 8) {
+            dst_bit = 0;
+            ++dst;
+        }
+        src_bit += take;
+        src += src_bit >> 3;
+        src_bit &= 7;
+    }
+}
+
 int32_t jls_core_fsr(struct jls_core_s * self, uint16_t signal_id, int64_t start_sample_id,
                      void * data, int64_t data_length) {
     // start_sample_id is API zero-based
@@ -1408,88 +1440,36 @@ int32_t jls_core_fsr(struct jls_core_s * self, uint16_t signal_id, int64_t start
     const int64_t sample_id_offset = signal_def->sample_id_offset;
     uint8_t entry_size_bits = jls_datatype_parse_size(signal_def->data_type);
 
-    if ((start_sample_id + data_length) > samples) {
-        JLS_LOGW("rd_fsr %d %s: start=%" PRIi64 " length=%" PRIi64 " > %" PRIi64 " by %" PRIi64,
+    // subtract, never add: start_sample_id + data_length may overflow
+    if ((start_sample_id > samples) || (data_length > (samples - start_sample_id))) {
+        JLS_LOGW("rd_fsr %d %s: start=%" PRIi64 " length=%" PRIi64 " > %" PRIi64,
                  (int) signal_id, signal_def->name,
-                 start_sample_id, data_length, samples,
-                 start_sample_id + data_length - samples);
+                 start_sample_id, data_length, samples);
         return JLS_ERROR_PARAMETER_INVALID;
     }
 
-    //JLS_LOGD3("jls_rd_fsr_f32(%d, %" PRIi64 ")", (int) signal_id, start_sample_id);
-    start_sample_id += sample_id_offset;  // file sample_id
-
-    int64_t chunk_sample_id;
-    int64_t chunk_sample_count;
-    uint8_t * u8;
-    uint8_t * u8_end;
-    uint8_t shift_bits = 0;
-    uint8_t shift_carry = 0;
+    // file sample_id; a hostile offset wraps here, then fails the chunk checks
+    start_sample_id = (int64_t) ((uint64_t) start_sample_id + (uint64_t) sample_id_offset);
+    uint64_t dst_bit = 0;
 
     while (data_length > 0) {
+        // validates that the chunk holds start_sample_id and its entries
         ROE(jls_core_rd_fsr_data0(self, signal_id, start_sample_id));
-
         struct jls_fsr_data_s * r = (struct jls_fsr_data_s *) self->buf->start;
-        chunk_sample_id = r->header.timestamp;
-        chunk_sample_count = r->header.entry_count;
-        u8 = (uint8_t *) &r->data[0];
-        u8_end = u8 + (chunk_sample_count * entry_size_bits) / 8;
-        if (r->header.entry_size_bits != entry_size_bits) {
-            JLS_LOGE("fsr entry size mismatch");
-            return JLS_ERROR_UNSPECIFIED;
-        }
-
-        int64_t sz_samples = chunk_sample_count;
-        if (start_sample_id > chunk_sample_id) {
-            // should only happen on first chunk
-            int64_t idx_start = start_sample_id - chunk_sample_id;
-            sz_samples = chunk_sample_count - idx_start;
-            u8 += ((idx_start * entry_size_bits) / 8);
-            switch (entry_size_bits) {
-                case 1: shift_bits = (uint8_t) (start_sample_id & 0x07); break;
-                case 4: shift_bits = (uint8_t) ((start_sample_id & 0x01) * 4); break;
-                default: break;
-            }
-            if (shift_bits) {
-                shift_carry = (*u8++) >> shift_bits;
-                uint8_t rem_bits = (uint8_t) ((start_sample_id + data_length - 1) & 0x07) + 1;
-                if ((1 == entry_size_bits) && ((8 - shift_bits + rem_bits) > 8)) {
-                    // write out carry on buffer wrap when carry + end bits exceed a byte
-                    if (data_length > sz_samples) {
-                        data_length += 8;
-                    }
-                } else if ((4 == entry_size_bits) && (sz_samples == 1)) {
-                    data_length -= sz_samples;
-                    start_sample_id += sz_samples;
-                    continue;
-                }
-            }
-        }
-
-        if (sz_samples <= 0) {
-            // damaged file: chunk does not cover start_sample_id, read cannot progress
-            JLS_LOGW("rd_fsr no progress: signal_id=%d, sample_id=%" PRIi64,
-                     (int) signal_id, start_sample_id);
-            return JLS_ERROR_MESSAGE_INTEGRITY;
-        }
+        int64_t idx = start_sample_id - r->header.timestamp;
+        int64_t sz_samples = (int64_t) r->header.entry_count - idx;
         if (sz_samples > data_length) {
             sz_samples = data_length;
         }
-
-        size_t sz_bytes = (size_t) (sz_samples * entry_size_bits + 7) / 8;
-        if ((u8 + sz_bytes) > u8_end) {
-            sz_bytes = (size_t) (u8_end - u8);
-        }
-        if (shift_bits) {
-            for (size_t i = 0; i < sz_bytes; ++i) {
-                data_u8[i] = (u8[i] << (8 - shift_bits)) | shift_carry;
-                shift_carry = u8[i] >> shift_bits;
-            }
-            sz_bytes = (sz_samples * entry_size_bits) / 8;
+        const uint8_t * src = (const uint8_t *) r->data;
+        if (entry_size_bits >= 8) {
+            size_t sample_bytes = entry_size_bits / 8;
+            memcpy(data_u8 + (dst_bit / 8), src + idx * sample_bytes, (size_t) sz_samples * sample_bytes);
         } else {
-            memcpy(data_u8, u8, sz_bytes);
+            bits_copy(data_u8, dst_bit, src, (uint64_t) idx * entry_size_bits,
+                      (uint64_t) sz_samples * entry_size_bits);
         }
-        data_u8 += sz_bytes;
+        dst_bit += (uint64_t) sz_samples * entry_size_bits;
         data_length -= sz_samples;
         start_sample_id += sz_samples;
     }

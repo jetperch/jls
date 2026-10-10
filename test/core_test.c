@@ -388,6 +388,132 @@ static void test_signal_def_duplicate_read(void ** state) {
 }
 
 
+// --- C1: u1/u4 reads ---
+
+static int sample_get(const uint8_t * b, int bits, int64_t i) {
+    if (bits == 1) {
+        return (b[i >> 3] >> (i & 7)) & 1;
+    }
+    return (b[i >> 1] >> ((i & 1) * 4)) & 0xf;
+}
+
+// Read [start, start + length) into an exact-size heap buffer (ASan
+// catches any overflow) and compare against the reference.
+static void packed_read_check(struct jls_rd_s * rd, const uint8_t * ref, int bits, int64_t start, int64_t length) {
+    size_t sz = (size_t) ((length * bits + 7) / 8);
+    uint8_t * y = malloc(sz);
+    assert_non_null(y);
+    memset(y, 0xA5, sz);
+    assert_int_equal(0, jls_rd_fsr(rd, 1, start, y, length));
+    for (int64_t i = 0; i < length; ++i) {
+        if (sample_get(y, bits, i) != sample_get(ref, bits, start + i)) {
+            fail_msg("bits=%d start=%d length=%d: mismatch at %d", bits, (int) start, (int) length, (int) i);
+        }
+    }
+    uint32_t tail_bits = (uint32_t) ((length * bits) & 7);
+    if (tail_bits) {
+        assert_int_equal(0, y[sz - 1] >> tail_bits);  // unused high bits cleared
+    }
+    free(y);
+}
+
+static void packed_sweep(int bits, uint32_t spd, uint32_t sdf, uint32_t n) {
+    const int64_t first_sample_ids[] = {0, 1, 3, 5, 7};
+    uint32_t data_type = (bits == 1) ? JLS_DATATYPE_U1 : JLS_DATATYPE_U4;
+    struct jls_signal_def_s def = signal_def_typed(data_type, spd, sdf, 10, 10);
+    size_t nbytes = ((size_t) n * bits + 7) / 8;
+    uint8_t * ref = malloc(nbytes + 8);  // slack: writer may over-read the source (W9)
+    assert_non_null(ref);
+    srand(1);
+    for (size_t i = 0; i < nbytes + 8; ++i) {
+        ref[i] = (uint8_t) rand();
+    }
+
+    for (size_t k = 0; k < ARRAY_SIZE(first_sample_ids); ++k) {
+        gen_packed(PATH, &def, first_sample_ids[k], ref, n, 0);
+        struct jls_rd_s * rd = NULL;
+        assert_int_equal(0, jls_rd_open(&rd, PATH));
+        struct jls_signal_def_s def_rd;
+        assert_int_equal(0, jls_rd_signal(rd, 1, &def_rd));
+        assert_int_equal(spd, def_rd.samples_per_data);  // > 3 data chunks
+        int64_t samples = 0;
+        assert_int_equal(0, jls_rd_fsr_length(rd, 1, &samples));
+        assert_int_equal(n, samples);
+
+        // every start, short lengths & lengths crossing chunk boundaries
+        const int64_t lengths[] = {1, 2, 3, 7, 8, 9, 15, 16, 17, spd - 1, spd, spd + 1, 2 * spd + 3};
+        for (int64_t start = 0; start < n; ++start) {
+            for (size_t j = 0; j < ARRAY_SIZE(lengths); ++j) {
+                if (lengths[j] <= (n - start)) {
+                    packed_read_check(rd, ref, bits, start, lengths[j]);
+                }
+            }
+            packed_read_check(rd, ref, bits, start, n - start);
+        }
+        for (int i = 0; i < 500; ++i) {
+            int64_t start = rand() % n;
+            int64_t length = 1 + (rand() % (n - start));
+            packed_read_check(rd, ref, bits, start, length);
+        }
+        jls_rd_close(rd);
+    }
+    free(ref);
+    remove(PATH);
+}
+
+static void test_fsr_u1_sweep(void ** state) {
+    (void) state;
+    packed_sweep(1, 256, 256, 256 * 3 + 32);
+}
+
+static void test_fsr_u4_sweep(void ** state) {
+    (void) state;
+    packed_sweep(4, 64, 64, 64 * 3 + 8);
+}
+
+static void test_fsr_u4_exhaustive(void ** state) {
+    (void) state;
+    const uint32_t n = 64 * 2 + 10;
+    struct jls_signal_def_s def = signal_def_typed(JLS_DATATYPE_U4, 64, 64, 10, 10);
+    uint8_t ref[n / 2 + 8];
+    for (size_t i = 0; i < sizeof(ref); ++i) {
+        ref[i] = (uint8_t) (i * 37 + 11);
+    }
+    gen_packed(PATH, &def, 3, ref, n, 0);
+    struct jls_rd_s * rd = NULL;
+    assert_int_equal(0, jls_rd_open(&rd, PATH));
+    for (int64_t start = 0; start < n; ++start) {
+        for (int64_t length = 1; length <= (n - start); ++length) {
+            packed_read_check(rd, ref, 4, start, length);
+        }
+    }
+    jls_rd_close(rd);
+    remove(PATH);
+}
+
+// The final partial output byte used to underflow the copy size into a
+// huge memcpy over the caller's 1-byte buffer.
+static void test_fsr_u1_tail_read_bounds(void ** state) {
+    (void) state;
+    uint8_t ref[16 + 8];
+    memset(ref, 0x5A, sizeof(ref));
+    struct jls_signal_def_s def = signal_def_typed(JLS_DATATYPE_U1, 0, 0, 0, 0);
+    gen_packed(PATH, &def, 0, ref, 100, 0);
+    struct jls_rd_s * rd = NULL;
+    assert_int_equal(0, jls_rd_open(&rd, PATH));
+    uint8_t * y = malloc(1);
+    assert_int_equal(0, jls_rd_fsr(rd, 1, 97, y, 1));
+    assert_int_equal(0, jls_rd_fsr(rd, 1, 90, y, 6));
+    assert_int_equal(sample_get(ref, 1, 90) | (sample_get(ref, 1, 91) << 1), y[0] & 3);
+    free(y);
+    y = malloc(2);
+    assert_int_equal(0, jls_rd_fsr(rd, 1, 89, y, 10));
+    free(y);
+    jls_rd_close(rd);
+    remove(PATH);
+}
+
+
 // --- C2: data chunk timestamp must cover the read ---
 
 static void test_fsr_data_timestamp_corrupt(void ** state) {
@@ -546,6 +672,23 @@ static void test_fsr_level1_corrupt(void ** state) {
 }
 
 
+// --- C15: argument bounds without signed overflow ---
+
+static void test_fsr_read_bounds_overflow(void ** state) {
+    (void) state;
+    gen_f32(PATH, &SIGNAL_1, 1000, 1);
+    struct jls_rd_s * rd = NULL;
+    assert_int_equal(0, jls_rd_open(&rd, PATH));
+    float y[10];
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_fsr_f32(rd, 1, INT64_MAX - 3, y, 10));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_fsr_f32(rd, 1, 5, y, INT64_MAX));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_fsr_f32(rd, 1, 995, y, 10));
+    assert_int_equal(0, jls_rd_fsr_f32(rd, 1, 990, y, 10));
+    jls_rd_close(rd);
+    remove(PATH);
+}
+
+
 int main(void) {
     const struct CMUnitTest tests[] = {
             cmocka_unit_test(test_signal_def_align_wrap_rejected),
@@ -553,10 +696,15 @@ int main(void) {
             cmocka_unit_test(test_signal_def_validate_fsr),
             cmocka_unit_test(test_signal_def_hostile_read),
             cmocka_unit_test(test_signal_def_duplicate_read),
+            cmocka_unit_test(test_fsr_u1_sweep),
+            cmocka_unit_test(test_fsr_u4_sweep),
+            cmocka_unit_test(test_fsr_u4_exhaustive),
+            cmocka_unit_test(test_fsr_u1_tail_read_bounds),
             cmocka_unit_test(test_fsr_data_timestamp_corrupt),
             cmocka_unit_test(test_fsr_omit_reconstruct_corrupt),
             cmocka_unit_test(test_fsr_omit_reconstruct_types),
             cmocka_unit_test(test_fsr_level1_corrupt),
+            cmocka_unit_test(test_fsr_read_bounds_overflow),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
