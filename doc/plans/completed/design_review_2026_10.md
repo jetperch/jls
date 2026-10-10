@@ -51,11 +51,11 @@ calls, not just hostile files.
 |-----|-----|----------|--------|
 | R1  | C   | raw.c payload_size_on_disk | uint32 wrap; CRC reads ~4 GiB past buffer on open |
 | R2  | C v | buffer.c jls_buf_realloc | squares size (1 MiB -> 1 TiB); cur/end not rebased (UAF) |
-| R3  | M v | core.c jls_core_rd_chunk | grows to payload_length, not on-disk size: hang near 1 MiB |
+| R3  | M v | core.c rd_chunk | grows to payload_length, not on-disk size: hangs near 1 MiB |
 | R4  | C v | buffer.c jls_buf_string_save | string > 1 MiB overflows the strings block |
 | R5  | M   | buffer.c jls_buf_rd_str | string straddling a strings page truncates / stale buf_end |
-| R6  | M   | raw.c jls_raw_chunk_scan | advances twice per block (skips half); tail < 32 B loops forever |
-| R7  | M   | raw.c jls_raw_wr_payload | writes hdr->payload_length, ignores arg; repair stack over-read |
+| R6  | M   | raw.c chunk_scan | advances twice per block (skips half); short tail loops forever |
+| R7  | M   | raw.c wr_payload | writes hdr->payload_length, ignores arg; repair stack over-read |
 | R8  | M   | repair.c heads_rebuild, track.c | rewrites heads whose on-disk length mismatches |
 | R9  | M   | copy.c | trusts entry_count/data_size; leaks buf/rd/wr; resync drops chunk |
 | R10 | M   | backend_win.c finalize | frees bk while thread may run (1 s join timeout) |
