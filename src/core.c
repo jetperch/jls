@@ -203,8 +203,9 @@ int32_t jls_core_signal_def_validate_fsr(struct jls_signal_def_s const * def) {
     uint64_t sdf = def->sample_decimate_factor;
     uint64_t eps = def->entries_per_summary;
     uint64_t sumdf = def->summary_decimate_factor;
-    if ((0 == bits) || (0 == spd) || (spd > SAMPLES_PER_DATA_MAX)
-            || (((spd * bits) / 8) > DATA_SIZE_BYTES_MAX)) {
+    // Bound bytes, not samples: older writers had no sample cap, so files with
+    // large sub-byte chunks are valid.  align() also caps samples for writers.
+    if ((0 == bits) || (0 == spd) || (((spd * bits) / 8) > DATA_SIZE_BYTES_MAX)) {
         JLS_LOGW("signal %d: invalid samples_per_data %" PRIu64, (int) def->signal_id, spd);
         return JLS_ERROR_PARAMETER_INVALID;
     }
@@ -1420,38 +1421,6 @@ int32_t jls_core_rd_fsr_data0(struct jls_core_s * self, uint16_t signal_id, int6
     return 0;
 }
 
-// Copy n_bits from src at bit src_bit to dst at bit dst_bit, LSB first.
-// Writes only the bytes holding destination bits and clears the bits
-// above the copied range in the final destination byte.
-static void bits_copy(uint8_t * dst, uint64_t dst_bit, const uint8_t * src, uint64_t src_bit, uint64_t n_bits) {
-    dst += dst_bit >> 3;
-    dst_bit &= 7;
-    src += src_bit >> 3;
-    src_bit &= 7;
-    while (n_bits) {
-        uint32_t take = 8 - (uint32_t) dst_bit;
-        if (take > n_bits) {
-            take = (uint32_t) n_bits;
-        }
-        uint32_t v = ((uint32_t) src[0]) >> src_bit;
-        if (take > (8 - src_bit)) {
-            v |= ((uint32_t) src[1]) << (8 - src_bit);
-        }
-        v &= (1U << take) - 1;
-        uint8_t keep = (uint8_t) ((1U << dst_bit) - 1);
-        *dst = (uint8_t) ((*dst & keep) | (v << dst_bit));
-        n_bits -= take;
-        dst_bit += take;
-        if (dst_bit >= 8) {
-            dst_bit = 0;
-            ++dst;
-        }
-        src_bit += take;
-        src += src_bit >> 3;
-        src_bit &= 7;
-    }
-}
-
 int32_t jls_core_fsr(struct jls_core_s * self, uint16_t signal_id, int64_t start_sample_id,
                      void * data, int64_t data_length) {
     // start_sample_id is API zero-based
@@ -1503,7 +1472,7 @@ int32_t jls_core_fsr(struct jls_core_s * self, uint16_t signal_id, int64_t start
             size_t sample_bytes = entry_size_bits / 8;
             memcpy(data_u8 + (dst_bit / 8), src + idx * sample_bytes, (size_t) sz_samples * sample_bytes);
         } else {
-            bits_copy(data_u8, dst_bit, src, (uint64_t) idx * entry_size_bits,
+            jls_bit_copy(data_u8, dst_bit, src, (uint64_t) idx * entry_size_bits,
                       (uint64_t) sz_samples * entry_size_bits);
         }
         dst_bit += (uint64_t) sz_samples * entry_size_bits;

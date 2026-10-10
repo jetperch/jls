@@ -326,8 +326,17 @@ static void test_signal_def_validate_fsr(void ** state) {
 
     def = base; def.samples_per_data = 0;
     assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_core_signal_def_validate_fsr(&def));
-    def = base; def.samples_per_data = 1U << 23;
+    def = base; def.samples_per_data = 1U << 23;  // f32: 32 MiB per data chunk
     assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_core_signal_def_validate_fsr(&def));
+    // Older writers had no sample cap: large sub-byte and u8 chunks within 16 MiB are valid.
+    def = base; def.data_type = JLS_DATATYPE_U1; def.samples_per_data = 1U << 27;
+    def.sample_decimate_factor = 1024; def.entries_per_summary = 1U << 17; def.summary_decimate_factor = 16;
+    assert_int_equal(0, jls_core_signal_def_validate_fsr(&def));
+    def.samples_per_data = 1U << 28;  // 32 MiB
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_core_signal_def_validate_fsr(&def));
+    def = base; def.data_type = JLS_DATATYPE_U8; def.samples_per_data = 1U << 24;
+    def.sample_decimate_factor = 1024; def.entries_per_summary = 1U << 14; def.summary_decimate_factor = 16;
+    assert_int_equal(0, jls_core_signal_def_validate_fsr(&def));
     def = base; def.sample_decimate_factor = 0;
     assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_core_signal_def_validate_fsr(&def));
     def = base; def.sample_decimate_factor = 7;  // not a divisor of samples_per_data

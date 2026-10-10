@@ -58,6 +58,25 @@ void jls_bit_copy(uint8_t * dst, uint64_t dst_offset, const uint8_t * src, uint6
         return;
     }
     while (bits) {
+        if (!d_off && (bits >= 8)) {
+            // Byte-aligned destination: build whole bytes from two source bytes.
+            // Both source bytes hold copied bits, so this reads nothing extra.
+            size_t bytes = (size_t) (bits >> 3);
+            if (!s_off) {
+                memcpy(dst, src, bytes);
+            } else {
+                uint32_t s_hi = 8 - s_off;
+                for (size_t i = 0; i < bytes; ++i) {
+                    dst[i] = (uint8_t) ((src[i] >> s_off) | (src[i + 1] << s_hi));
+                }
+            }
+            dst += bytes;
+            src += bytes;
+            bits &= 7;
+            if (!bits) {
+                break;
+            }
+        }
         uint32_t take = 8 - d_off;
         if (take > bits) {
             take = (uint32_t) bits;
