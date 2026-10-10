@@ -20,6 +20,7 @@
 #include <cmocka.h>
 #include "jls.h"
 #include "jls/writer.h"
+#include "jls/crc32c.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1106,6 +1107,120 @@ static void test_fsr_u1_auto_def(void **state) {
     remove(filename);
 }
 
+static int32_t on_annotation_unexpected(void * user_data, const struct jls_annotation_s * annotation) {
+    (void) user_data;
+    (void) annotation;
+    fail();
+    return 1;
+}
+
+static int32_t on_utc_unexpected(void * user_data, const struct jls_utc_summary_entry_s * utc, uint32_t size) {
+    (void) user_data;
+    (void) utc;
+    (void) size;
+    fail();
+    return 1;
+}
+
+static void test_signal_id_validation(void **state) {
+    (void) state;
+    struct jls_wr_s * wr = NULL;
+    float data[10] = {0};
+    assert_int_equal(0, jls_wr_open(&wr, filename));
+    assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_3));
+    assert_int_equal(0, jls_wr_signal_def(wr, &SIGNAL_5));
+    assert_int_equal(0, jls_wr_fsr_f32(wr, 5, 0, data, ARRAY_SIZE(data)));
+    // signal 0 is the predefined VSR signal, which has no FSR track
+    assert_int_equal(JLS_ERROR_NOT_SUPPORTED, jls_wr_fsr_f32(wr, 0, 0, data, ARRAY_SIZE(data)));
+    assert_int_equal(JLS_ERROR_NOT_SUPPORTED, jls_wr_fsr(wr, 0, 0, data, ARRAY_SIZE(data)));
+    assert_int_equal(JLS_ERROR_NOT_SUPPORTED, jls_wr_fsr_omit_data(wr, 0, 1));
+    assert_int_equal(JLS_ERROR_NOT_FOUND, jls_wr_fsr_f32(wr, 7, 0, data, ARRAY_SIZE(data)));
+    assert_int_equal(JLS_ERROR_NOT_FOUND, jls_wr_fsr_omit_data(wr, 7, 1));
+    assert_int_equal(JLS_ERROR_NOT_FOUND, jls_wr_utc(wr, 7, 0, 0));
+    assert_int_equal(JLS_ERROR_NOT_FOUND, jls_wr_annotation(wr, 7, 0, NAN, JLS_ANNOTATION_TYPE_TEXT, 0,
+                                                            JLS_STORAGE_TYPE_STRING, (const uint8_t *) STRING_1, 0));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_wr_utc(wr, 300, 0, 0));
+    assert_int_equal(0, jls_wr_close(wr));
+
+    struct jls_rd_s * rd = NULL;
+    int64_t i64 = 0;
+    double stats[JLS_SUMMARY_FSR_COUNT];
+    struct jls_utc_summary_entry_s entry;
+    assert_int_equal(0, jls_rd_open(&rd, filename));
+    assert_int_equal(JLS_ERROR_NOT_FOUND, jls_rd_fsr_f32(rd, 7, 0, data, 1));
+    assert_int_equal(JLS_ERROR_NOT_FOUND, jls_rd_fsr_statistics(rd, 7, 0, 1, stats, 1));
+    assert_int_equal(JLS_ERROR_NOT_FOUND, jls_rd_annotations(rd, 7, 0, on_annotation_unexpected, NULL));
+    assert_int_equal(JLS_ERROR_NOT_FOUND, jls_rd_utc(rd, 7, 0, on_utc_unexpected, NULL));
+    assert_int_equal(JLS_ERROR_NOT_FOUND, jls_rd_sample_id_to_timestamp(rd, 7, 0, &i64));
+    assert_int_equal(JLS_ERROR_NOT_FOUND, jls_rd_timestamp_to_sample_id(rd, 7, 0, &i64));
+    assert_int_equal(JLS_ERROR_NOT_FOUND, jls_rd_tmap_get(rd, 7, 0, &entry));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_rd_fsr_statistics(rd, 300, 0, 1, stats, 1));
+    // jls_rd_tmap_length() returns 0, not an error code, on failure
+    assert_int_equal(0, jls_rd_tmap_length(rd, 7));
+    assert_int_equal(0, jls_rd_tmap_length(rd, 0));
+    assert_int_equal(0, jls_rd_tmap_length(rd, 300));
+    assert_int_equal(1, jls_rd_tmap_length(rd, 5));
+    jls_rd_close(rd);
+    remove(filename);
+}
+
+static uint8_t * file_read_all(const char * path, size_t * size) {
+    FILE * f = fopen(path, "rb");
+    assert_non_null(f);
+    fseek(f, 0, SEEK_END);
+    *size = (size_t) ftell(f);
+    fseek(f, 0, SEEK_SET);
+    uint8_t * data = malloc(*size);
+    assert_non_null(data);
+    assert_int_equal(*size, fread(data, 1, *size, f));
+    fclose(f);
+    return data;
+}
+
+static void file_write_all(const char * path, const uint8_t * data, size_t size) {
+    FILE * f = fopen(path, "wb");
+    assert_non_null(f);
+    assert_int_equal(size, fwrite(data, 1, size, f));
+    fclose(f);
+}
+
+// A corrupt data_size with valid CRCs must not read past the chunk payload.
+static void test_annotation_data_size_corrupt(void **state) {
+    (void) state;
+    struct jls_wr_s * wr = NULL;
+    struct jls_rd_s * rd = NULL;
+    assert_int_equal(0, jls_wr_open(&wr, filename));
+    assert_int_equal(0, jls_wr_annotation(wr, 0, 0, NAN, JLS_ANNOTATION_TYPE_TEXT, 0,
+                                          JLS_STORAGE_TYPE_STRING, (const uint8_t *) STRING_1, 0));
+    assert_int_equal(0, jls_wr_close(wr));
+
+    size_t size = 0;
+    uint8_t * data = file_read_all(filename, &size);
+    struct jls_chunk_header_s * hdr = NULL;
+    for (size_t offset = 0; (offset + sizeof(*hdr)) <= size; offset += 8) {
+        struct jls_chunk_header_s * h = (struct jls_chunk_header_s *) (data + offset);
+        if ((h->tag == JLS_TAG_TRACK_ANNOTATION_DATA) && (h->crc32 == jls_crc32c_hdr(h))) {
+            hdr = h;
+            break;
+        }
+    }
+    assert_non_null(hdr);
+    uint8_t * payload = (uint8_t *) (hdr + 1);
+    struct jls_annotation_s * annotation = (struct jls_annotation_s *) payload;
+    assert_int_equal(sizeof(STRING_1), annotation->data_size);
+    annotation->data_size = 0x00100000;
+    uint32_t pad = (8 - ((hdr->payload_length + 4) & 7)) & 7;
+    uint32_t crc32 = jls_crc32c(payload, hdr->payload_length);
+    memcpy(payload + hdr->payload_length + pad, &crc32, sizeof(crc32));
+    file_write_all(filename, data, size);
+    free(data);
+
+    assert_int_equal(0, jls_rd_open(&rd, filename));
+    assert_int_equal(JLS_ERROR_MESSAGE_INTEGRITY, jls_rd_annotations(rd, 0, 0, on_annotation_unexpected, NULL));
+    jls_rd_close(rd);
+    remove(filename);
+}
+
 #if !SKIP_REALWORLD
 static void test_fsr_f32_statistics_real(void **state) {
     (void) state;
@@ -1170,6 +1285,8 @@ int main(void) {
             cmocka_unit_test(test_fsr_u1_len_1),
             cmocka_unit_test(test_fsr_u1_ones),
             cmocka_unit_test(test_fsr_u1_auto_def),
+            cmocka_unit_test(test_signal_id_validation),
+            cmocka_unit_test(test_annotation_data_size_corrupt),
 
 #if !SKIP_REALWORLD
             cmocka_unit_test(test_fsr_f32_statistics_real),

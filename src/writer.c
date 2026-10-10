@@ -333,14 +333,14 @@ int32_t jls_wr_user_data(struct jls_wr_s * self, uint16_t chunk_meta,
 
 int32_t jls_wr_fsr(struct jls_wr_s * self, uint16_t signal_id,
                            int64_t sample_id, const void * data, uint32_t data_length) {
-    ROE(jls_core_signal_validate(&self->core, signal_id));
+    ROE(jls_core_signal_validate_typed(&self->core, signal_id, JLS_SIGNAL_TYPE_FSR));
     struct jls_core_signal_s * info = &self->core.signal_info[signal_id];
     return jls_wr_fsr_data(info->track_fsr, sample_id, data, data_length);
 }
 
 int32_t jls_wr_fsr_f32(struct jls_wr_s * self, uint16_t signal_id,
                        int64_t sample_id, const float * data, uint32_t data_length) {
-    ROE(jls_core_signal_validate(&self->core, signal_id));
+    ROE(jls_core_signal_validate_typed(&self->core, signal_id, JLS_SIGNAL_TYPE_FSR));
     struct jls_core_signal_s * info = &self->core.signal_info[signal_id];
     if (info->signal_def.data_type != JLS_DATATYPE_F32) {
         return JLS_ERROR_PARAMETER_INVALID;
@@ -349,7 +349,7 @@ int32_t jls_wr_fsr_f32(struct jls_wr_s * self, uint16_t signal_id,
 }
 
 int32_t jls_wr_fsr_omit_data(struct jls_wr_s * self, uint16_t signal_id, uint32_t enable) {
-    ROE(jls_core_signal_validate(&self->core, signal_id));
+    ROE(jls_core_signal_validate_typed(&self->core, signal_id, JLS_SIGNAL_TYPE_FSR));
     struct jls_core_signal_s * info = &self->core.signal_info[signal_id];
     if (enable) {
         info->track_fsr->write_omit_data |= 1;

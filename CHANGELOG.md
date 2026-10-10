@@ -17,6 +17,37 @@ This file contains the list of changes made to the JLS project.
 * Garbage collection now closes a Writer or Reader left open.  Previously,
   the native handle leaked, and a Writer never finalized its file.
 * Documented that Writer and Reader are not thread-safe.
+* Fixed memory safety issues found by an argument validation review:
+  * Writer.signal_def() with signal_id 256 or more wrote past the end of
+    the Writer, in both the binding and jls_twr_signal_def().
+  * Writer.fsr() and jls_twr_fsr() read signal state past the end of their
+    tables for signal_id 256 or more.  jls_twr_fsr() also read
+    uninitialized state for undefined signals, and its byte count could
+    overflow.
+  * jls_core_signal_validate() returned success for undefined signals, so
+    reading statistics, UTC, or time maps for one crashed.
+  * Writing FSR data or fsr_omit_data to a VSR signal dereferenced NULL.
+  * Reader.fsr() computed its buffer size in 32 bits, which wrapped for
+    reads of 2**30 or more samples and overflowed the heap.
+  * jls_rd_tmap_length() returned error codes as lengths, so
+    Reader.time_map_get() returned uninitialized memory.
+  * Fixed out-of-bounds reads in the threaded writer message log names,
+    the time map interpolation search, and annotations whose data_size
+    exceeds their chunk.
+  * The threaded writer now rejects STRING and JSON payloads that are not
+    NUL-terminated.
+* Writer and Reader methods now raise ValueError for an undefined or
+  out-of-range signal_id, a non-FSR signal where FSR is required, an
+  invalid annotation_type or data_type, or a negative length.  The
+  threaded writer now reports these synchronously, rather than only
+  logging them from its thread.
+* Empty data now works: Writer.annotation() with data None or b'',
+  Writer.fsr() with an empty array, and Reader.fsr() or
+  Reader.fsr_statistics() with length 0.
+* An exception in a Reader.annotations(), user_data(), or utc() callback
+  now stops the iteration and is logged.  Previously, user_data() and
+  utc() continued.
+* Writer.annotation() now stores a non-finite y as NAN, as intended.
 
 
 ## 0.18.0

@@ -12,7 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from pyjls.binding import Writer, Reader, SummaryFSR, DataType, jls_inject_log, copy, repair, TimeMap
+from pyjls.binding import Writer, Reader, SummaryFSR, DataType, jls_inject_log, copy, repair, TimeMap, \
+    AnnotationType, SignalType
 from pyjls.time64 import SECOND, YEAR
 import gc
 import io
@@ -307,6 +308,138 @@ class TestBinding(unittest.TestCase):
                 np.testing.assert_equal(tm[90:95], d)
             d = tmap.time_map_get((3, 2))
             self.assertEqual(0, len(d))
+
+    def _fsr_vsr_gen(self):
+        # FSR signal 3 with 100 samples, VSR signal 4
+        with Writer(self._path) as w:
+            self._write_fsr_100(w)
+            w.signal_def(4, source_id=1, signal_type=SignalType.VSR, name='vsr', units='A')
+
+    def test_writer_signal_id_invalid(self):
+        x = np.zeros(10, dtype=np.float32)
+        with Writer(self._path) as w:
+            w.source_def(source_id=1, name='n')
+            for signal_id in [-1, 256, 65536]:
+                with self.assertRaisesRegex(ValueError, 'out of range'):
+                    w.signal_def(signal_id, source_id=1)
+            with self.assertRaisesRegex(ValueError, 'invalid data_type'):
+                w.signal_def(3, source_id=1, data_type='f16')
+            w.signal_def(3, source_id=1, sample_rate=1000)
+            for signal_id in [7, 300, 70000]:
+                with self.assertRaisesRegex(ValueError, 'is not defined'):
+                    w.fsr(signal_id, 0, x)
+                with self.assertRaisesRegex(ValueError, 'is not defined'):
+                    w.fsr_omit_data(signal_id, True)
+                with self.assertRaisesRegex(ValueError, 'is not defined'):
+                    w.annotation(signal_id, 0, None, 'text', 0, 'x')
+                with self.assertRaisesRegex(ValueError, 'is not defined'):
+                    w.utc(signal_id, 0, 0)
+            # signal 0 is the predefined VSR signal
+            with self.assertRaisesRegex(ValueError, 'not an FSR signal'):
+                w.fsr(0, 0, x)
+            with self.assertRaisesRegex(ValueError, 'not an FSR signal'):
+                w.fsr_omit_data(0, True)
+            with self.assertRaisesRegex(ValueError, 'not an FSR signal'):
+                w.utc(0, 0, 0)
+            w.annotation(0, 0, None, 'text', 0, 'vsr ok')
+            w.fsr(3, 0, x)
+
+    def test_writer_annotation_type_invalid(self):
+        with Writer(self._path) as w:
+            self._write_fsr_100(w)
+            for annotation_type in [99, 'bogus']:
+                with self.assertRaisesRegex(ValueError, 'invalid annotation_type'):
+                    w.annotation(3, 0, None, annotation_type, 0, 'x')
+
+    def test_writer_empty_data(self):
+        with Writer(self._path) as w:
+            self._write_fsr_100(w)
+            w.fsr(3, 100, np.zeros(0, dtype=np.float32))
+            w.annotation(3, 0, None, 'text', 0, None)
+            w.annotation(3, 1, float('inf'), AnnotationType.USER, 0, b'')
+        with Reader(self._path) as r:
+            self.assertEqual(100, r.signals[3].length)
+            r.annotations(3, 0, self._on_annotations)
+        expected = [
+            (0, None, AnnotationType.TEXT, 0, b''),
+            (1, None, AnnotationType.USER, 0, b''),
+        ]
+        self.assertEqual(expected, self.annotations)
+
+    def test_reader_signal_id_invalid(self):
+        self._fsr_vsr_gen()
+        with Reader(self._path) as r:
+            fns = [
+                lambda s: r.fsr(s, 0, 10),
+                lambda s: r.fsr_statistics(s, 0, 10, 1),
+                lambda s: r.utc(s, 0, self._on_utc),
+                lambda s: r.time_map_length(s),
+                lambda s: r.time_map_get(s),
+                lambda s: r.sample_id_to_timestamp(s, 0),
+                lambda s: r.timestamp_to_sample_id(s, 0),
+            ]
+            for signal_id in [7, 300, 70000]:
+                for fn in fns:
+                    with self.assertRaisesRegex(ValueError, 'is not defined'):
+                        fn(signal_id)
+                with self.assertRaisesRegex(ValueError, 'is not defined'):
+                    r.annotations(signal_id, 0, self._on_annotations)
+            for fn in fns:
+                with self.assertRaisesRegex(ValueError, 'not an FSR signal'):
+                    fn(4)
+            r.annotations(4, 0, self._on_annotations)
+        self.assertEqual([], self.annotations)
+
+    def test_reader_length_zero_and_negative(self):
+        self._fsr_vsr_gen()
+        with Reader(self._path) as r:
+            d = r.fsr(3, 0, 0)
+            self.assertEqual((0, ), d.shape)
+            self.assertEqual(np.float32, d.dtype)
+            self.assertEqual((0, SummaryFSR.COUNT), r.fsr_statistics(3, 0, 10, 0).shape)
+            with self.assertRaisesRegex(ValueError, 'invalid length'):
+                r.fsr(3, 0, -1)
+            with self.assertRaisesRegex(ValueError, 'invalid length'):
+                r.fsr_statistics(3, 0, 10, -1)
+
+    def test_time_map_get_index_out_of_range(self):
+        signal_id = 3
+        self._utc_gen(signal_id)
+        with Reader(self._path) as r:
+            for index in [100, -101, (-200, 1), (0, 101)]:
+                with self.assertRaisesRegex(ValueError, 'index out of range'):
+                    r.time_map_get(signal_id, index)
+
+    def test_callback_exception_stops_iteration(self):
+        calls = []
+
+        def cbk(*args):
+            calls.append(args)
+            raise RuntimeError('cbk')
+
+        with Writer(self._path) as w:
+            for chunk_meta in range(3):
+                w.user_data(chunk_meta, b'data')
+        with Reader(self._path) as r, self.assertLogs('pyjls.binding', 'ERROR'):
+            r.user_data(cbk)
+        self.assertEqual(1, len(calls))
+
+        calls.clear()
+        self._annotation_gen(3)
+        with Reader(self._path) as r, self.assertLogs('pyjls.binding', 'ERROR'):
+            r.annotations(3, 0, cbk)
+        self.assertEqual(1, len(calls))
+
+        calls.clear()
+        with Writer(self._path) as w:
+            w.source_def(source_id=1, name='n')
+            w.signal_def(3, source_id=1, sample_rate=1000, utc_decimate_factor=10)
+            w.fsr(3, 0, np.zeros(10, dtype=np.float32))
+            for entry in range(100):  # 10 callbacks of 10 entries
+                w.utc(3, entry * 1000, YEAR + entry * SECOND)
+        with Reader(self._path) as r, self.assertLogs('pyjls.binding', 'ERROR'):
+            r.utc(3, 0, cbk)
+        self.assertEqual(1, len(calls))
 
     def test_log(self):
         log = logging.getLogger('pyjls.c')

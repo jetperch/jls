@@ -281,7 +281,7 @@ int32_t jls_core_signal_validate(struct jls_core_s * self, uint16_t signal_id) {
     struct jls_core_signal_s * signal_info = &self->signal_info[signal_id];
     if (signal_info->signal_def.signal_id != signal_id) {
         JLS_LOGW("signal_id %d not defined", (int) signal_id);
-        return false;
+        return JLS_ERROR_NOT_FOUND;
     }
     if (!signal_info->chunk_def.offset) {
         JLS_LOGW("attempted to annotated an undefined signal %d", (int) signal_id);

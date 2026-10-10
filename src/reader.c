@@ -31,6 +31,7 @@
 #include <inttypes.h>
 #include <math.h>
 #include <stdio.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
@@ -629,6 +630,12 @@ int32_t jls_core_annotations(struct jls_core_s * self, uint16_t signal_id, int64
             return JLS_ERROR_NOT_FOUND;
         }
         annotation = (struct jls_annotation_s *) self->buf->start;
+        const uint32_t data_offset = (uint32_t) offsetof(struct jls_annotation_s, data);  // sizeof pads
+        if ((self->chunk_cur.hdr.payload_length < data_offset)
+                || (annotation->data_size > (self->chunk_cur.hdr.payload_length - data_offset))) {
+            JLS_LOGW("annotation data_size exceeds payload at %" PRIi64, pos);
+            return JLS_ERROR_MESSAGE_INTEGRITY;
+        }
         annotation->timestamp -= sample_id_offset;
         if (cbk_fn(cbk_user_data, annotation)) {
             return 0;
@@ -815,8 +822,10 @@ static int32_t utc_load(struct jls_core_s * self, uint16_t signal_id) {
 
 
 size_t jls_rd_tmap_length(struct jls_rd_s * self, uint16_t signal_id) {
-    fsr_tmap();
-    return jls_tmap_length(fsr);
+    if (utc_load(&self->core, signal_id)) {
+        return 0;
+    }
+    return jls_tmap_length(self->core.signal_info[signal_id].track_fsr->tmap);
 }
 
 int32_t jls_rd_sample_id_to_timestamp(struct jls_rd_s * self, uint16_t signal_id,

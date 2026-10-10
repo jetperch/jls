@@ -29,6 +29,7 @@
 
 
 #define MRB_BUFFER_SIZE (64 * 1024 * 1024)
+#define SIGNAL_TYPE_UNDEFINED (0xff)
 
 
 struct jls_twr_s {
@@ -39,6 +40,7 @@ struct jls_twr_s {
     volatile uint64_t flush_send_id;
     volatile uint64_t flush_processed_id;
     uint8_t fsr_entry_size_bits[JLS_SIGNAL_COUNT];
+    uint8_t signal_type[JLS_SIGNAL_COUNT];  // jls_signal_type_e or SIGNAL_TYPE_UNDEFINED
     struct jls_mrb_s mrb;
     uint8_t mrb_buffer[];
 };
@@ -102,6 +104,7 @@ const char * message_str[] = {
         "flush",
         "user_data",
         "fsr",
+        "fsr_omit",
         "annotation",
         "utc",
 };
@@ -217,12 +220,16 @@ int32_t jls_twr_open(struct jls_twr_s ** instance, const char * path) {
     self->wr = wr;
     self->flush_send_id = 0;
     self->flush_processed_id = 0;
+    memset(self->fsr_entry_size_bits, 0, sizeof(self->fsr_entry_size_bits));
+    memset(self->signal_type, SIGNAL_TYPE_UNDEFINED, sizeof(self->signal_type));
+    self->signal_type[0] = JLS_SIGNAL_TYPE_VSR;  // jls_wr_open defines signal 0
 
     jls_mrb_init(&self->mrb, self->mrb_buffer, MRB_BUFFER_SIZE);
     self->bk = jls_bkt_initialize(self);
     if (!self->bk) {
         JLS_LOGE("jls_bkt_initialize failed");
         jls_wr_close(wr);
+        free(self);
         return JLS_ERROR_NOT_ENOUGH_MEMORY;
     }
 
@@ -317,10 +324,52 @@ int32_t jls_twr_source_def(struct jls_twr_s * self, const struct jls_source_def_
 
 int32_t jls_twr_signal_def(struct jls_twr_s * self, const struct jls_signal_def_s * signal) {
     jls_bkt_process_lock(self->bk);
-    self->fsr_entry_size_bits[signal->signal_id] = jls_datatype_parse_size(signal->data_type);
     int32_t rv = jls_wr_signal_def(self->wr, signal);
+    if (0 == rv) {  // jls_wr_signal_def validated signal_id
+        self->fsr_entry_size_bits[signal->signal_id] = jls_datatype_parse_size(signal->data_type);
+        self->signal_type[signal->signal_id] = signal->signal_type;
+    }
     jls_bkt_process_unlock(self->bk);
     return rv;
+}
+
+/*
+ * Validate synchronously: the writer thread only logs its errors.
+ * Matches jls_core_signal_validate_typed() return codes.
+ */
+static int32_t signal_validate(struct jls_twr_s * self, uint16_t signal_id, bool fsr_only) {
+    if (signal_id >= JLS_SIGNAL_COUNT) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
+    uint8_t signal_type = self->signal_type[signal_id];
+    if (SIGNAL_TYPE_UNDEFINED == signal_type) {
+        return JLS_ERROR_NOT_FOUND;
+    }
+    if (fsr_only && (JLS_SIGNAL_TYPE_FSR != signal_type)) {
+        return JLS_ERROR_NOT_SUPPORTED;
+    }
+    return 0;
+}
+
+/*
+ * The message copies data_size bytes, and the writer thread runs strlen()
+ * on STRING and JSON payloads, so they must be NUL-terminated within it.
+ */
+static int32_t payload_validate(enum jls_storage_type_e storage_type, const uint8_t * data, uint32_t data_size) {
+    if (data_size && !data) {
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
+    switch (storage_type) {
+        case JLS_STORAGE_TYPE_STRING:  // intentional fall-through
+        case JLS_STORAGE_TYPE_JSON:
+            if (!data_size || (NULL == memchr(data, 0, data_size))) {
+                return JLS_ERROR_PARAMETER_INVALID;
+            }
+            break;
+        default:
+            break;
+    }
+    return 0;
 }
 
 int32_t jls_twr_user_data(struct jls_twr_s * self, uint16_t chunk_meta,
@@ -335,6 +384,7 @@ int32_t jls_twr_user_data(struct jls_twr_s * self, uint16_t chunk_meta,
             },
             .d = 0
     };
+    ROE(payload_validate(storage_type, data, data_size));
     return msg_send(self, &hdr, data, data_size);
 }
 
@@ -351,7 +401,12 @@ int32_t jls_twr_fsr(struct jls_twr_s * self, uint16_t signal_id,
             },
             .d = 0
     };
-    uint32_t length = (data_length * self->fsr_entry_size_bits[signal_id] + 7) / 8;
+    ROE(signal_validate(self, signal_id, true));
+    uint64_t length_u64 = ((uint64_t) data_length * self->fsr_entry_size_bits[signal_id] + 7) / 8;
+    if (length_u64 > MRB_BUFFER_SIZE) {
+        return JLS_ERROR_TOO_BIG;
+    }
+    uint32_t length = (uint32_t) length_u64;
     int32_t rc;
     if (self->flags & JLS_TWR_FLAG_DROP_ON_OVERFLOW) {
         rc = msg_send_inner(self, &hdr, (const uint8_t *) data, length);
@@ -381,6 +436,7 @@ int32_t jls_twr_fsr_omit_data(struct jls_twr_s * self, uint16_t signal_id, uint3
             },
             .d = 0
     };
+    ROE(signal_validate(self, signal_id, true));
     return msg_send(self, &hdr, NULL, 0);
 }
 
@@ -404,6 +460,8 @@ int32_t jls_twr_annotation(struct jls_twr_s * self, uint16_t signal_id, int64_t 
             },
             .d = 0
     };
+    ROE(signal_validate(self, signal_id, false));
+    ROE(payload_validate(storage_type, data, data_size));
     return msg_send(self, &hdr, data, data_size);
 }
 
@@ -419,5 +477,6 @@ JLS_API int32_t jls_twr_utc(struct jls_twr_s * self, uint16_t signal_id, int64_t
             },
             .d = 0
     };
+    ROE(signal_validate(self, signal_id, true));
     return msg_send(self, &hdr, NULL, 0);
 }

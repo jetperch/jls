@@ -123,7 +123,7 @@ size_t jls_tmap_length(struct jls_tmap_s * self) {
 int64_t interp_i64(struct jls_tmap_s * self, int64_t x0, int64_t const * x, int64_t const * y) {
     // binary search for x index with value less than or equal to x0
     size_t low = 0;
-    size_t high = self->entries_length;
+    size_t high = self->entries_length - 1;  // caller guarantees >= 2 entries
     size_t mid;
     while (low < high) {
         mid = (low + high + 1) / 2;

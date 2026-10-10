@@ -101,12 +101,31 @@ static void test_interpN(void **state) {
     assert_int_equal(0, jls_tmap_sample_id_to_timestamp(s, 4150, &v)); assert_int_equal(YEAR + 7 * SECOND / 2, v);  // below range
 }
 
+static void test_interp_full_allocation(void **state) {
+    (void) state;
+    int64_t v;
+    const int64_t count = 1000;  // ENTRIES_ALLOC_INIT, so x[count] is past the allocation
+    struct jls_tmap_s * s = jls_tmap_alloc(1000.0);
+    for (int64_t i = 0; i < count; ++i) {
+        jls_tmap_add(s, i * 1000, YEAR + i * SECOND);
+    }
+    assert_int_equal(count, jls_tmap_length(s));
+    assert_int_equal(0, jls_tmap_sample_id_to_timestamp(s, (count - 1) * 1000, &v));
+    assert_int_equal(YEAR + (count - 1) * SECOND, v);
+    assert_int_equal(0, jls_tmap_sample_id_to_timestamp(s, count * 1000, &v));
+    assert_int_equal(YEAR + count * SECOND, v);
+    assert_int_equal(0, jls_tmap_timestamp_to_sample_id(s, YEAR + count * SECOND, &v));
+    assert_int_equal(count * 1000, v);
+    jls_tmap_free(s);
+}
+
 int main(void) {
     const struct CMUnitTest tests[] = {
             cmocka_unit_test(test_empty),
             cmocka_unit_test(test_single),
             cmocka_unit_test(test_interp2),
             cmocka_unit_test(test_interpN),
+            cmocka_unit_test(test_interp_full_allocation),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);
