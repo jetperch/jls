@@ -73,11 +73,20 @@ void jls_mrb_clear(struct jls_mrb_s * self);
 uint32_t jls_mrb_used_bytes(struct jls_mrb_s * self);
 
 /**
+ * @brief Get the maximum message size.
+ *
+ * @param self The ring buffer instance.
+ * @return The largest size jls_mrb_alloc() accepts, which only fits
+ *      when the buffer is empty.
+ */
+uint32_t jls_mrb_msg_size_max(struct jls_mrb_s * self);
+
+/**
  * @brief Allocate a message on the ring buffer.
  *
  * @param self The ring buffer instance.
  * @param size The desired size of the buffer.
- * @return The buffer or NULL on out of space.
+ * @return The buffer or NULL on out of space or size too big.
  */
 uint8_t * jls_mrb_alloc(struct jls_mrb_s * self, uint32_t size);
 

@@ -24,7 +24,14 @@
  * The message size, sz, must be less than 0x80000000.
  * Any message with the bit[31] set is considered a control header,
  * which indicates wrap_around.
+ *
+ * Invariants: head and tail never exceed buf_size - 4, so a wrap marker
+ * always fits at head.  head == tail means empty, so a message never
+ * fills the last free byte before tail.
  */
+
+#define HDR_SZ (4U)
+#define WRAP_MARKER (0xffffffffU)
 
 void jls_mrb_init(struct jls_mrb_s * self, uint8_t * buffer, uint32_t buffer_size) {
     self->buf = buffer;
@@ -40,11 +47,17 @@ void jls_mrb_clear(struct jls_mrb_s * self) {
 }
 
 uint32_t jls_mrb_used_bytes(struct jls_mrb_s * self) {
-    if (self->head > self->tail) {
+    if (self->head >= self->tail) {
         return self->head - self->tail;
     } else {
-        return (self-> head + self->buf_size) - self->tail;
+        return (self->head + self->buf_size) - self->tail;
     }
+}
+
+uint32_t jls_mrb_msg_size_max(struct jls_mrb_s * self) {
+    // header + message + room for the next wrap marker + 1 byte gap
+    uint32_t overhead = HDR_SZ + HDR_SZ + 1;
+    return (self->buf_size > overhead) ? (self->buf_size - overhead) : 0;
 }
 
 static inline uint8_t * add_sz(uint8_t * p, uint32_t sz) {
@@ -56,42 +69,41 @@ static inline uint8_t * add_sz(uint8_t * p, uint32_t sz) {
 }
 
 uint8_t * jls_mrb_alloc(struct jls_mrb_s * self, uint32_t size) {
-    uint8_t *p = self->buf + self->head;
     uint32_t head = self->head;
     uint32_t tail = self->tail;
+    uint64_t total = (uint64_t) HDR_SZ + size;  // 64-bit: never wraps
+    uint64_t head_max = (uint64_t) self->buf_size - HDR_SZ;  // keep room for a wrap marker
 
-    if (size > self->buf_size) {
+    if ((self->buf_size <= (2 * HDR_SZ)) || (size > jls_mrb_msg_size_max(self))) {
         JLS_LOGE("jls_mrb_alloc too big");
         return NULL;
     }
 
-    if (head >= tail) {
-        uint32_t end_idx = head + 4 + size + 4 + (tail ? 0 : 1);
-        if (end_idx < self->buf_size) {
-            // fits as is, no wrap
-        } else if ((size + 5) < tail) {
-            // fits after wrap
-            add_sz(p, 0xffffffffU);
-            p = self->buf;
-        } else if (head == tail) {
-            // Big item, but buffer is empty.  Reset pointers to make room.
-            self->head = 0;
-            self->tail = 0;
-            p = self->buf;
-        } else {
-            return NULL; // does not fit
-        }
-    } else if ((head + size + 5) < tail) {
-        // fits as is
-    } else {
-        return NULL; // does not fit.
-    }
-    p = add_sz(p, size);
-    head = ((uint32_t) (p - self->buf)) + size;
-    if (head >= self->buf_size) {
+    if (head == tail) {
+        // Empty: restart at 0 for the most contiguous space.
         head = 0;
+        self->head = 0;
+        self->tail = 0;
+        tail = 0;
     }
-    self->head = head;
+
+    uint32_t pos;
+    if (head >= tail) {
+        if ((head + total) <= head_max) {
+            pos = head;  // fits as is, no wrap
+        } else if (total < tail) {
+            add_sz(self->buf + head, WRAP_MARKER);  // fits after wrap
+            pos = 0;
+        } else {
+            return NULL;  // does not fit
+        }
+    } else if ((head + total) < tail) {
+        pos = head;  // fits as is
+    } else {
+        return NULL;  // does not fit.
+    }
+    uint8_t * p = add_sz(self->buf + pos, size);
+    self->head = (uint32_t) (pos + total);
     ++self->count;
     return p;
 }
@@ -104,7 +116,6 @@ static inline uint32_t get_sz(uint8_t const * p) {
 }
 
 uint8_t * jls_mrb_peek(struct jls_mrb_s * self, uint32_t * size) {
-    uint8_t *p = self->buf + self->tail;
     uint32_t head = self->head;
     uint32_t sz;
     *size = 0;
@@ -112,7 +123,7 @@ uint8_t * jls_mrb_peek(struct jls_mrb_s * self, uint32_t * size) {
     if (self->tail == head) {
         return NULL;
     }
-    sz = get_sz(p);
+    sz = get_sz(self->buf + self->tail);
     if (sz >= 0x80000000) {
         // rollover
         if (head > self->tail) {
@@ -124,26 +135,24 @@ uint8_t * jls_mrb_peek(struct jls_mrb_s * self, uint32_t * size) {
         if (self->tail == head) {
             return NULL;
         }
-        p = self->buf;
-        sz = get_sz(p);
+        sz = get_sz(self->buf);
+    }
+    if (((uint64_t) self->tail + HDR_SZ + sz) > self->buf_size) {
+        JLS_LOGE("buffer corrupt");  // should never be possible
+        jls_mrb_clear(self);
+        return NULL;
     }
     *size = sz;
-    return (p + 4);
+    return (self->buf + self->tail + HDR_SZ);
 }
-
 
 uint8_t * jls_mrb_pop(struct jls_mrb_s * self, uint32_t * size) {
     uint8_t *p = jls_mrb_peek(self, size);
-    uint32_t tail = self->tail;
     if (p) {
-        tail += (4 + *size);
-        if (tail >= self->buf_size) {
-            tail -= self->buf_size;
-        }
+        self->tail += HDR_SZ + *size;  // never past buf_size - 4, see alloc
         if (self->count) {
             --self->count;
         }
     }
-    self->tail = tail;
     return p;
 }
