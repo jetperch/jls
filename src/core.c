@@ -35,6 +35,14 @@
 #define SAMPLES_PER_DATA_MIN            (SAMPLE_DECIMATE_FACTOR_MIN)
 #define ENTRIES_PER_SUMMARY_MIN         (SAMPLE_DECIMATE_FACTOR_MIN)
 #define SUMMARY_DECIMATE_FACTOR_MIN     (SAMPLE_DECIMATE_FACTOR_MIN)
+#define TS_DECIMATE_FACTOR_MIN          (10)
+// Signal definition caps, see jls_signal_def_s in format.h.  They bound every
+// chunk and buffer size derived from a signal definition well below the
+// uint32 payload length and the threaded writer message limit.
+#define SAMPLES_PER_DATA_MAX            (1UL << 22)   // 4 Mi samples
+#define DATA_SIZE_BYTES_MAX             (1UL << 24)   // 16 MiB sample data per chunk
+#define ENTRIES_PER_SUMMARY_MAX         (1UL << 19)   // 16 MiB of f64 summary entries
+#define TS_DECIMATE_FACTOR_MAX          (1UL << 16)
 #define F64_BUF_LENGTH_MIN (1 << 16)
 #define SIGNAL_MASK  (0x0fff)
 #define TAU_F (6.283185307179586f)
@@ -84,11 +92,11 @@ static const struct jls_signal_def_s SIGNAL_1_DEFAULTS = {
         .summary_decimate_factor = 20,
 };
 
-static inline uint32_t u32_max(uint32_t a, uint32_t b) {
+static inline uint64_t u64_max(uint64_t a, uint64_t b) {
     return (a > b) ? a : b;
 }
 
-static uint32_t round_up_to_multiple(uint32_t x, uint32_t m) {
+static uint64_t round_up_to_multiple(uint64_t x, uint64_t m) {
     return ((x + m - 1) / m) * m;
 }
 
@@ -104,6 +112,9 @@ int32_t jls_core_f64_buf_alloc(size_t length, struct jls_core_f64_buf_s ** buf) 
 
     if (length < F64_BUF_LENGTH_MIN) {
         length = F64_BUF_LENGTH_MIN;
+    }
+    if (length > ((SIZE_MAX - sizeof(struct jls_core_f64_buf_s)) / sizeof(double))) {
+        return JLS_ERROR_NOT_ENOUGH_MEMORY;  // size would wrap
     }
     struct jls_core_f64_buf_s * b = malloc(sizeof(struct jls_core_f64_buf_s) + length * sizeof(double));
     if (!b) {
@@ -179,6 +190,50 @@ int32_t jls_core_signal_def_validate(struct jls_signal_def_s const * def) {
     return 0;
 }
 
+int32_t jls_core_signal_def_validate_fsr(struct jls_signal_def_s const * def) {
+    // Structural checks that every reader division, loop, and buffer size
+    // relies on.  jls_core_signal_def_align() always produces a passing def.
+    uint64_t bits = jls_datatype_parse_size(def->data_type);
+    uint64_t spd = def->samples_per_data;
+    uint64_t sdf = def->sample_decimate_factor;
+    uint64_t eps = def->entries_per_summary;
+    uint64_t sumdf = def->summary_decimate_factor;
+    if ((0 == bits) || (0 == spd) || (spd > SAMPLES_PER_DATA_MAX)
+            || (((spd * bits) / 8) > DATA_SIZE_BYTES_MAX)) {
+        JLS_LOGW("signal %d: invalid samples_per_data %" PRIu64, (int) def->signal_id, spd);
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
+    if ((0 == sdf) || (spd % sdf) || ((sdf * bits) % 8)) {
+        JLS_LOGW("signal %d: invalid sample_decimate_factor %" PRIu64, (int) def->signal_id, sdf);
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
+    uint64_t entries_per_data = spd / sdf;
+    if ((0 == eps) || (eps > ENTRIES_PER_SUMMARY_MAX) || (eps % entries_per_data)) {
+        JLS_LOGW("signal %d: invalid entries_per_summary %" PRIu64, (int) def->signal_id, eps);
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
+    if ((sumdf < 2) || (eps % sumdf)) {
+        JLS_LOGW("signal %d: invalid summary_decimate_factor %" PRIu64, (int) def->signal_id, sumdf);
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
+    return 0;
+}
+
+int64_t jls_core_fsr_step_size(struct jls_signal_def_s const * def, uint8_t level) {
+    if (0 == level) {
+        return 1;
+    }
+    // saturate: hostile head offsets can request levels the file never reached
+    int64_t step = def->sample_decimate_factor;
+    for (uint8_t lvl = 2; lvl <= level; ++lvl) {
+        if (step > (INT64_MAX / (int64_t) def->summary_decimate_factor)) {
+            return INT64_MAX;
+        }
+        step *= def->summary_decimate_factor;
+    }
+    return step;
+}
+
 #define SIGNAL_DEF_DEFAULT(field)   \
     if (0 == def->field) {          \
         def->field = d->field;      \
@@ -192,39 +247,63 @@ static void signal_def_defaults(struct jls_signal_def_s * def) {
         case 4:  d = &SIGNAL_4_DEFAULTS; break;
         case 8:  d = &SIGNAL_8_DEFAULTS; break;
         case 16: d = &SIGNAL_16_DEFAULTS; break;
+        case 24: d = &SIGNAL_32_DEFAULTS; break;
         case 32: d = &SIGNAL_32_DEFAULTS; break;
         case 64: d = &SIGNAL_64_DEFAULTS; break;
-        default: return;
+        default: d = NULL; break;
     }
 
-    SIGNAL_DEF_DEFAULT(samples_per_data);
-    SIGNAL_DEF_DEFAULT(sample_decimate_factor);
-    SIGNAL_DEF_DEFAULT(entries_per_summary);
-    SIGNAL_DEF_DEFAULT(summary_decimate_factor);
+    if (d) {
+        SIGNAL_DEF_DEFAULT(samples_per_data);
+        SIGNAL_DEF_DEFAULT(sample_decimate_factor);
+        SIGNAL_DEF_DEFAULT(entries_per_summary);
+        SIGNAL_DEF_DEFAULT(summary_decimate_factor);
+    }
 
-    // common parameters
+    // common parameters, for all data types
     d = &SIGNAL_32_DEFAULTS;
     SIGNAL_DEF_DEFAULT(annotation_decimate_factor);
     SIGNAL_DEF_DEFAULT(utc_decimate_factor);
 }
 
+static int32_t ts_decimate_factor_align(uint16_t signal_id, const char * name, uint32_t * factor) {
+    if (*factor < TS_DECIMATE_FACTOR_MIN) {
+        JLS_LOGI("%s adjusted from %" PRIu32 " to %d", name, *factor, TS_DECIMATE_FACTOR_MIN);
+        *factor = TS_DECIMATE_FACTOR_MIN;
+    } else if (*factor > TS_DECIMATE_FACTOR_MAX) {
+        JLS_LOGW("signal %d: %s %" PRIu32 " too big", (int) signal_id, name, *factor);
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
+    return 0;
+}
+
 int32_t jls_core_signal_def_align(struct jls_signal_def_s * def) {
     signal_def_defaults(def);
     uint8_t sample_size = jls_datatype_parse_size(def->data_type);
-    uint32_t samples_per_data_multiple = (SAMPLE_SIZE_BYTES_MAX * 8) / sample_size;
+    if (0 == sample_size) {
+        JLS_LOGW("signal %d: invalid data type 0x%08" PRIx32, (int) def->signal_id, def->data_type);
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
+    uint64_t samples_per_data_multiple = (SAMPLE_SIZE_BYTES_MAX * 8) / sample_size;
 
-    uint32_t sample_decimate_factor = u32_max(def->sample_decimate_factor, SAMPLE_DECIMATE_FACTOR_MIN);
+    // 64-bit math: user values near UINT32_MAX must not wrap to 0
+    uint64_t sample_decimate_factor = u64_max(def->sample_decimate_factor, SAMPLE_DECIMATE_FACTOR_MIN);
     sample_decimate_factor = round_up_to_multiple(sample_decimate_factor, samples_per_data_multiple);
 
-    uint32_t samples_per_data = u32_max(def->samples_per_data, SAMPLES_PER_DATA_MIN);
-    uint32_t entries_per_summary = u32_max(def->entries_per_summary, ENTRIES_PER_SUMMARY_MIN);
-    uint32_t summary_decimate_factor = u32_max(def->summary_decimate_factor, SUMMARY_DECIMATE_FACTOR_MIN);
+    uint64_t samples_per_data = u64_max(def->samples_per_data, SAMPLES_PER_DATA_MIN);
+    uint64_t entries_per_summary = u64_max(def->entries_per_summary, ENTRIES_PER_SUMMARY_MIN);
+    uint64_t summary_decimate_factor = u64_max(def->summary_decimate_factor, SUMMARY_DECIMATE_FACTOR_MIN);
 
     entries_per_summary = round_up_to_multiple(entries_per_summary, summary_decimate_factor);
     samples_per_data = round_up_to_multiple(samples_per_data, sample_decimate_factor);
-    uint32_t entries_per_data = samples_per_data / sample_decimate_factor;
+    if ((samples_per_data > SAMPLES_PER_DATA_MAX) || (entries_per_summary > ENTRIES_PER_SUMMARY_MAX)) {
+        JLS_LOGW("signal %d: samples_per_data %" PRIu64 " or entries_per_summary %" PRIu64 " too big",
+                 (int) def->signal_id, samples_per_data, entries_per_summary);
+        return JLS_ERROR_PARAMETER_INVALID;
+    }
+    uint64_t entries_per_data = samples_per_data / sample_decimate_factor;
 
-    while (entries_per_summary != ((entries_per_summary / entries_per_data) * entries_per_data)) {
+    while (entries_per_summary % entries_per_data) {
         // reduce until fits.
         --entries_per_data;
     }
@@ -232,23 +311,25 @@ int32_t jls_core_signal_def_align(struct jls_signal_def_s * def) {
     samples_per_data = sample_decimate_factor * entries_per_data;
 
     if (sample_decimate_factor != def->sample_decimate_factor) {
-        JLS_LOGI("sample_decimate_factor adjusted from %" PRIu32 " to %" PRIu32,
+        JLS_LOGI("sample_decimate_factor adjusted from %" PRIu32 " to %" PRIu64,
                 def->sample_decimate_factor, sample_decimate_factor);
     }
     if (samples_per_data != def->samples_per_data) {
-        JLS_LOGI("samples_per_data adjusted from %" PRIu32 " to %" PRIu32,
+        JLS_LOGI("samples_per_data adjusted from %" PRIu32 " to %" PRIu64,
                 def->samples_per_data, samples_per_data);
     }
     if (entries_per_summary != def->entries_per_summary) {
-        JLS_LOGI("entries_per_summary adjusted from %" PRIu32 " to %" PRIu32,
+        JLS_LOGI("entries_per_summary adjusted from %" PRIu32 " to %" PRIu64,
                 def->entries_per_summary, entries_per_summary);
     }
+    ROE(ts_decimate_factor_align(def->signal_id, "annotation_decimate_factor", &def->annotation_decimate_factor));
+    ROE(ts_decimate_factor_align(def->signal_id, "utc_decimate_factor", &def->utc_decimate_factor));
 
-    def->sample_decimate_factor = sample_decimate_factor;
-    def->samples_per_data = samples_per_data;
-    def->entries_per_summary = entries_per_summary;
-    def->summary_decimate_factor = summary_decimate_factor;
-    return 0;
+    def->sample_decimate_factor = (uint32_t) sample_decimate_factor;
+    def->samples_per_data = (uint32_t) samples_per_data;
+    def->entries_per_summary = (uint32_t) entries_per_summary;
+    def->summary_decimate_factor = (uint32_t) summary_decimate_factor;
+    return jls_core_signal_def_validate_fsr(def);
 }
 
 int32_t jls_core_update_chunk_header(struct jls_core_s * self, struct jls_core_chunk_s * chunk) {
@@ -597,29 +678,38 @@ static int32_t handle_signal_def(struct jls_core_s * self) {
         return 0;  // semantically invalid but structurally sound: skip
     }
     struct jls_core_signal_s * signal_info = &self->signal_info[signal_id];
+    if (signal_info->chunk_def.offset) {
+        // keep the first: a later def must not retype a signal already in use
+        JLS_LOGW("duplicate signal %d def at %" PRIi64 " - skip", (int) signal_id, self->chunk_cur.offset);
+        return 0;
+    }
+    // parse into a temporary: commit only a fully validated definition
+    struct jls_signal_def_s s;
+    memset(&s, 0, sizeof(s));
+    ROE(jls_buf_rd_u16(self->buf, &s.source_id));
+    ROE(jls_buf_rd_u8(self->buf, &s.signal_type));
+    ROE(jls_buf_rd_skip(self->buf, 1));
+    ROE(jls_buf_rd_u32(self->buf, &s.data_type));
+    ROE(jls_buf_rd_u32(self->buf, &s.sample_rate));
+    ROE(jls_buf_rd_u32(self->buf, &s.samples_per_data));
+    ROE(jls_buf_rd_u32(self->buf, &s.sample_decimate_factor));
+    ROE(jls_buf_rd_u32(self->buf, &s.entries_per_summary));
+    ROE(jls_buf_rd_u32(self->buf, &s.summary_decimate_factor));
+    ROE(jls_buf_rd_u32(self->buf, &s.annotation_decimate_factor));
+    ROE(jls_buf_rd_u32(self->buf, &s.utc_decimate_factor));
+    ROE(jls_buf_rd_skip(self->buf, 92));
+    ROE(jls_buf_rd_str(self->buf, (const char **) &s.name));
+    ROE(jls_buf_rd_str(self->buf, (const char **) &s.units));
+    s.signal_id = signal_id;
+    if (jls_core_signal_def_validate(&s)
+            || ((JLS_SIGNAL_TYPE_FSR == s.signal_type) && jls_core_signal_def_validate_fsr(&s))) {
+        JLS_LOGW("Signal validation failed for %d : %s - skip", (int) signal_id, s.name);
+        return 0;
+    }
     signal_info->chunk_def = self->chunk_cur;
     signal_info->parent = self;
-    struct jls_signal_def_s *s = &signal_info->signal_def;
-    ROE(jls_buf_rd_u16(self->buf, &s->source_id));
-    ROE(jls_buf_rd_u8(self->buf, &s->signal_type));
-    ROE(jls_buf_rd_skip(self->buf, 1));
-    ROE(jls_buf_rd_u32(self->buf, &s->data_type));
-    ROE(jls_buf_rd_u32(self->buf, &s->sample_rate));
-    ROE(jls_buf_rd_u32(self->buf, &s->samples_per_data));
-    ROE(jls_buf_rd_u32(self->buf, &s->sample_decimate_factor));
-    ROE(jls_buf_rd_u32(self->buf, &s->entries_per_summary));
-    ROE(jls_buf_rd_u32(self->buf, &s->summary_decimate_factor));
-    ROE(jls_buf_rd_u32(self->buf, &s->annotation_decimate_factor));
-    ROE(jls_buf_rd_u32(self->buf, &s->utc_decimate_factor));
-    ROE(jls_buf_rd_skip(self->buf, 92));
-    ROE(jls_buf_rd_str(self->buf, (const char **) &s->name));
-    ROE(jls_buf_rd_str(self->buf, (const char **) &s->units));
-    if (0 == jls_core_signal_def_validate(s)) {  // validate passed
-        s->signal_id = signal_id;  // indicate that this signal is valid
-        JLS_LOGD1("Found signal %d : %s", (int) signal_id, s->name);
-    } else {
-        JLS_LOGW("Signal validation failed for %d : %s", signal_id, s->name);
-    } // else skip
+    signal_info->signal_def = s;  // signal_id match indicates that this signal is valid
+    JLS_LOGD1("Found signal %d : %s", (int) signal_id, s.name);
     return 0;
 }
 

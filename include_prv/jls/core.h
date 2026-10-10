@@ -170,12 +170,39 @@ void jls_core_f64_buf_free(struct jls_core_f64_buf_s * buf);
 int32_t jls_core_signal_def_validate(struct jls_signal_def_s const * def);
 
 /**
+ * @brief Validate the FSR summary geometry of a signal definition.
+ *
+ * @param def[in] The signal definition.
+ * @return 0 or JLS_ERROR_PARAMETER_INVALID.
+ *
+ * Checks the invariants that FSR reads, summaries, and recovery rely on:
+ * samples_per_data, sample_decimate_factor, entries_per_summary and
+ * summary_decimate_factor are non-zero, consistent multiples, and within
+ * the caps documented for jls_signal_def_s.  Applied to every FSR signal
+ * definition read from a file.
+ */
+int32_t jls_core_signal_def_validate_fsr(struct jls_signal_def_s const * def);
+
+/**
  * @brief Align the signal definition parameters.
  *
  * @param def[inout] The signal definition.
  * @return 0 or error code.
+ *
+ * Applies defaults for zero values, enforces the minimums, rounds to
+ * consistent multiples, and then rejects definitions that exceed the
+ * caps.  On success, the result passes jls_core_signal_def_validate_fsr().
  */
 int32_t jls_core_signal_def_align(struct jls_signal_def_s * def);
+
+/**
+ * @brief The number of samples per FSR summary entry at a level.
+ *
+ * @param def[in] The validated signal definition.
+ * @param level The summary level, 0 for samples.
+ * @return The step size, saturated at INT64_MAX.
+ */
+int64_t jls_core_fsr_step_size(struct jls_signal_def_s const * def, uint8_t level);
 
 /**
  * @brief Update the chunk header

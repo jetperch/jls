@@ -399,6 +399,24 @@ struct jls_source_def_s {
 
 /**
  * @brief The signal definition.
+ *
+ * On write, zero values select per-data-type defaults.  The writer then
+ * aligns the FSR parameters: sample_decimate_factor >= 10 and a multiple
+ * of 256 bits of samples, samples_per_data a multiple of
+ * sample_decimate_factor, entries_per_summary a multiple of both
+ * summary_decimate_factor (>= 10) and the entries per data chunk, and
+ * annotation_decimate_factor and utc_decimate_factor >= 10.
+ *
+ * Caps: the writer rejects definitions that exceed them after alignment,
+ * and the reader skips FSR signals whose definitions violate them:
+ * - samples_per_data <= 2^22 (4 Mi samples),
+ * - samples_per_data * sample size <= 16 MiB of data per chunk,
+ * - entries_per_summary <= 2^19 (16 MiB of 64-bit summaries),
+ * - annotation_decimate_factor and utc_decimate_factor <= 2^16 (write).
+ * On read, an FSR definition must also have sample_decimate_factor
+ * dividing samples_per_data, a whole number of bytes per summary entry,
+ * entries_per_summary a multiple of the entries per data chunk and of
+ * summary_decimate_factor, and summary_decimate_factor >= 2.
  */
 struct jls_signal_def_s {       // 0 reserved for VSR annotations
     // store unique signal_id in chunk_meta
