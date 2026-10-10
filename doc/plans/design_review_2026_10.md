@@ -1,6 +1,6 @@
 # JLS Design Review (2026-10)
 
-Status: FIXED except X1 (deferred, see Stage 6) on branch
+Status: FIXED (X1 won't fix, see Stage 6) on branch
 `fix/design_review`, local and unpushed (2026-10-10).  Full review of the
 C library and pyjls after the 0.19.0 argument-validation pass (branch
 `fix/closed_handle`).  Every finding below is fixed with a regression
@@ -16,6 +16,16 @@ Found during integration, not in the tables:
 - I2 (m v): pyjls `Writer.close()` now raises the latched write error.
 - I3 (m): Windows `WAIT_ABANDONED` treated as lock failure, so the
   owned mutex was never released.
+
+Decisions (2026-10-10):
+
+- C17 fixed-point scaling: kept.  No Jetperch writer uses a nonzero q
+  (pyjoulescope_ui, joulescope_driver record, pyjoulescope, and the
+  examples write only F32, U8, U4, and U1), so no existing files change.
+- X1 copy gap amplification: won't fix.  jls_copy is a salvage tool for
+  damaged files; the recovery fixes here should make it rarely needed.
+- pyjls u1/u4 Writer.fsr() writes whole bytes only: known limitation,
+  documented in the docstring rather than adding a sample count argument.
 
 Verification: ASan+UBSan ctest 17/17 with leak detection; pyjls 50/50
 under ASan; crash-consistent fuzz modes ~35k cases and resign modes 21k

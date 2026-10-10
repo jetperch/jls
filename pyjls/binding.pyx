@@ -674,7 +674,10 @@ cdef class Writer:
         :param data: The data to add as a numpy array with the dtype for
             the signal data_type.  u1 and u4 data is packed in little
             endian order into np.uint8, so each call writes a multiple of
-            8 (u1) or 2 (u4) samples.
+            8 (u1) or 2 (u4) samples.  This is a known limitation: to
+            store a total sample count that is not such a multiple, pad
+            the final byte, and readers will see the padding samples.
+            The C API, jls_twr_fsr(), accepts any sample count.
         :raise: On error.
         """
         cdef c_jls.jls_twr_s * wr
