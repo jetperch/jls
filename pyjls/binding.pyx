@@ -294,11 +294,13 @@ cdef class Writer:
     Methods raise ValueError for invalid arguments, such as an undefined
     signal_id, and RuntimeError for errors reported by the JLS library.
 
-    Not thread-safe: call each Writer's methods from one thread at a
-    time.  In particular, calling close() while another thread is
-    inside a method may crash the interpreter.  Garbage collection
-    closes a Writer left open, but call close() or use a `with`
-    block to finalize the file at a known time.
+    Thread-safe, except for close(): multiple threads may call the other
+    methods concurrently, such as fsr() for different signals.  Call
+    close() only after all other threads have finished calling this
+    Writer.  Calling close() while another thread is inside a method may
+    crash the interpreter.  Garbage collection closes a Writer left
+    open, but call close() or use a `with` block to finalize the file
+    at a known time.
     """
     cdef c_jls.jls_twr_s * _wr
     cdef object _signals  # signal_id -> data_type, for packing fsr data
@@ -604,9 +606,16 @@ cdef class Reader:
     signal_id, and RuntimeError for errors reported by the JLS library.
 
     Not thread-safe: call each Reader's methods from one thread at a
-    time.  In particular, calling close() while another thread is
-    inside a method may crash the interpreter.  Garbage collection
-    closes a Reader left open.
+    time, because all reads share one buffer and file position.
+    Calling methods concurrently, including close(), may return wrong
+    data or crash the interpreter.  To read from multiple threads, open
+    a separate Reader in each thread.
+
+    Not reentrant: callbacks passed to annotations(), user_data(), and
+    utc() must not call methods on the same Reader, which corrupts the
+    iteration in progress.  Collect the entries in the callback, and
+    process them after the method returns.  Garbage collection closes a
+    Reader left open.
     """
     cdef c_jls.jls_rd_s * _rd
     cdef object _sources

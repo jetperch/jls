@@ -45,7 +45,10 @@ This file contains the list of changes made to the JLS project.
   same way.
 * Garbage collection now closes a Writer or Reader left open.  Previously,
   the native handle leaked, and a Writer never finalized its file.
-* Documented that Writer and Reader are not thread-safe.
+* Documented thread safety.  Writer methods may be called from multiple
+  threads, except that close() must not overlap another call.  Reader is
+  not thread-safe; use one Reader per thread.  Reader callbacks must not
+  call the same Reader.
 * Fixed memory safety issues found by an argument validation review:
   * Writer.signal_def() with signal_id 256 or more wrote past the end of
     the Writer, in both the binding and jls_twr_signal_def().
