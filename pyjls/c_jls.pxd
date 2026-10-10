@@ -132,7 +132,7 @@ cdef extern from "jls/threaded_writer.h":
 
 cdef extern from "jls/reader.h":
     struct jls_rd_s
-    int32_t jls_rd_open(jls_rd_s ** instance, const char * path)
+    int32_t jls_rd_open(jls_rd_s ** instance, const char * path) nogil
     void jls_rd_close(jls_rd_s * self) nogil
     int32_t jls_rd_sources(jls_rd_s * self, jls_source_def_s ** sources, uint16_t * count)
     int32_t jls_rd_signals(jls_rd_s * self, jls_signal_def_s ** signals, uint16_t * count)
@@ -165,9 +165,9 @@ cdef extern from "jls/progress.h":
 cdef extern from "jls/copy.h":
     int32_t jls_copy(const char * src, const char * dst,
                      jls_msg_fn msg_fn, void * msg_user_data,
-                     jls_progress_fn progress_fn, void * progress_user_data)
+                     jls_progress_fn progress_fn, void * progress_user_data) nogil
 
 cdef extern from "jls/repair.h":
     int32_t jls_repair(const char * path,
                        jls_msg_fn msg_fn, void * msg_user_data,
-                       jls_progress_fn progress_fn, void * progress_user_data)
+                       jls_progress_fn progress_fn, void * progress_user_data) nogil

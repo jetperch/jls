@@ -458,36 +458,138 @@ class TestBinding(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'PARAMETER_INVALID'):
                     r.time_map_get(signal_id, index)
 
-    def test_callback_exception_stops_iteration(self):
-        calls = []
+    def _callback_cases(self):
+        """Write a file with user data, annotations, and utc for signal 3.
 
-        def cbk(*args):
-            calls.append(args)
-            raise RuntimeError('cbk')
-
-        with Writer(self._path) as w:
-            for chunk_meta in range(3):
-                w.user_data(chunk_meta, b'data')
-        with Reader(self._path) as r, self.assertLogs('pyjls.binding', 'ERROR'):
-            r.user_data(cbk)
-        self.assertEqual(1, len(calls))
-
-        calls.clear()
-        self._annotation_gen(3)
-        with Reader(self._path) as r, self.assertLogs('pyjls.binding', 'ERROR'):
-            r.annotations(3, 0, cbk)
-        self.assertEqual(1, len(calls))
-
-        calls.clear()
+        :return: The list of (name, fn(reader, cbk)) for each callback method.
+        """
         with Writer(self._path) as w:
             w.source_def(source_id=1, name='n')
             w.signal_def(3, source_id=1, sample_rate=1000, utc_decimate_factor=10)
             w.fsr(3, 0, np.zeros(10, dtype=np.float32))
+            for chunk_meta in range(3):
+                w.user_data(chunk_meta, b'data')
+            for idx in range(3):
+                w.annotation(3, idx, None, 'text', 0, 'a')
             for entry in range(100):  # 10 callbacks of 10 entries
                 w.utc(3, entry * 1000, YEAR + entry * SECOND)
-        with Reader(self._path) as r, self.assertLogs('pyjls.binding', 'ERROR'):
-            r.utc(3, 0, cbk)
-        self.assertEqual(1, len(calls))
+        return [
+            ('user_data', lambda r, cbk: r.user_data(cbk)),
+            ('annotations', lambda r, cbk: r.annotations(3, 0, cbk)),
+            ('utc', lambda r, cbk: r.utc(3, 0, cbk)),
+        ]
+
+    def test_callback_exception_propagates(self):
+        class CbkError(Exception):
+            pass
+
+        for exc_type in [CbkError, KeyboardInterrupt]:
+            for name, fn in self._callback_cases():
+                with self.subTest(exc=exc_type.__name__, method=name):
+                    calls = []
+
+                    def cbk(*args):
+                        calls.append(args)
+                        raise exc_type('cbk')
+
+                    with Reader(self._path) as r:
+                        with self.assertRaises(exc_type):
+                            fn(r, cbk)
+                        self.assertEqual(1, len(calls))  # stopped the iteration
+                        calls.clear()
+                        fn(r, lambda *args: calls.append(args))  # still usable
+                        self.assertGreater(len(calls), 1)
+
+    def test_callback_close_raises(self):
+        for name, fn in self._callback_cases():
+            with self.subTest(method=name), Reader(self._path) as r:
+                calls = []
+
+                def cbk(*args):
+                    calls.append(args)
+                    r.close()  # freed the reader under the iteration
+
+                with self.assertRaisesRegex(RuntimeError, 'in progress'):
+                    fn(r, cbk)
+                self.assertEqual(1, len(calls))
+                self.assertEqual(10, len(r.fsr(3, 0, 10)))  # still open
+            with self.assertRaisesRegex(ValueError, 'closed Reader'):
+                r.fsr(3, 0, 10)
+
+    def test_callback_nested_read(self):
+        for name, fn in self._callback_cases():
+            with self.subTest(method=name), Reader(self._path) as r:
+                lengths = []
+                fn(r, lambda *args: lengths.append(len(r.fsr(3, 0, 10))))
+                self.assertGreater(len(lengths), 0)
+                self.assertEqual({10}, set(lengths))
+
+    def test_close_from_other_thread_while_busy(self):
+        import threading
+        self._callback_cases()
+        entered = threading.Event()
+        release = threading.Event()
+        errors = []
+
+        def cbk(*args):
+            entered.set()
+            release.wait(10)
+            return True
+
+        with Reader(self._path) as r:
+            t = threading.Thread(target=r.user_data, args=(cbk, ))
+            t.start()
+            self.assertTrue(entered.wait(10))
+            try:
+                r.close()
+            except RuntimeError as ex:
+                errors.append(ex)
+            release.set()
+            t.join()
+            self.assertEqual(1, len(errors))
+            self.assertEqual(10, len(r.fsr(3, 0, 10)))  # still open
+
+    def test_writer_close_from_other_thread(self):
+        import threading
+        x = np.zeros(1000, dtype=np.float32)
+        with Writer(self._path) as w:
+            self._write_fsr_100(w)
+
+            def run():
+                try:
+                    for i in range(300):
+                        w.fsr(3, 100 + i * 1000, x)
+                except ValueError:
+                    pass  # closed
+
+            t = threading.Thread(target=run)
+            t.start()
+            while True:
+                try:
+                    w.close()
+                    break
+                except RuntimeError:
+                    pass  # busy
+            t.join()
+        with Reader(self._path) as r:
+            self.assertEqual(0, (r.signals[3].length - 100) % 1000)
+
+    def test_init_twice_closes(self):
+        path2 = self._path + '.2.jls'
+        try:
+            w = Writer(self._path)
+            self._write_fsr_100(w)
+            w.__init__(path2)
+            with Reader(self._path) as r:  # finalized by __init__
+                self.assertEqual(100, r.signals[3].length)
+            self._write_fsr_100(w)
+            w.close()
+            r = Reader(self._path)
+            r.__init__(path2)
+            self.assertEqual(100, r.signals[3].length)
+            r.close()
+        finally:
+            os.remove(path2)
 
     def test_log(self):
         log = logging.getLogger('pyjls.c')
@@ -625,6 +727,28 @@ class TestBinding(unittest.TestCase):
         repair(self._path)  # canceled repair reruns to completion
         with Reader(self._path) as r:
             self.assertEqual(3, r.signals[3].signal_id)
+
+    def test_repair_callback_exception_propagates(self):
+        class CbkError(Exception):
+            pass
+
+        for exc_type in [CbkError, KeyboardInterrupt]:
+            with self.subTest(exc=exc_type.__name__):
+                self._repair_case_create()
+
+                def raise_exc(*args):
+                    raise exc_type('cbk')
+
+                with self.assertRaises(exc_type):
+                    repair(self._path, None, raise_exc)
+                with self.assertRaises(exc_type):
+                    repair(self._path, raise_exc)
+                dst = self._path + '.copy.jls'
+                with self.assertRaises(exc_type):
+                    copy(self._path, dst, None, raise_exc)
+                if os.path.isfile(dst):
+                    os.remove(dst)
+                repair(self._path)
 
     def test_repair_missing_file(self):
         with self.assertRaises(RuntimeError):

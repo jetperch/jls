@@ -383,31 +383,33 @@ cdef class Writer:
     Methods raise ValueError for invalid arguments, such as an undefined
     signal_id, and RuntimeError for errors reported by the JLS library.
 
-    Thread-safe, except for close(): multiple threads may call the other
-    methods concurrently, such as fsr() for different signals.  Call
-    close() only after all other threads have finished calling this
-    Writer.  Calling close() while another thread is inside a method may
-    crash the interpreter.  Garbage collection closes a Writer left
-    open, but call close() or use a `with` block to finalize the file
-    at a known time.
+    Thread-safe: multiple threads may call the methods concurrently,
+    such as fsr() for different signals.  close() raises RuntimeError
+    while another thread is inside a method, so call close() after the
+    other threads have finished calling this Writer.  Garbage collection
+    and interpreter exit close a Writer left open, but call close() or
+    use a `with` block to finalize the file at a known time.
     """
     cdef c_jls.jls_twr_s * _wr
+    cdef int _busy  # methods using _wr, protected by the GIL, see _wr_acquire()
     cdef object _signals  # signal_id -> data_type, for packing fsr data
     cdef object __weakref__
 
     FLAG_DROP_ON_OVERFLOW = c_jls.JLS_TWR_FLAG_DROP_ON_OVERFLOW
 
     def __init__(self, path: str):
-        cdef c_jls.jls_twr_s ** wr_ptr = &self._wr
+        cdef c_jls.jls_twr_s * wr = NULL
         cdef int32_t rc
         cdef const char * c_path
+        self._close()  # __init__ called again
         path_bytes = path.encode('utf-8')
         c_path = path_bytes
         # jls_twr_open() defines signal 0 for VSR annotations
         self._signals = {0: DataType.F32}
         with nogil:
-            rc = c_jls.jls_twr_open(wr_ptr, c_path)
+            rc = c_jls.jls_twr_open(&wr, c_path)
         _handle_rc('open', rc)
+        self._wr = wr
         _writers.add(self)
 
     def __enter__(self):
@@ -418,52 +420,82 @@ cdef class Writer:
 
     @property
     def flags(self):
-        cdef c_jls.jls_twr_s * wr = self._wr_get()
+        cdef c_jls.jls_twr_s * wr
         cdef uint32_t flags
-        with nogil:
-            flags = c_jls.jls_twr_flags_get(wr)
+        wr = self._wr_acquire()
+        try:
+            with nogil:
+                flags = c_jls.jls_twr_flags_get(wr)
+        finally:
+            self._busy -= 1
         return flags
 
     @flags.setter
     def flags(self, value):
-        cdef c_jls.jls_twr_s * wr = self._wr_get()
+        cdef c_jls.jls_twr_s * wr
         cdef uint32_t flags = value
         cdef int32_t rc
-        with nogil:
-            rc = c_jls.jls_twr_flags_set(wr, flags)
+        wr = self._wr_acquire()
+        try:
+            with nogil:
+                rc = c_jls.jls_twr_flags_set(wr, flags)
+        finally:
+            self._busy -= 1
         _handle_rc('flags', rc)
 
-    cdef c_jls.jls_twr_s * _wr_get(self) except NULL:
+    cdef c_jls.jls_twr_s * _wr_acquire(self) except NULL:
+        """Get the open instance and mark it busy.
+
+        The caller must decrement _busy when done with the instance,
+        so that _close() cannot free it while in use.
+        """
         if self._wr == NULL:
             raise ValueError('I/O operation on closed Writer')
+        self._busy += 1
         return self._wr
 
-    cdef void _close(self) noexcept:
+    cdef int _close(self) except -1:
         cdef c_jls.jls_twr_s * wr = self._wr
         if wr == NULL:
-            return
+            return 0
+        if self._busy:
+            raise RuntimeError('Writer.close() while another thread is inside a Writer method')
         self._wr = NULL
         with nogil:
             c_jls.jls_twr_close(wr)
         _log_drain()
+        return 0
 
     def __dealloc__(self):
-        self._close()
+        # Methods hold a reference, so this Writer cannot be busy.
+        cdef c_jls.jls_twr_s * wr = self._wr
+        self._wr = NULL
+        if wr != NULL:
+            with nogil:
+                c_jls.jls_twr_close(wr)
+            _log_drain()
 
     def close(self):
         """Close the JLS file and release all resources.
 
         Safe to call repeatedly.  Afterwards, the other methods raise
         ValueError.
+
+        :raise RuntimeError: If another thread is inside a method.
+            The Writer remains open.
         """
         self._close()
 
     def flush(self):
         """Flush any pending data to the JLS file."""
-        cdef c_jls.jls_twr_s * wr = self._wr_get()
+        cdef c_jls.jls_twr_s * wr
         cdef int32_t rc
-        with nogil:
-            rc = c_jls.jls_twr_flush(wr)
+        wr = self._wr_acquire()
+        try:
+            with nogil:
+                rc = c_jls.jls_twr_flush(wr)
+        finally:
+            self._busy -= 1
         _handle_rc('flush', rc)
 
     def source_def(self, source_id, name=None, vendor=None, model=None, version=None, serial_number=None):
@@ -482,9 +514,12 @@ cdef class Writer:
         s.model = model_b
         s.version = version_b
         s.serial_number = serial_number_b
-        wr = self._wr_get()
-        with nogil:
-            rc = c_jls.jls_twr_source_def(wr, &s)
+        wr = self._wr_acquire()
+        try:
+            with nogil:
+                rc = c_jls.jls_twr_source_def(wr, &s)
+        finally:
+            self._busy -= 1
         _handle_rc('source_def', rc)
 
     def source_def_from_struct(self, s: SourceDef):
@@ -526,9 +561,12 @@ cdef class Writer:
         units_b = _encode_str(units)
         s.name = name_b
         s.units = units_b
-        wr = self._wr_get()
-        with nogil:
-            rc = c_jls.jls_twr_signal_def(wr, s)
+        wr = self._wr_acquire()
+        try:
+            with nogil:
+                rc = c_jls.jls_twr_signal_def(wr, s)
+        finally:
+            self._busy -= 1
         _handle_rc('signal_def', rc)
         self._signals[signal_id] = s.data_type
 
@@ -561,13 +599,17 @@ cdef class Writer:
         cdef const uint8_t[:] payload_u8
         cdef const uint8_t * payload_u8_ptr = NULL
         cdef uint32_t payload_length
-        cdef c_jls.jls_twr_s * wr = self._wr_get()
+        cdef c_jls.jls_twr_s * wr
         storage_type, payload_bytes, payload_length = _storage_pack(data)
         payload_u8 = payload_bytes
         if 0 != payload_length:
             payload_u8_ptr = &payload_u8[0]
-        with nogil:
-            rc = c_jls.jls_twr_user_data(wr, chunk_meta_u16, storage_type, payload_u8_ptr, payload_length)
+        wr = self._wr_acquire()
+        try:
+            with nogil:
+                rc = c_jls.jls_twr_user_data(wr, chunk_meta_u16, storage_type, payload_u8_ptr, payload_length)
+        finally:
+            self._busy -= 1
 
         _handle_rc('user_data', rc)
 
@@ -588,7 +630,7 @@ cdef class Writer:
         :param data: The data to add.
         :raise: On error.
         """
-        cdef c_jls.jls_twr_s * wr = self._wr_get()
+        cdef c_jls.jls_twr_s * wr
         cdef uint16_t signal_id_u16
         cdef int64_t sample_id_i64 = sample_id
         cdef int32_t rc
@@ -613,8 +655,12 @@ cdef class Writer:
                 data_u8 = data.view(dtype=np.uint8)
                 u8 = data_u8
                 data_ptr = &u8[0]
-        with nogil:
-            rc = c_jls.jls_twr_fsr(wr, signal_id_u16, sample_id_i64, data_ptr, length_u32)
+        wr = self._wr_acquire()
+        try:
+            with nogil:
+                rc = c_jls.jls_twr_fsr(wr, signal_id_u16, sample_id_i64, data_ptr, length_u32)
+        finally:
+            self._busy -= 1
         _handle_rc('fsr', rc)
 
     def fsr_omit_data(self, signal_id, enable):
@@ -628,13 +674,17 @@ cdef class Writer:
         See jls_twr_fsr_omit_data() for the data types this affects.
         On read, omitted data is reconstructed from the summaries.
         """
-        cdef c_jls.jls_twr_s * wr = self._wr_get()
+        cdef c_jls.jls_twr_s * wr
         cdef uint16_t signal_id_u16
         cdef uint32_t enable_u32 = 1 if bool(enable) else 0
         cdef int32_t rc
         signal_id_u16 = signal_id
-        with nogil:
-            rc = c_jls.jls_twr_fsr_omit_data(wr, signal_id_u16, enable_u32)
+        wr = self._wr_acquire()
+        try:
+            with nogil:
+                rc = c_jls.jls_twr_fsr_omit_data(wr, signal_id_u16, enable_u32)
+        finally:
+            self._busy -= 1
         _handle_rc('fsr_omit_data', rc)
 
     def annotation(self, signal_id, timestamp, y, annotation_type, group_id, data):
@@ -648,7 +698,7 @@ cdef class Writer:
         :param data: The data for the annotation.
         :raise: On error.
         """
-        cdef c_jls.jls_twr_s * wr = self._wr_get()
+        cdef c_jls.jls_twr_s * wr
         cdef uint16_t signal_id_u16
         cdef int64_t timestamp_i64 = timestamp
         cdef uint8_t group_id_u8 = group_id
@@ -675,10 +725,14 @@ cdef class Writer:
         payload_u8 = payload
         if 0 != payload_length:
             payload_u8_ptr = &payload_u8[0]
-        with nogil:
-            rc = c_jls.jls_twr_annotation(wr, signal_id_u16, timestamp_i64, y_f32,
-                annotation_type_e,
-                group_id_u8, storage_type, payload_u8_ptr, payload_length)
+        wr = self._wr_acquire()
+        try:
+            with nogil:
+                rc = c_jls.jls_twr_annotation(wr, signal_id_u16, timestamp_i64, y_f32,
+                    annotation_type_e,
+                    group_id_u8, storage_type, payload_u8_ptr, payload_length)
+        finally:
+            self._busy -= 1
         _handle_rc('annotation', rc)
 
     def utc(self, signal_id, sample_id, utc_i64):
@@ -688,14 +742,18 @@ cdef class Writer:
         :param utc: The UTC timestamp.
         :raise: On error.
         """
-        cdef c_jls.jls_twr_s * wr = self._wr_get()
+        cdef c_jls.jls_twr_s * wr
         cdef uint16_t signal_id_u16
         cdef int64_t sample_id_i64 = sample_id
         cdef int64_t utc_i64c = utc_i64
         cdef int32_t rc
         signal_id_u16 = signal_id
-        with nogil:
-            rc = c_jls.jls_twr_utc(wr, signal_id_u16, sample_id_i64, utc_i64c)
+        wr = self._wr_acquire()
+        try:
+            with nogil:
+                rc = c_jls.jls_twr_utc(wr, signal_id_u16, sample_id_i64, utc_i64c)
+        finally:
+            self._busy -= 1
         _handle_rc('utc', rc)
 
 
@@ -715,17 +773,18 @@ cdef class Reader:
 
     Not thread-safe: call each Reader's methods from one thread at a
     time, because all reads share one buffer and file position.
-    Calling methods concurrently, including close(), may return wrong
-    data or crash the interpreter.  To read from multiple threads, open
-    a separate Reader in each thread.
+    Calling methods concurrently may return wrong data or crash the
+    interpreter.  To read from multiple threads, open a separate Reader
+    in each thread.
 
-    Not reentrant: callbacks passed to annotations(), user_data(), and
-    utc() must not call methods on the same Reader, which corrupts the
-    iteration in progress.  Collect the entries in the callback, and
-    process them after the method returns.  Garbage collection closes a
-    Reader left open.
+    close() raises RuntimeError while a method is in progress, either
+    in another thread or from a callback passed to annotations(),
+    user_data(), or utc().  An exception raised by a callback stops the
+    iteration and propagates from the method.  Garbage collection closes
+    a Reader left open.
     """
     cdef c_jls.jls_rd_s * _rd
+    cdef int _busy  # methods using _rd, protected by the GIL, see _rd_acquire()
     cdef object _sources
     cdef object _signals
 
@@ -735,10 +794,17 @@ cdef class Reader:
         cdef c_jls.jls_signal_def_s * signals
         cdef uint16_t count
         cdef int64_t samples
+        cdef c_jls.jls_rd_s * rd = NULL
+        cdef const char * c_path
+        self._close()  # __init__ called again
         self._sources: Mapping[int, SourceDef] = {}
         self._signals: Mapping[int, SignalDef] = {}
-        rc = c_jls.jls_rd_open(&self._rd, path.encode('utf-8'))
+        path_bytes = path.encode('utf-8')
+        c_path = path_bytes
+        with nogil:  # may recover a truncated file
+            rc = c_jls.jls_rd_open(&rd, c_path)
         _handle_rc('open', rc)
+        self._rd = rd
 
         rc = c_jls.jls_rd_sources(self._rd_get(), &sources, &count)
         _handle_rc('rd_sources', rc)
@@ -784,25 +850,48 @@ cdef class Reader:
         self.close()
 
     cdef c_jls.jls_rd_s * _rd_get(self) except NULL:
+        """Get the open instance for immediate use with the GIL held."""
         if self._rd == NULL:
             raise ValueError('I/O operation on closed Reader')
         return self._rd
 
-    cdef void _close(self) noexcept:
+    cdef c_jls.jls_rd_s * _rd_acquire(self) except NULL:
+        """Get the open instance and mark it busy.
+
+        Use for calls that release the GIL or invoke Python callbacks.
+        The caller must decrement _busy when done with the instance,
+        so that _close() cannot free it while in use.
+        """
+        cdef c_jls.jls_rd_s * rd = self._rd_get()
+        self._busy += 1
+        return rd
+
+    cdef int _close(self) except -1:
         cdef c_jls.jls_rd_s * rd = self._rd
         if rd == NULL:
-            return
+            return 0
+        if self._busy:
+            raise RuntimeError('Reader.close() while a Reader method is in progress')
         self._rd = NULL
         c_jls.jls_rd_close(rd)
+        _log_drain()
+        return 0
 
     def __dealloc__(self):
-        self._close()
+        # Methods hold a reference, so this Reader cannot be busy.
+        cdef c_jls.jls_rd_s * rd = self._rd
+        self._rd = NULL
+        if rd != NULL:
+            c_jls.jls_rd_close(rd)
 
     def close(self):
         """Close the JLS file and release all resources.
 
         Safe to call repeatedly.  Afterwards, the other methods raise
         ValueError.
+
+        :raise RuntimeError: If called from a callback or while another
+            thread is inside a method.  The Reader remains open.
         """
         self._close()
 
@@ -908,9 +997,9 @@ cdef class Reader:
         cdef int64_t start_sample_id_i64 = start_sample_id
         cdef int64_t length_i64 = length
         cdef c_jls.jls_signal_def_s signal_def
-        cdef c_jls.jls_rd_s * rd = self._rd_get()
+        cdef c_jls.jls_rd_s * rd
 
-        rc = c_jls.jls_rd_signal(rd, signal_id_u16, &signal_def)
+        rc = c_jls.jls_rd_signal(self._rd_get(), signal_id_u16, &signal_def)
         _handle_rc('rd_fsr', rc)
         data_type = signal_def.data_type
         entry_size_bits = (data_type >> 8) & 0xff
@@ -922,8 +1011,12 @@ cdef class Reader:
         if length > 0:
             u8 = data_u8
             data_ptr = &u8[0]
-        with nogil:
-            rc = c_jls.jls_rd_fsr(rd, signal_id_u16, start_sample_id_i64, data_ptr, length_i64)
+        rd = self._rd_acquire()
+        try:
+            with nogil:
+                rc = c_jls.jls_rd_fsr(rd, signal_id_u16, start_sample_id_i64, data_ptr, length_i64)
+        finally:
+            self._busy -= 1
         _handle_rc('rd_fsr', rc)
         return data
 
@@ -959,16 +1052,20 @@ cdef class Reader:
         cdef int64_t start_sample_id_i64 = start_sample_id
         cdef int64_t increment_i64 = increment
         cdef int64_t length_i64 = length
-        cdef c_jls.jls_rd_s * rd = self._rd_get()
+        cdef c_jls.jls_rd_s * rd
 
         # jls_rd_fsr_statistics() rejects length < 0
         data = np.empty((max(length, 0), c_jls.JLS_SUMMARY_FSR_COUNT), dtype=np.float64)
         if length > 0:
             c_data = data
             data_ptr = &c_data[0, 0]
-        with nogil:
-            rc = c_jls.jls_rd_fsr_statistics(rd, signal_id_u16, start_sample_id_i64,
-                                             increment_i64, data_ptr, length_i64)
+        rd = self._rd_acquire()
+        try:
+            with nogil:
+                rc = c_jls.jls_rd_fsr_statistics(rd, signal_id_u16, start_sample_id_i64,
+                                                 increment_i64, data_ptr, length_i64)
+        finally:
+            self._busy -= 1
         _handle_rc('rd_fsr_statistics', rc)
         return data
 
@@ -982,7 +1079,13 @@ cdef class Reader:
             the annotations or False to continue iterating.
         """
         cdef int32_t rc
-        rc = c_jls.jls_rd_annotations(self._rd_get(), signal_id, timestamp, _annotation_cbk_fn, <void *> cbk_fn)
+        cdef _Callback cbk = _Callback(cbk_fn)
+        cdef c_jls.jls_rd_s * rd = self._rd_acquire()
+        try:
+            rc = c_jls.jls_rd_annotations(rd, signal_id, timestamp, _annotation_cbk_fn, <void *> cbk)
+        finally:
+            self._busy -= 1
+        cbk.reraise()
         _handle_rc('rd_annotations', rc)
 
     def user_data(self, cbk_fn):
@@ -993,7 +1096,13 @@ cdef class Reader:
             user data entries or False to continue iterating.
         """
         cdef int32_t rc
-        rc = c_jls.jls_rd_user_data(self._rd_get(), _user_data_cbk_fn, <void *> cbk_fn)
+        cdef _Callback cbk = _Callback(cbk_fn)
+        cdef c_jls.jls_rd_s * rd = self._rd_acquire()
+        try:
+            rc = c_jls.jls_rd_user_data(rd, _user_data_cbk_fn, <void *> cbk)
+        finally:
+            self._busy -= 1
+        cbk.reraise()
         _handle_rc('rd_user_data', rc)
 
     def utc(self, signal_id, sample_id, cbk_fn):
@@ -1008,7 +1117,13 @@ cdef class Reader:
             or False to continue iterating.
         """
         cdef int32_t rc
-        rc = c_jls.jls_rd_utc(self._rd_get(), signal_id, sample_id, _utc_cbk_fn, <void *> cbk_fn)
+        cdef _Callback cbk = _Callback(cbk_fn)
+        cdef c_jls.jls_rd_s * rd = self._rd_acquire()
+        try:
+            rc = c_jls.jls_rd_utc(rd, signal_id, sample_id, _utc_cbk_fn, <void *> cbk)
+        finally:
+            self._busy -= 1
+        cbk.reraise()
         _handle_rc(f'rd_utc({signal_id}, {sample_id})', rc)
 
     def time_map_length(self, signal_id):
@@ -1137,66 +1252,87 @@ class TimeMap:
         return self._reader.time_map_get(self._signal_id, index)
 
 
+cdef class _Callback:
+    """Hold a Python callback and the exception that it raised.
+
+    C cannot propagate Python exceptions.  The C callback adapter
+    stores the exception and stops the iteration, then the caller
+    raises it after the C function returns.
+    """
+    cdef object fn
+    cdef object exc
+
+    def __cinit__(self, fn):
+        self.fn = fn
+        self.exc = None
+
+    cdef int32_t call(self, args) noexcept:
+        """Call fn(*args) and return the C stop flag: 1 to stop, 0 to continue."""
+        if self.fn is None:
+            return 0
+        try:
+            return 1 if bool(self.fn(*args)) else 0
+        except BaseException as ex:  # including KeyboardInterrupt
+            self.exc = ex
+            return 1
+
+    cdef reraise(self):
+        exc, self.exc = self.exc, None
+        if exc is not None:
+            raise exc
+
+
 cdef int32_t _annotation_cbk_fn(void * user_data, const c_jls.jls_annotation_s * annotation) noexcept:
-    cbk_fn = <object> user_data
+    cdef _Callback cbk = <_Callback> user_data
     y = annotation[0].y
-    timestamp = annotation[0].timestamp
     if not isfinite(y):
         y = None
     try:
         data = _storage_unpack(annotation[0].storage_type, annotation[0].data, annotation[0].data_size)
-        rc = cbk_fn(timestamp, y, annotation[0].annotation_type, annotation[0].group_id, data)
-    except Exception:
-        logging.getLogger(__name__).exception('in annotation callback')
+    except BaseException as ex:
+        cbk.exc = ex
         return 1
-    return 1 if bool(rc) else 0
+    return cbk.call((annotation[0].timestamp, y, annotation[0].annotation_type, annotation[0].group_id, data))
 
 
 cdef int32_t _user_data_cbk_fn(void * user_data, uint16_t chunk_meta, c_jls.jls_storage_type_e storage_type,
         uint8_t * data, uint32_t data_size) noexcept:
+    cdef _Callback cbk = <_Callback> user_data
     try:
-        cbk_fn = <object> user_data
         d = _storage_unpack(storage_type, data, data_size)
-        rc = cbk_fn(chunk_meta, d)
-    except Exception:
-        logging.getLogger(__name__).exception('in user_data callback')
+    except BaseException as ex:
+        cbk.exc = ex
         return 1
-    return 1 if bool(rc) else 0
+    return cbk.call((chunk_meta, d))
 
 
 cdef int32_t _utc_cbk_fn(void * user_data, const c_jls.jls_utc_summary_entry_s * utc, uint32_t size) noexcept:
+    cdef _Callback cbk = <_Callback> user_data
     cdef uint32_t idx
     try:
-        cbk_fn = <object> user_data
         entries = np.empty((size, 2), dtype=np.int64)
         for idx in range(size):
             entries[idx, 0] = utc[idx].sample_id
             entries[idx, 1] = utc[idx].timestamp
-        rc = cbk_fn(entries)
-    except Exception:
-        logging.getLogger(__name__).exception('in utc callback')
+    except BaseException as ex:
+        cbk.exc = ex
         return 1
-    return 1 if bool(rc) else 0
+    return cbk.call((entries, ))
 
 
-cdef int32_t _msg_fn(void * user_data, const char * msg) noexcept:
-    try:
-        cbk_fn = <object> user_data
-        if callable(cbk_fn):
-            return 1 if bool(cbk_fn((<bytes> msg).decode('utf-8', 'replace'))) else 0
+# copy() and repair() release the GIL, so these callbacks acquire it.
+cdef int32_t _msg_fn(void * user_data, const char * msg) noexcept with gil:
+    cdef _Callback cbk = <_Callback> user_data
+    _log_drain()
+    if cbk.fn is None:
         return 0
-    except:
-        return 1
+    return cbk.call(((<bytes> msg).decode('utf-8', 'replace'), ))
 
 
-cdef int32_t _progress_fn(void * user_data, double progress) noexcept:
-    try:
-        cbk_fn = <object> user_data
-        if callable(cbk_fn):
-            return 1 if bool(cbk_fn(progress)) else 0
-        return 0
-    except:
-        return 1
+cdef int32_t _progress_fn(void * user_data, double progress) noexcept with gil:
+    cdef _Callback cbk = <_Callback> user_data
+    _log_drain()
+    return cbk.call((progress, ))
 
 
 def copy(src, dst, msg_fn=None, progress_fn=None):
@@ -1205,18 +1341,26 @@ def copy(src, dst, msg_fn=None, progress_fn=None):
     :param src: The source path.
     :param dst: The destination path.
     :param msg_fn: The optional function to call with each status message str.
-        Return True (or raise) to cancel; the copy then raises ABORTED.
+        Return True to cancel; the copy then raises RuntimeError ABORTED.
+        An exception raised by msg_fn cancels the copy and propagates.
     :param progress_fn: The optional function to call with progress from 0.0 to 1.0.
-        Return True (or raise) to cancel; the copy then raises ABORTED.
+        Return True to cancel; the copy then raises RuntimeError ABORTED.
+        An exception raised by progress_fn cancels the copy and propagates.
     :raise RuntimeError: on error.
     """
     cdef const char * c_src
     cdef const char * c_dst
+    cdef int32_t rc
+    cdef _Callback msg_cbk = _Callback(msg_fn)
+    cdef _Callback progress_cbk = _Callback(progress_fn)
     src_encode = src.encode('utf-8')
     dst_encode = dst.encode('utf-8')
     c_src = src_encode
     c_dst = dst_encode
-    rc = c_jls.jls_copy(c_src, c_dst, _msg_fn, <void *> msg_fn, _progress_fn, <void *> progress_fn)
+    with nogil:
+        rc = c_jls.jls_copy(c_src, c_dst, _msg_fn, <void *> msg_cbk, _progress_fn, <void *> progress_cbk)
+    msg_cbk.reraise()
+    progress_cbk.reraise()
     _handle_rc('copy', rc)
 
 
@@ -1225,9 +1369,11 @@ def repair(path, msg_fn=None, progress_fn=None):
 
     :param path: The target path, which must be writable.
     :param msg_fn: The optional function to call with each status message str.
-        Return True (or raise) to cancel; the repair then raises ABORTED.
+        Return True to cancel; the repair then raises RuntimeError ABORTED.
+        An exception raised by msg_fn cancels the repair and propagates.
     :param progress_fn: The optional function to call with progress from 0.0 to 1.0.
-        Return True (or raise) to cancel; the repair then raises ABORTED.
+        Return True to cancel; the repair then raises RuntimeError ABORTED.
+        An exception raised by progress_fn cancels the repair and propagates.
     :raise RuntimeError: on error.
 
     Opening a file with :class:`Reader` automatically recovers tail
@@ -1242,7 +1388,13 @@ def repair(path, msg_fn=None, progress_fn=None):
     salvage the readable prefix of such tracks into a new file.
     """
     cdef const char * c_path
+    cdef int32_t rc
+    cdef _Callback msg_cbk = _Callback(msg_fn)
+    cdef _Callback progress_cbk = _Callback(progress_fn)
     path_encode = path.encode('utf-8')
     c_path = path_encode
-    rc = c_jls.jls_repair(c_path, _msg_fn, <void *> msg_fn, _progress_fn, <void *> progress_fn)
+    with nogil:
+        rc = c_jls.jls_repair(c_path, _msg_fn, <void *> msg_cbk, _progress_fn, <void *> progress_cbk)
+    msg_cbk.reraise()
+    progress_cbk.reraise()
     _handle_rc('repair', rc)
