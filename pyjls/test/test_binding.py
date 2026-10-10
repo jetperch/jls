@@ -15,14 +15,29 @@
 from pyjls.binding import Writer, Reader, SummaryFSR, DataType, jls_inject_log, copy, repair, TimeMap, \
     AnnotationType, SignalType
 from pyjls.time64 import SECOND, YEAR
+import pyjls
 import gc
 import io
 import logging
 from logging import StreamHandler
 import os
+import subprocess
+import sys
 import tempfile
+import textwrap
 import unittest
 import numpy as np
+
+
+_PYJLS_PARENT = os.path.dirname(os.path.dirname(os.path.abspath(pyjls.__file__)))
+
+
+def _run_script(code, *args, timeout=30):
+    """Run code in a new interpreter that imports this pyjls build."""
+    env = dict(os.environ)
+    env['PYTHONPATH'] = os.pathsep.join([_PYJLS_PARENT, env.get('PYTHONPATH', '')])
+    return subprocess.run([sys.executable, '-c', textwrap.dedent(code), *args],
+                          env=env, capture_output=True, text=True, timeout=timeout)
 
 
 class TestBinding(unittest.TestCase):
@@ -487,6 +502,60 @@ class TestBinding(unittest.TestCase):
         jls_inject_log('D', 'debug', 12, 'debug2')
         expect = ['INFO:hello:10:pyjls.c:world', 'DEBUG:debug:11:pyjls.c:debug1', '']
         self.assertEqual('\n'.join(expect), stream.getvalue())
+
+    # Writes with sample_id gaps make the writer thread log a warning
+    # while it holds the lock that signal_def() waits on.
+    _SKIP_WARNINGS_WRITE = """
+        import sys, numpy as np
+        from pyjls import Writer, Reader
+        w = Writer(sys.argv[1])
+        w.source_def(1, name='s')
+        w.signal_def(1, 1, sample_rate=1000, name='a')
+        for i in range(200):
+            w.fsr(1, i * 2000, np.zeros(1000, dtype=np.float32))
+        w.signal_def(2, 1, sample_rate=1000, name='b')
+    """
+
+    def test_writer_log_from_writer_thread_does_not_deadlock(self):
+        code = self._SKIP_WARNINGS_WRITE + """
+        w.close()
+        with Reader(sys.argv[1]) as r:
+            print(r.signals[1].length, len(r.signals))
+        """
+        for _ in range(3):  # hung in 2 of 3 runs before the log queue
+            p = _run_script(code, self._path)
+            self.assertEqual(0, p.returncode, p.stderr)
+            self.assertIn('399000 3', p.stdout)
+            self.assertIn('skip: in=2000', p.stderr)  # writer thread log forwarded
+
+    def test_writer_open_at_exit_closes(self):
+        # Hung at interpreter exit before the log queue.
+        p = _run_script(self._SKIP_WARNINGS_WRITE, self._path)
+        self.assertEqual(0, p.returncode, p.stderr)
+        with Reader(self._path) as r:
+            self.assertEqual(399000, r.signals[1].length)
+            self.assertEqual(3, len(r.signals))
+
+    def test_writer_referenced_at_exit_closes(self):
+        # A daemon thread keeps the Writer alive past finalization,
+        # so only the atexit handler closes it.
+        code = self._SKIP_WARNINGS_WRITE + """
+        import threading, time
+        threading.Thread(target=lambda x: time.sleep(100), args=(w, ), daemon=True).start()
+        del w
+        """
+        p = _run_script(code, self._path)
+        self.assertEqual(0, p.returncode, p.stderr)
+        with Reader(self._path) as r:
+            self.assertEqual(399000, r.signals[1].length)
+
+    def test_writer_flush(self):
+        with Writer(self._path) as w:
+            self._write_fsr_100(w)
+            w.flush()
+            w.flags = Writer.FLAG_DROP_ON_OVERFLOW
+            self.assertEqual(Writer.FLAG_DROP_ON_OVERFLOW, w.flags)
+            w.flags = 0
 
     def test_copy(self):
         msgs = []

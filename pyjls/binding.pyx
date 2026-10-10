@@ -23,12 +23,17 @@ Python binding for the native JLS implementation.
 from libc.stdint cimport uint8_t, uint16_t, uint32_t, uint64_t, int32_t, int64_t
 from libc.float cimport DBL_MAX
 from libc.math cimport isfinite, NAN
+from libc.string cimport memcpy, strlen
+from cpython.pythread cimport PyThread_type_lock, PyThread_allocate_lock, \
+    PyThread_acquire_lock, PyThread_release_lock, WAIT_LOCK
 
+import atexit
 from collections.abc import Iterable, Mapping
 import json
 import logging
 import numpy as np
 import time
+import weakref
 cimport numpy as np
 from . cimport c_jls
 from .structs import SourceDef, SignalDef
@@ -193,14 +198,82 @@ class SummaryFSR:
     COUNT = c_jls.JLS_SUMMARY_FSR_COUNT
 
 
+# The JLS library logs from any thread, including the threaded writer
+# thread while it holds locks that Python threads wait on with the GIL
+# released.  Acquiring the GIL in the log callback can deadlock, so the
+# callback only copies each message into this bounded queue.  Python
+# drains the queue into the logging module on each binding call that
+# checks a return code, on close, and at exit.
+cdef enum:
+    _LOG_QUEUE_COUNT = 256      # entries, one slot always empty
+    _LOG_MSG_SIZE = 512         # bytes, longer messages are truncated
+
+cdef char _log_queue[_LOG_QUEUE_COUNT][_LOG_MSG_SIZE]
+cdef uint32_t _log_head = 0     # next write index, owned by _log_cbk
+cdef uint32_t _log_tail = 0     # next read index, owned by _log_drain
+cdef uint64_t _log_dropped = 0  # messages dropped because the queue was full
+cdef PyThread_type_lock _log_lock = PyThread_allocate_lock()
+
+
 cdef void _log_cbk(const char * msg) noexcept nogil:
-    with gil:
-        m = msg.decode('utf-8').strip()
+    global _log_head, _log_dropped
+    cdef size_t sz
+    cdef uint32_t head_next
+    if msg == NULL:
+        return
+    sz = strlen(msg)
+    if sz >= _LOG_MSG_SIZE:
+        sz = _LOG_MSG_SIZE - 1
+    PyThread_acquire_lock(_log_lock, WAIT_LOCK)
+    head_next = (_log_head + 1) % _LOG_QUEUE_COUNT
+    if head_next == _log_tail:
+        _log_dropped += 1
+    else:
+        memcpy(_log_queue[_log_head], msg, sz)
+        _log_queue[_log_head][sz] = 0
+        _log_head = head_next
+    PyThread_release_lock(_log_lock)
+
+
+cdef void _log_emit(bytes msg):
+    m = msg.decode('utf-8', 'replace').strip()
+    try:
         level, location, s = m.split(' ', 2)
-        lvl = _log_level_map.get(level, logging.DEBUG)
         filename, line, _ = location.split(':')
-        record = logging.LogRecord(_log_c_name, lvl, filename, int(line), s, None, None)
-        _log_c.handle(record)
+        lineno = int(line)
+    except ValueError:  # not in the JLS_LOG_PRINTF format
+        level, filename, lineno, s = 'W', '', 0, m
+    lvl = _log_level_map.get(level, logging.DEBUG)
+    record = logging.LogRecord(_log_c_name, lvl, filename, lineno, s, None, None)
+    _log_c.handle(record)
+
+
+cdef void _log_drain() noexcept:
+    """Forward the queued JLS library messages to the logging module."""
+    global _log_tail, _log_dropped
+    cdef char buf[_LOG_MSG_SIZE]
+    cdef uint64_t dropped
+    cdef bint has_msg
+    cdef uint32_t count
+    for count in range(_LOG_QUEUE_COUNT + 1):  # bounded, the C side keeps producing
+        # Copy out under the lock, then call Python without it: a garbage
+        # collection finalizer may drain recursively.
+        PyThread_acquire_lock(_log_lock, WAIT_LOCK)
+        dropped = _log_dropped
+        _log_dropped = 0
+        has_msg = _log_tail != _log_head
+        if has_msg:
+            memcpy(buf, _log_queue[_log_tail], _LOG_MSG_SIZE)
+            _log_tail = (_log_tail + 1) % _LOG_QUEUE_COUNT
+        PyThread_release_lock(_log_lock)
+        try:
+            if dropped:
+                _log_c.warning('log queue full: dropped %d messages', dropped)
+            if not has_msg:
+                return
+            _log_emit(<bytes> buf)
+        except Exception:
+            pass  # logging must never break the binding call, or exit
 
 
 c_jls.jls_log_register(_log_cbk)
@@ -212,6 +285,7 @@ def jls_inject_log(level, filename, line, msg):
     msg = ' '.join([level, location, msg]).encode('utf-8')
     c_msg = msg
     c_jls.jls_log_printf('%s\n'.encode('utf-8'), c_msg)
+    _log_drain()
 
 
 def _encode_str(s):
@@ -278,12 +352,27 @@ _VALUE_ERROR_CODES = frozenset([
 
 
 def _handle_rc(name, rc):
+    _log_drain()
     if rc == 0:
         return
     rc_name = c_jls.jls_error_code_name(rc).decode('utf-8')
     rc_descr = c_jls.jls_error_code_description(rc).decode('utf-8')
     error_type = ValueError if rc in _VALUE_ERROR_CODES else RuntimeError
     raise error_type(f'{name} {rc_name}[{rc}]: {rc_descr}')
+
+
+# Live writers, closed at interpreter exit to finalize their files.
+_writers = weakref.WeakSet()
+
+
+@atexit.register
+def _atexit_close():
+    for w in list(_writers):
+        try:
+            w.close()
+        except Exception:
+            _log_c.exception('Writer close at exit failed')
+    _log_drain()
 
 
 cdef class Writer:
@@ -304,6 +393,7 @@ cdef class Writer:
     """
     cdef c_jls.jls_twr_s * _wr
     cdef object _signals  # signal_id -> data_type, for packing fsr data
+    cdef object __weakref__
 
     FLAG_DROP_ON_OVERFLOW = c_jls.JLS_TWR_FLAG_DROP_ON_OVERFLOW
 
@@ -318,6 +408,7 @@ cdef class Writer:
         with nogil:
             rc = c_jls.jls_twr_open(wr_ptr, c_path)
         _handle_rc('open', rc)
+        _writers.add(self)
 
     def __enter__(self):
         return self
@@ -328,12 +419,19 @@ cdef class Writer:
     @property
     def flags(self):
         cdef c_jls.jls_twr_s * wr = self._wr_get()
-        return c_jls.jls_twr_flags_get(wr)
+        cdef uint32_t flags
+        with nogil:
+            flags = c_jls.jls_twr_flags_get(wr)
+        return flags
 
     @flags.setter
     def flags(self, value):
         cdef c_jls.jls_twr_s * wr = self._wr_get()
-        c_jls.jls_twr_flags_set(wr, value)
+        cdef uint32_t flags = value
+        cdef int32_t rc
+        with nogil:
+            rc = c_jls.jls_twr_flags_set(wr, flags)
+        _handle_rc('flags', rc)
 
     cdef c_jls.jls_twr_s * _wr_get(self) except NULL:
         if self._wr == NULL:
@@ -347,6 +445,7 @@ cdef class Writer:
         self._wr = NULL
         with nogil:
             c_jls.jls_twr_close(wr)
+        _log_drain()
 
     def __dealloc__(self):
         self._close()
@@ -362,13 +461,16 @@ cdef class Writer:
     def flush(self):
         """Flush any pending data to the JLS file."""
         cdef c_jls.jls_twr_s * wr = self._wr_get()
+        cdef int32_t rc
         with nogil:
-            c_jls.jls_twr_flush(wr)
+            rc = c_jls.jls_twr_flush(wr)
+        _handle_rc('flush', rc)
 
     def source_def(self, source_id, name=None, vendor=None, model=None, version=None, serial_number=None):
         """Define a source."""
         cdef int32_t rc
         cdef c_jls.jls_source_def_s s
+        cdef c_jls.jls_twr_s * wr
         name_b = _encode_str(name)
         vendor_b = _encode_str(vendor)
         model_b = _encode_str(model)
@@ -380,7 +482,9 @@ cdef class Writer:
         s.model = model_b
         s.version = version_b
         s.serial_number = serial_number_b
-        rc = c_jls.jls_twr_source_def(self._wr_get(), &s)
+        wr = self._wr_get()
+        with nogil:
+            rc = c_jls.jls_twr_source_def(wr, &s)
         _handle_rc('source_def', rc)
 
     def source_def_from_struct(self, s: SourceDef):
@@ -400,6 +504,7 @@ cdef class Writer:
         cdef int32_t rc
         cdef c_jls.jls_signal_def_s signal
         cdef c_jls.jls_signal_def_s * s = &signal
+        cdef c_jls.jls_twr_s * wr
         if data_type is None:
             data_type = DataType.F32
         elif isinstance(data_type, str):
@@ -421,7 +526,9 @@ cdef class Writer:
         units_b = _encode_str(units)
         s.name = name_b
         s.units = units_b
-        rc = c_jls.jls_twr_signal_def(self._wr_get(), s)
+        wr = self._wr_get()
+        with nogil:
+            rc = c_jls.jls_twr_signal_def(wr, s)
         _handle_rc('signal_def', rc)
         self._signals[signal_id] = s.data_type
 
@@ -526,7 +633,8 @@ cdef class Writer:
         cdef uint32_t enable_u32 = 1 if bool(enable) else 0
         cdef int32_t rc
         signal_id_u16 = signal_id
-        rc = c_jls.jls_twr_fsr_omit_data(wr, signal_id_u16, enable_u32)
+        with nogil:
+            rc = c_jls.jls_twr_fsr_omit_data(wr, signal_id_u16, enable_u32)
         _handle_rc('fsr_omit_data', rc)
 
     def annotation(self, signal_id, timestamp, y, annotation_type, group_id, data):

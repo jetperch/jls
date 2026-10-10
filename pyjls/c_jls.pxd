@@ -93,8 +93,8 @@ cdef extern from "jls/format.h":
 
 
 cdef extern from "jls/log.h":
-    void jls_log_printf(const char * format, ...)
-    ctypedef void (*jls_log_cbk)(const char * msg)
+    void jls_log_printf(const char * format, ...) nogil
+    ctypedef void (*jls_log_cbk)(const char * msg) noexcept nogil
     void jls_log_register(jls_log_cbk handler)
     void jls_log_unregister()
 
@@ -109,16 +109,16 @@ cdef extern from "jls/threaded_writer.h":
         JLS_TWR_FLAG_DROP_ON_OVERFLOW = (1 << 0)
     int32_t jls_twr_open(jls_twr_s ** instance, const char * path) nogil
     int32_t jls_twr_close(jls_twr_s * self) nogil
-    uint32_t jls_twr_flags_get(jls_twr_s * self)
-    int32_t jls_twr_flags_set(jls_twr_s * self, uint32_t flags)
+    uint32_t jls_twr_flags_get(jls_twr_s * self) nogil
+    int32_t jls_twr_flags_set(jls_twr_s * self, uint32_t flags) nogil
     int32_t jls_twr_flush(jls_twr_s * self) nogil
-    int32_t jls_twr_source_def(jls_twr_s * self, const jls_source_def_s * source)
-    int32_t jls_twr_signal_def(jls_twr_s * self, const jls_signal_def_s * signal)
+    int32_t jls_twr_source_def(jls_twr_s * self, const jls_source_def_s * source) nogil
+    int32_t jls_twr_signal_def(jls_twr_s * self, const jls_signal_def_s * signal) nogil
     int32_t jls_twr_user_data(jls_twr_s * self, uint16_t chunk_meta,
             jls_storage_type_e storage_type, const uint8_t * data, uint32_t data_size) nogil
     int32_t jls_twr_fsr(jls_twr_s * self, uint16_t signal_id,
             int64_t sample_id, const void * data, uint32_t data_length) nogil
-    int32_t jls_twr_fsr_omit_data(jls_twr_s * self, uint16_t signal_id, uint32_t enable)
+    int32_t jls_twr_fsr_omit_data(jls_twr_s * self, uint16_t signal_id, uint32_t enable) nogil
     int32_t jls_twr_annotation(jls_twr_s * self, uint16_t signal_id,
             int64_t timestamp,
             float y,
