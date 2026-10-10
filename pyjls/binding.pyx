@@ -499,10 +499,13 @@ cdef class Writer:
             return 0
         if self._busy:
             raise RuntimeError('Writer.close() while another thread is inside a Writer method')
+        cdef int32_t rc
         self._wr = NULL
         with nogil:
-            c_jls.jls_twr_close(wr)
-        _log_drain()
+            rc = c_jls.jls_twr_close(wr)
+        # The writer is freed even on error.  Report the first write error,
+        # which means the file may be incomplete.
+        _handle_rc('close', rc)
         return 0
 
     def __dealloc__(self):
@@ -522,6 +525,8 @@ cdef class Writer:
 
         :raise RuntimeError: If another thread is inside a method.
             The Writer remains open.
+        :raise RuntimeError: If any write failed, such as on a full disk.
+            The Writer is closed, but the file may be incomplete.
         """
         self._close()
 

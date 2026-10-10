@@ -576,6 +576,17 @@ class TestBinding(unittest.TestCase):
         with Reader(self._path) as r:
             self.assertEqual(0, (r.signals[3].length - 100) % 1000)
 
+    def test_user_data_chunk_meta_reserved_bits(self):
+        # bits 15:12 are reserved: C rejects them instead of silently masking
+        with Writer(self._path) as w:
+            with self.assertRaises(ValueError):
+                w.user_data(0x1000, b'ab')
+            w.user_data(0x0fff, b'ab')
+        with Reader(self._path) as r:
+            metas = []
+            r.user_data(lambda meta, data: metas.append(meta))
+            self.assertEqual([0x0fff], metas)
+
     def test_writer_arg_out_of_range(self):
         x = np.zeros(10, dtype=np.float32)
         with Writer(self._path) as w:
@@ -846,6 +857,36 @@ class TestBinding(unittest.TestCase):
     def test_repair_missing_file(self):
         with self.assertRaises(RuntimeError):
             repair(self._path + '.does_not_exist.jls')
+
+    @unittest.skipUnless(sys.platform.startswith('linux'), 'uses RLIMIT_FSIZE')
+    def test_writer_close_reports_write_error(self):
+        # Writes past RLIMIT_FSIZE fail with EFBIG: close must report it.
+        code = """
+            import resource, signal, sys
+            import numpy as np
+            from pyjls import Writer
+            signal.signal(signal.SIGXFSZ, signal.SIG_IGN)
+            resource.setrlimit(resource.RLIMIT_FSIZE, (1 << 20, 1 << 20))
+            w = Writer(sys.argv[1])
+            w.source_def(1, name='s')
+            w.signal_def(1, 1, data_type='f32', sample_rate=1000000)
+            x = np.zeros(100000, dtype=np.float32)
+            try:
+                for i in range(100):
+                    w.fsr(1, i * len(x), x)
+            except RuntimeError:
+                pass  # the latched error may surface on a later fsr()
+            try:
+                w.close()
+            except RuntimeError as ex:
+                print('close raised', ex)
+                sys.exit(0)
+            sys.exit(3)
+        """
+        with tempfile.TemporaryDirectory() as d:
+            p = _run_script(code, os.path.join(d, 'full.jls'))
+        self.assertEqual(0, p.returncode, p.stdout + p.stderr)
+        self.assertIn('close raised', p.stdout)
 
     def test_signal_lookup(self):
         with Writer(self._path) as w:
