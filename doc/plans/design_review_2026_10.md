@@ -1,8 +1,25 @@
 # JLS Design Review (2026-10)
 
-Status: IN PROGRESS.  Full review of the C library and pyjls after the
-0.19.0 argument-validation pass (branch `fix/closed_handle`).  Fixes on
-branch `fix/design_review`.
+Status: FIXED except X1 (deferred, see Stage 6) on branch
+`fix/design_review`, local and unpushed (2026-10-10).  Full review of the
+C library and pyjls after the 0.19.0 argument-validation pass (branch
+`fix/closed_handle`).  Every finding below is fixed with a regression
+test that fails without its fix, except R10/R11 (Windows, not compiled
+here) and items noted as untestable in the commit messages.
+
+Found during integration, not in the tables:
+
+- I1 (M v): `wr_summary()` wrote only half of each 64-bit summary
+  (I32, U32, I64, U64, F64), so summary statistics for these types
+  always failed.  Fixed; legacy files fall back to exact sample
+  statistics.  Sample statistics now support 64-bit data types.
+- I2 (m v): pyjls `Writer.close()` now raises the latched write error.
+- I3 (m): Windows `WAIT_ABANDONED` treated as lock failure, so the
+  owned mutex was never released.
+
+Verification: ASan+UBSan ctest 17/17 with leak detection; pyjls 50/50
+under ASan; crash-consistent fuzz modes ~35k cases and resign modes 21k
+cases, 0 failures.
 
 Method: five parallel line-by-line reviews (core read/index, reader and
 statistics, writer and threaded writer, raw/backend/repair/copy, pyjls),

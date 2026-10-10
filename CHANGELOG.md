@@ -34,6 +34,27 @@ This file contains the list of changes made to the JLS project.
    reading, and for an out-of-range jls_rd_tmap_get() index, which
    previously returned UNAVAILABLE.
 
+3. **Writers latch the first write error.**  After any write failure,
+   such as a full disk, every later jls_wr_* and jls_twr_* call returns
+   that error, and jls_wr_close() and jls_twr_close() return it instead
+   of 0.  The threaded writer reports errors from its thread on the next
+   call, flush, or close instead of only logging them.  pyjls
+   Writer.close() raises RuntimeError when the file may be incomplete.
+4. **pyjls callback exceptions propagate.**  An exception raised in a
+   Reader annotations(), user_data(), or utc() callback, or in a copy()
+   or repair() callback, now propagates from the method, including
+   KeyboardInterrupt.  Previously it was logged and iteration silently
+   stopped.  close() called from a callback or from another thread while
+   a method is running now raises RuntimeError instead of crashing.
+5. **Stricter signal and user data validation.**  jls_wr_signal_def()
+   rejects definitions above the documented size caps (format.h)
+   instead of crashing, and jls_wr_user_data() rejects chunk_meta values
+   that use the reserved bits 15:12 instead of silently clearing them.
+   Readers skip invalid or duplicate signal definitions.
+6. **Fixed-point signals are scaled.**  Statistics and writer summaries
+   for data types with a nonzero fixed-point q now apply the documented
+   2**-q scale.  Previously the scale was never applied.
+
 * Fixed the inverted Writer.fsr_omit_data() enable argument (see above).
   Corrected the jls_twr_fsr_omit_data() documentation, which said these
   data types are omitted regardless of the setting.
@@ -72,6 +93,47 @@ This file contains the list of changes made to the JLS project.
     summary timestamp is corrupt (with valid CRCs) read before the chunk
     buffer.  These reads now return MESSAGE_INTEGRITY.  Found by the
     read_fuzzer bitflip campaign under AddressSanitizer.
+* Fixed memory safety and logic defects found by a full design review
+  (see doc/plans/design_review_2026_10.md).  Defects reachable from valid
+  files or normal API use:
+  * Reading u1 and u4 samples could write past the caller's buffer,
+    returned wrong samples, and failed some valid reads across chunks.
+  * Writing u1 and u4 data lost the final partial byte, over-read the
+    caller's buffer by one byte, and stored wrong samples for duplicate
+    sample_ids.  An odd u4 overlap looped forever, growing the file.
+  * Chunks over 1 MiB, such as large user data, could not be read, and
+    chunks of about 1 MiB hung the reader.
+  * Filling a sample_id gap for data types wider than 8 bits wrote heap
+    memory into the file.
+  * A write error followed by more writes overflowed the index and
+    summary buffers.  The threaded writer could hang on close.
+  * Threaded writer messages near the queue size overflowed its buffer.
+  * Omitted constant I4 and I8 data chunks could not be read.
+  * Summary statistics for I32, U32, I64, U64, and F64 signals always
+    failed: writers stored only half of each 64-bit summary.  New files
+    store full summaries.  Existing files compute exact statistics from
+    the samples.  Sample statistics now support 64-bit data types.
+  * I24 and U24 statistics used uninitialized memory.
+  * Statistics with a huge increment overflowed the heap.
+  * Nested reads inside annotation and user data callbacks silently
+    truncated the outer iteration.
+  * The reader leaked its time map for each FSR signal.
+  * pyjls Writer could deadlock when the library logged from its thread,
+    and an open Writer could hang interpreter exit.
+* Hardened reading of corrupt or hostile files with valid CRCs: chunk
+  lengths that wrap or exceed the file, signal definitions that divide by
+  zero or overflow, untrusted entry counts and timestamps in data, index,
+  and summary chunks, recovery that overflowed or appended junk to a
+  failed file, jls_copy() over-reads, jls_repair() head rewrites, and a
+  chunk scan that skipped half the file or looped forever.  Corrupt file
+  errors return MESSAGE_INTEGRITY, so pyjls raises RuntimeError, not
+  ValueError, for them.
+* Statistics skip NaN samples, and windows with no finite samples return
+  NaN.  UTC time maps ignore entries whose timestamps do not increase.
+* pyjls accepts os.PathLike paths, raises ValueError for out-of-range
+  integer arguments, returns int64 sample_ids from time maps, and
+  releases the GIL while opening, copying, and repairing files.
+
 * Errors that the JLS library returns for invalid arguments
   (PARAMETER_INVALID, NOT_FOUND, NOT_SUPPORTED, TOO_BIG, ALREADY_EXISTS)
   now raise ValueError instead of RuntimeError.  The library validates
