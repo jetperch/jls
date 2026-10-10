@@ -108,6 +108,14 @@ static const struct jls_signal_def_s SIGNAL_9 = {
         .units = "",
 };
 
+// Release a crashed writer without touching its file: with no write budget,
+// every close-time write fails, so jls_wr_close only frees memory.
+static void wr_abandon(struct jls_wr_s * wr) {
+    jls_bk_write_limit_set(0);
+    (void) jls_wr_close(wr);
+    jls_bk_write_limit_set(-1);
+}
+
 enum gen_close_e {
     GEN_CLOSE,
     GEN_SKIP_CLOSE,
@@ -183,12 +191,7 @@ static void gen(const char * path, int secondary, int ts_en,
     }
 
 exit:
-    // simulated crash: abandon the writer, close only the file descriptor
-    if (NULL != wr) {
-        struct jls_core_s * core = (struct jls_core_s *) wr;
-        jls_bk_fclose(jls_raw_backend(core->raw));
-    }
-    jls_bk_write_limit_set(-1);
+    wr_abandon(wr);  // simulated crash; NULL if open failed
 }
 
 static void file_copy_truncate(const char * src, const char * dst, int64_t length) {
@@ -429,9 +432,7 @@ static void gen_crash_n(const char * path, int64_t sample_count) {
         }
         assert_int_equal(0, jls_wr_fsr_f32(wr, 5, sample_id, signal_f32_, (uint32_t) len));
     }
-    // simulated crash: abandon the writer, close only the file descriptor
-    struct jls_core_s * core = (struct jls_core_s *) wr;
-    jls_bk_fclose(jls_raw_backend(core->raw));
+    wr_abandon(wr);  // simulated crash
 }
 
 // Truncation recovery cost must track the crash tail, not the file size:
@@ -480,9 +481,7 @@ static void gen_crash_omit(const char * path, int64_t prefix_samples, int64_t ta
         }
         assert_int_equal(0, jls_wr_fsr(wr, 7, sample_id, buf, (uint32_t) len));
     }
-    // simulated crash: abandon the writer, close only the file descriptor
-    struct jls_core_s * core = (struct jls_core_s *) wr;
-    jls_bk_fclose(jls_raw_backend(core->raw));
+    wr_abandon(wr);  // simulated crash
 }
 
 // A long trailing run of fully-omitted (constant fsr_omit) intervals must
@@ -563,6 +562,29 @@ static uint8_t * file_read_all(const char * path, int64_t * length) {
     assert_int_equal((size_t) *length, fread(data, 1, (size_t) *length, f));
     fclose(f);
     return data;
+}
+
+// wr_abandon must leave the crash-state file byte-for-byte unchanged,
+// including unflushed fsr data and the unwritten end chunk.
+static void test_wr_abandon_preserves_file(void ** state) {
+    (void) state;
+    struct jls_wr_s * wr = NULL;
+    int64_t len0 = 0;
+    int64_t len1 = 0;
+    signals_generate();
+    assert_int_equal(0, jls_wr_open(&wr, TST_PATH));
+    assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_3));
+    assert_int_equal(0, jls_wr_signal_def(wr, &SIGNAL_5));
+    assert_int_equal(0, jls_wr_fsr_f32(wr, 5, 0, signal_f32_, SAMPLE_COUNT));
+    assert_int_equal(0, jls_wr_utc(wr, 5, 0, JLS_TIME_YEAR));
+    uint8_t * before = file_read_all(TST_PATH, &len0);
+    wr_abandon(wr);
+    uint8_t * after = file_read_all(TST_PATH, &len1);
+    assert_int_equal(len0, len1);
+    assert_memory_equal(before, after, (size_t) len0);
+    free(before);
+    free(after);
+    remove(TST_PATH);
 }
 
 // Interior corruption in a properly closed file: open must fail with
@@ -665,6 +687,7 @@ int main(void) {
             cmocka_unit_test(test_recovery_traversal_bound),
             cmocka_unit_test(test_recovery_traversal_bound_omitted_tail),
             cmocka_unit_test(test_open_clean_interior_corruption),
+            cmocka_unit_test(test_wr_abandon_preserves_file),
             cmocka_unit_test(test_open_crash_torn_head),
             cmocka_unit_test(test_open_crash_recovery_write_failure),
 #if !defined(_WIN32)

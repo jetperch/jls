@@ -85,6 +85,14 @@ static void signals_generate(void) {
     }
 }
 
+// Release a crashed writer without touching its file: with no write budget,
+// every close-time write fails, so jls_wr_close only frees memory.
+static void wr_abandon(struct jls_wr_s * wr) {
+    jls_bk_write_limit_set(0);
+    (void) jls_wr_close(wr);
+    jls_bk_write_limit_set(-1);
+}
+
 static void gen(const char * path, int close_file) {
     struct jls_wr_s * wr = NULL;
     signals_generate();
@@ -101,9 +109,7 @@ static void gen(const char * path, int close_file) {
     if (close_file) {
         assert_int_equal(0, jls_wr_close(wr));
     } else {
-        // simulated crash: abandon the writer, close only the file descriptor
-        struct jls_core_s * core = (struct jls_core_s *) wr;
-        jls_bk_fclose(jls_raw_backend(core->raw));
+        wr_abandon(wr);  // simulated crash
     }
 }
 

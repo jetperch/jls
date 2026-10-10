@@ -157,6 +157,7 @@ static void test_chunks_nav(void **state) {
     assert_memory_equal(PAYLOAD1, data, sizeof(PAYLOAD1));
     assert_int_equal(0, jls_raw_chunk_prev(j));
     assert_int_equal(JLS_ERROR_EMPTY, jls_raw_chunk_prev(j));
+    assert_int_equal(0, jls_raw_close(j));
 
     assert_int_equal(0, jls_raw_open(&j, filename, "r"));
     for (size_t i = 0; i < sizeof(PAYLOAD1) - 1; ++i) {

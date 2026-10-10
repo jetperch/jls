@@ -81,6 +81,8 @@ static void test_interp2(void **state) {
     assert_int_equal(0, jls_tmap_timestamp_to_sample_id(s, YEAR + SECOND / 2, &v)); assert_int_equal(1500, v);
     assert_int_equal(0, jls_tmap_timestamp_to_sample_id(s, YEAR - SECOND / 2, &v)); assert_int_equal(500, v);  // below range
     assert_int_equal(0, jls_tmap_timestamp_to_sample_id(s, YEAR + 3 * SECOND / 2, &v)); assert_int_equal(2500, v);  // above range
+
+    jls_tmap_free(s);
 }
 
 static void test_interpN(void **state) {
@@ -101,6 +103,8 @@ static void test_interpN(void **state) {
     assert_int_equal(0, jls_tmap_sample_id_to_timestamp(s, 4050, &v)); assert_int_equal(YEAR + 5 * SECOND / 2, v);  // interp
     assert_int_equal(0, jls_tmap_sample_id_to_timestamp(s, 500, &v)); assert_int_equal(YEAR - SECOND / 2, v);  // below range
     assert_int_equal(0, jls_tmap_sample_id_to_timestamp(s, 4150, &v)); assert_int_equal(YEAR + 7 * SECOND / 2, v);  // below range
+
+    jls_tmap_free(s);
 }
 
 static void test_interp_full_allocation(void **state) {

@@ -633,6 +633,8 @@ static void test_fsr_f32_len_N(void **state) {
     }
 
     jls_rd_close(rd);
+    free(data);
+    free(expect);
     remove(filename);
 }
 
@@ -1061,6 +1063,8 @@ static void test_fsr_u1_ones(void **state) {
     }
 
     jls_rd_close(rd);
+    free(data);
+    free(expect);
     remove(filename);
 }
 

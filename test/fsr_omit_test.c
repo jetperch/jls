@@ -163,6 +163,7 @@ static void test_samples(void **state) {
         assert_float_equal(signal[150000 + i], y[i], 10e-6);
     }
 
+    jls_rd_close(rd);
     free(signal);
     free(y);
     remove(filename);
@@ -187,6 +188,7 @@ static void test_summary(void **state) {
     assert_int_equal(0, jls_rd_fsr_statistics(rd, 1, 0, 2, &data[0][0], 100));
     assert_int_equal(0, jls_rd_fsr_statistics(rd, 1, 0, 2000, &data[0][0], 100));
 
+    jls_rd_close(rd);
     free(signal);
     free(y);
     // remove(filename);
@@ -236,6 +238,9 @@ static void test_u4(void **state) {
     for (int64_t i = 0; i < len; ++i) {
         assert_true(f64_stats[4 * i] > 2.5);
     }
+    free(f64_stats);
+    jls_rd_close(rd);
+    free(data);
 }
 
 static void on_log_recv(const char * msg) {
