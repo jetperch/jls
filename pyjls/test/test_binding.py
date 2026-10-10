@@ -356,7 +356,9 @@ class TestBinding(unittest.TestCase):
         with Writer(self._path) as w:
             w.source_def(source_id=1, name='n')
             for signal_id in [-1, 65536]:
-                with self.assertRaises(OverflowError):
+                with self.assertRaisesRegex(ValueError, 'signal_id out of range'):
+                    w.signal_def(signal_id, source_id=1)
+                with self.assertRaises(OverflowError):  # compatible with earlier versions
                     w.signal_def(signal_id, source_id=1)
             with self.assertRaisesRegex(ValueError, 'PARAMETER_INVALID'):
                 w.signal_def(256, source_id=1)
@@ -374,7 +376,7 @@ class TestBinding(unittest.TestCase):
                     w.annotation(signal_id, 0, None, 'text', 0, 'x')
                 with self.assertRaisesRegex(ValueError, error):
                     w.utc(signal_id, 0, 0)
-            with self.assertRaises(OverflowError):
+            with self.assertRaisesRegex(ValueError, 'signal_id out of range'):
                 w.fsr(70000, 0, x)
             # signal 0 is the predefined VSR signal
             with self.assertRaisesRegex(ValueError, 'NOT_SUPPORTED'):
@@ -573,6 +575,97 @@ class TestBinding(unittest.TestCase):
             t.join()
         with Reader(self._path) as r:
             self.assertEqual(0, (r.signals[3].length - 100) % 1000)
+
+    def test_writer_arg_out_of_range(self):
+        x = np.zeros(10, dtype=np.float32)
+        with Writer(self._path) as w:
+            w.source_def(source_id=1, name='n')
+            w.signal_def(3, source_id=1, sample_rate=1000)
+            cases = [
+                ('source_id', lambda: w.source_def(-1, name='x')),
+                ('sample_rate', lambda: w.signal_def(4, 1, sample_rate=-1)),
+                ('sample_rate', lambda: w.signal_def(4, 1, sample_rate=1 << 32)),
+                ('data_type', lambda: w.signal_def(4, 1, data_type=-1)),
+                ('signal_type', lambda: w.signal_def(4, 1, signal_type=256)),
+                ('chunk_meta', lambda: w.user_data(-1, b'x')),
+                ('sample_id', lambda: w.fsr(3, 1 << 63, x)),
+                ('signal_id', lambda: w.fsr_omit_data(-1, True)),
+                ('timestamp', lambda: w.annotation(3, 1 << 64, None, 'text', 0, 'x')),
+                ('annotation_type', lambda: w.annotation(3, 0, None, -1, 0, 'x')),
+                ('group_id', lambda: w.annotation(3, 0, None, 'text', 256, 'x')),
+                ('utc', lambda: w.utc(3, 0, 1 << 63)),
+            ]
+            for name, fn in cases:
+                with self.subTest(name=name):
+                    with self.assertRaisesRegex(ValueError, f'{name} out of range'):
+                        fn()
+            with self.assertRaisesRegex(ValueError, 'flags out of range'):
+                w.flags = -1
+            w.fsr(3, 0, x)
+
+    def test_reader_arg_out_of_range(self):
+        self._utc_gen(3)
+        with Reader(self._path) as r:
+            cases = [
+                ('signal_id', lambda: r.fsr(-1, 0, 10)),
+                ('start_sample_id', lambda: r.fsr(3, 1 << 63, 10)),
+                ('length', lambda: r.fsr_statistics(3, 0, 1, 1 << 63)),
+                ('increment', lambda: r.fsr_statistics(3, 0, -1 << 64, 1)),
+                ('signal_id', lambda: r.annotations(-1, 0, self._on_annotations)),
+                ('timestamp', lambda: r.annotations(3, 1 << 63, self._on_annotations)),
+                ('sample_id', lambda: r.utc(3, -(1 << 63) - 1, self._on_utc)),
+                ('signal_id', lambda: r.time_map_length(65536)),
+                ('sample_id', lambda: r.sample_id_to_timestamp(3, [1 << 63])),
+                ('utc_timestamp', lambda: r.timestamp_to_sample_id(3, 1 << 63)),
+            ]
+            for name, fn in cases:
+                with self.subTest(name=name):
+                    with self.assertRaisesRegex(ValueError, f'{name} out of range'):
+                        fn()
+
+    def test_tmap_int64(self):
+        self._utc_gen(3)
+        with Reader(self._path) as r:
+            t0 = r.sample_id_to_timestamp(3, 0)
+            t_neg = t0 - SECOND  # before the first sample
+            sample_id = r.timestamp_to_sample_id(3, t_neg)
+            self.assertLess(sample_id, 0)
+            result = r.timestamp_to_sample_id(3, [t_neg, t0])
+            self.assertEqual(np.int64, result.dtype)
+            self.assertEqual([sample_id, 0], result.tolist())
+            result = r.sample_id_to_timestamp(3, [sample_id, 0])
+            self.assertEqual(np.int64, result.dtype)
+            self.assertEqual(t0, result[1])
+            self.assertEqual(np.int64, r.time_map_get(3).dtype['sample_id'])
+            # numpy scalars and 0-d arrays convert like scalars
+            self.assertEqual(sample_id, r.timestamp_to_sample_id(3, np.array(t_neg)))
+            self.assertEqual(t0, r.sample_id_to_timestamp(3, np.array(0)))
+            self.assertEqual(t0, r.sample_id_to_timestamp(3, np.int64(0)))
+
+    def test_fsr_statistics_dtype(self):
+        with Writer(self._path) as w:
+            self._write_fsr_100(w)
+        with Reader(self._path) as r:
+            self.assertEqual(np.float64, r.fsr_statistics(3, 0, 10, 2).dtype)
+
+    def test_path_like(self):
+        import pathlib
+        path = pathlib.Path(self._path)
+        with Writer(path) as w:
+            self._write_fsr_100(w)
+        with Reader(path) as r:
+            self.assertEqual(100, r.signals[3].length)
+        with Reader(os.fsencode(self._path)) as r:
+            self.assertEqual(100, r.signals[3].length)
+        dst = pathlib.Path(self._path + '.copy.jls')
+        try:
+            copy(path, dst)
+            repair(dst)
+            with Reader(dst) as r:
+                self.assertEqual(100, r.signals[3].length)
+        finally:
+            if dst.is_file():
+                dst.unlink()
 
     def test_init_twice_closes(self):
         path2 = self._path + '.2.jls'
