@@ -1123,6 +1123,14 @@ int32_t jls_core_rd_fsr_data0(struct jls_core_s * self, uint16_t signal_id, int6
     } else {
         struct jls_fsr_index_s * idx = (struct jls_fsr_index_s *) self->rd_index->start;
         int64_t idx_entry = (start_sample_id - idx->header.timestamp) / signal_def->samples_per_data;
+        uint64_t idx_bytes = sizeof(idx->header) + (uint64_t) idx->header.entry_count * sizeof(idx->offsets[0]);
+        if ((start_sample_id < idx->header.timestamp) || (idx_entry >= idx->header.entry_count)
+                || (idx_bytes > self->rd_index->length)) {  // corrupt index
+            JLS_LOGW("invalid index chunk at %" PRIi64 " for sample_id %" PRIi64,
+                     self->rd_index_chunk.offset, start_sample_id);
+            self->rd_index_chunk.offset = 0;
+            return JLS_ERROR_MESSAGE_INTEGRITY;
+        }
         offset = idx->offsets[idx_entry];
     }
     struct jls_fsr_data_s * r;

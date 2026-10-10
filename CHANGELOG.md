@@ -36,6 +36,10 @@ This file contains the list of changes made to the JLS project.
     exceeds their chunk.
   * The threaded writer now rejects STRING and JSON payloads that are not
     NUL-terminated.
+  * Reading FSR samples or statistics from a file whose level-1 index or
+    summary timestamp is corrupt (with valid CRCs) read before the chunk
+    buffer.  These reads now return MESSAGE_INTEGRITY.  Found by the
+    read_fuzzer bitflip campaign under AddressSanitizer.
 * Errors that the JLS library returns for invalid arguments
   (PARAMETER_INVALID, NOT_FOUND, NOT_SUPPORTED, TOO_BIG, ALREADY_EXISTS)
   now raise ValueError instead of RuntimeError.  The library validates

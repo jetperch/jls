@@ -1199,6 +1199,25 @@ static void file_write_all(const char * path, const uint8_t * data, size_t size)
     fclose(f);
 }
 
+// Find the first chunk with a valid header CRC matching tag and chunk_meta.
+static struct jls_chunk_header_s * chunk_find(uint8_t * data, size_t size, uint8_t tag, uint16_t chunk_meta) {
+    for (size_t offset = 0; (offset + sizeof(struct jls_chunk_header_s)) <= size; offset += 8) {
+        struct jls_chunk_header_s * h = (struct jls_chunk_header_s *) (data + offset);
+        if ((h->tag == tag) && (h->chunk_meta == chunk_meta) && (h->crc32 == jls_crc32c_hdr(h))) {
+            return h;
+        }
+    }
+    return NULL;
+}
+
+// Recompute the payload CRC after modifying a chunk payload, so readers see valid corruption.
+static void chunk_payload_crc_update(struct jls_chunk_header_s * hdr) {
+    uint8_t * payload = (uint8_t *) (hdr + 1);
+    uint32_t pad = (8 - ((hdr->payload_length + 4) & 7)) & 7;
+    uint32_t crc32 = jls_crc32c(payload, hdr->payload_length);
+    memcpy(payload + hdr->payload_length + pad, &crc32, sizeof(crc32));
+}
+
 // A corrupt data_size with valid CRCs must not read past the chunk payload.
 static void test_annotation_data_size_corrupt(void **state) {
     (void) state;
@@ -1211,27 +1230,67 @@ static void test_annotation_data_size_corrupt(void **state) {
 
     size_t size = 0;
     uint8_t * data = file_read_all(filename, &size);
-    struct jls_chunk_header_s * hdr = NULL;
-    for (size_t offset = 0; (offset + sizeof(*hdr)) <= size; offset += 8) {
-        struct jls_chunk_header_s * h = (struct jls_chunk_header_s *) (data + offset);
-        if ((h->tag == JLS_TAG_TRACK_ANNOTATION_DATA) && (h->crc32 == jls_crc32c_hdr(h))) {
-            hdr = h;
-            break;
-        }
-    }
+    struct jls_chunk_header_s * hdr = chunk_find(data, size, JLS_TAG_TRACK_ANNOTATION_DATA, 0);
     assert_non_null(hdr);
-    uint8_t * payload = (uint8_t *) (hdr + 1);
-    struct jls_annotation_s * annotation = (struct jls_annotation_s *) payload;
+    struct jls_annotation_s * annotation = (struct jls_annotation_s *) (hdr + 1);
     assert_int_equal(sizeof(STRING_1), annotation->data_size);
     annotation->data_size = 0x00100000;
-    uint32_t pad = (8 - ((hdr->payload_length + 4) & 7)) & 7;
-    uint32_t crc32 = jls_crc32c(payload, hdr->payload_length);
-    memcpy(payload + hdr->payload_length + pad, &crc32, sizeof(crc32));
+    chunk_payload_crc_update(hdr);
     file_write_all(filename, data, size);
     free(data);
 
     assert_int_equal(0, jls_rd_open(&rd, filename));
     assert_int_equal(JLS_ERROR_MESSAGE_INTEGRITY, jls_rd_annotations(rd, 0, 0, on_annotation_unexpected, NULL));
+    jls_rd_close(rd);
+    remove(filename);
+}
+
+// Write SIGNAL_5 with multiple index and summary chunks, then move the
+// timestamp of its first level-1 chunk with tag past sample 0.
+static void fsr_timestamp_corrupt(uint8_t tag) {
+    struct jls_wr_s * wr = NULL;
+    const int64_t sample_count = 100000;
+    float * signal = gen_triangle(1000, sample_count);
+    assert_non_null(signal);
+    assert_int_equal(0, jls_wr_open(&wr, filename));
+    assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_3));
+    assert_int_equal(0, jls_wr_signal_def(wr, &SIGNAL_5));
+    assert_int_equal(0, jls_wr_fsr_f32(wr, 5, 0, signal, (uint32_t) sample_count));
+    assert_int_equal(0, jls_wr_close(wr));
+    free(signal);
+
+    size_t size = 0;
+    uint8_t * data = file_read_all(filename, &size);
+    struct jls_chunk_header_s * hdr = chunk_find(data, size, tag, (uint16_t) ((1 << 12) | 5));
+    assert_non_null(hdr);
+    struct jls_payload_header_s * payload = (struct jls_payload_header_s *) (hdr + 1);
+    assert_int_equal(0, payload->timestamp);
+    payload->timestamp = 1LL << 40;
+    chunk_payload_crc_update(hdr);
+    file_write_all(filename, data, size);
+    free(data);
+}
+
+// A corrupt level-1 index timestamp must not index before the offsets.
+static void test_fsr_index_timestamp_corrupt(void **state) {
+    (void) state;
+    struct jls_rd_s * rd = NULL;
+    float data[100];
+    fsr_timestamp_corrupt(JLS_TAG_TRACK_FSR_INDEX);
+    assert_int_equal(0, jls_rd_open(&rd, filename));
+    assert_int_equal(JLS_ERROR_MESSAGE_INTEGRITY, jls_rd_fsr_f32(rd, 5, 0, data, ARRAY_SIZE(data)));
+    jls_rd_close(rd);
+    remove(filename);
+}
+
+// A corrupt level-1 summary timestamp must not index before the entries.
+static void test_fsr_summary_timestamp_corrupt(void **state) {
+    (void) state;
+    struct jls_rd_s * rd = NULL;
+    double stats[10 * JLS_SUMMARY_FSR_COUNT];
+    fsr_timestamp_corrupt(JLS_TAG_TRACK_FSR_SUMMARY);
+    assert_int_equal(0, jls_rd_open(&rd, filename));
+    assert_int_equal(JLS_ERROR_MESSAGE_INTEGRITY, jls_rd_fsr_statistics(rd, 5, 0, 1000, stats, 10));
     jls_rd_close(rd);
     remove(filename);
 }
@@ -1403,6 +1462,8 @@ int main(void) {
             cmocka_unit_test(test_fsr_u1_auto_def),
             cmocka_unit_test(test_signal_id_validation),
             cmocka_unit_test(test_annotation_data_size_corrupt),
+            cmocka_unit_test(test_fsr_index_timestamp_corrupt),
+            cmocka_unit_test(test_fsr_summary_timestamp_corrupt),
             cmocka_unit_test(test_wr_null_arguments),
             cmocka_unit_test(test_rd_null_arguments),
 

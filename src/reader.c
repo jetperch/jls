@@ -384,6 +384,11 @@ static int32_t fsr_statistics(struct jls_core_s * self, uint16_t signal_id,
     }
     int64_t src_offset = 0;
     int64_t src_end = f32_summary->header.entry_count;
+    if (start_sample_id < chunk_sample_id) {  // corrupt summary timestamp
+        JLS_LOGW("invalid summary chunk at %" PRIi64 ": timestamp %" PRIi64 " > %" PRIi64,
+                 pos, chunk_sample_id, start_sample_id);
+        return JLS_ERROR_MESSAGE_INTEGRITY;
+    }
     int64_t entry_offset = ((start_sample_id - chunk_sample_id + step_size - 1) / step_size);
     int64_t entry_sample_id = entry_offset * step_size + chunk_sample_id;
 
