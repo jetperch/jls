@@ -49,3 +49,4 @@ target_include_directories(repair_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../in
 ADD_CMOCKA_TEST(recovery_test)
 target_include_directories(recovery_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../include_prv)
 ADD_CMOCKA_TEST(fsr_omit_test)
+ADD_CMOCKA_TEST(log_test)
