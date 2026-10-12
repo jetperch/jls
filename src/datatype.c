@@ -37,14 +37,20 @@ static inline int8_t uint4_to_int8(uint8_t k) {
     break; \
 }
 
-// Packed sub-byte types index per sample: an odd count or a partial
-// final byte must neither write dst[samples] nor read past the source.
+// Packed sub-byte types convert whole bytes, then the partial final byte:
+// an odd count must neither write dst[samples] nor read past the source.
 int32_t jls_dt_buffer_to_f64(const void * src, uint32_t src_datatype, double * dst, size_t samples) {
     const uint8_t * u8 = (const uint8_t *) src;
+    size_t i = 0;  // sub-byte types: next sample
     switch (src_datatype & 0xffff) {
         case JLS_DATATYPE_I4:
-            for (size_t i = 0; i < samples; ++i) {
-                dst[i] = (double) uint4_to_int8((uint8_t) (u8[i >> 1] >> (4 * (i & 1))));
+            for (; (i + 2) <= samples; i += 2) {
+                uint8_t k = u8[i >> 1];
+                dst[i + 0] = (double) uint4_to_int8(k);
+                dst[i + 1] = (double) uint4_to_int8(k >> 4);
+            }
+            if (i < samples) {
+                dst[i] = (double) uint4_to_int8(u8[i >> 1]);
             }
             break;
         case JLS_DATATYPE_I8: TO_DOUBLE(int8_t);
@@ -58,13 +64,24 @@ int32_t jls_dt_buffer_to_f64(const void * src, uint32_t src_datatype, double * d
         case JLS_DATATYPE_I32: TO_DOUBLE(int32_t);
         case JLS_DATATYPE_I64: TO_DOUBLE(int64_t);
         case JLS_DATATYPE_U1:
-            for (size_t i = 0; i < samples; ++i) {
+            for (; (i + 8) <= samples; i += 8) {
+                uint8_t k = u8[i >> 3];
+                for (uint32_t b = 0; b < 8; ++b) {
+                    dst[i + b] = (double) ((k >> b) & 1);
+                }
+            }
+            for (; i < samples; ++i) {
                 dst[i] = (double) ((u8[i >> 3] >> (i & 7)) & 1);
             }
             break;
         case JLS_DATATYPE_U4:
-            for (size_t i = 0; i < samples; ++i) {
-                dst[i] = (double) ((u8[i >> 1] >> (4 * (i & 1))) & 0x0f);
+            for (; (i + 2) <= samples; i += 2) {
+                uint8_t k = u8[i >> 1];
+                dst[i + 0] = (double) (k & 0x0f);
+                dst[i + 1] = (double) (k >> 4);
+            }
+            if (i < samples) {
+                dst[i] = (double) (u8[i >> 1] & 0x0f);
             }
             break;
         case JLS_DATATYPE_U8: TO_DOUBLE(uint8_t);

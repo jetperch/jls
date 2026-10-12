@@ -569,17 +569,24 @@ static int32_t fsr_statistics_samples(struct jls_core_s * self, uint16_t signal_
         if (n > window_remaining) {
             n = window_remaining;
         }
-        // Skip non-finite samples to match the writer summaries.
+        // Skip non-finite samples to match the writer summaries.  compute_f64
+        // already skips NaN, and only inf makes min or max infinite, so split
+        // into finite runs only then: a per-sample scan costs ~30% (m8).
         const double * x = self->f64_sample_buf->start + src_idx;
-        int64_t run_start = 0;
-        for (int64_t i = 0; i <= n; ++i) {
-            if ((i == n) || !isfinite(x[i])) {
-                if (i > run_start) {
-                    jls_statistics_compute_f64(&run, x + run_start, (uint64_t) (i - run_start));
-                    jls_statistics_combine(&stats, &stats, &run);
+        jls_statistics_compute_f64(&run, x, (uint64_t) n);
+        if (isinf(run.min) || isinf(run.max)) {
+            int64_t run_start = 0;
+            for (int64_t i = 0; i <= n; ++i) {
+                if ((i == n) || !isfinite(x[i])) {
+                    if (i > run_start) {
+                        jls_statistics_compute_f64(&run, x + run_start, (uint64_t) (i - run_start));
+                        jls_statistics_combine(&stats, &stats, &run);
+                    }
+                    run_start = i + 1;
                 }
-                run_start = i + 1;
             }
+        } else {
+            jls_statistics_combine(&stats, &stats, &run);
         }
         src_idx += n;
         start_sample_id += n;
