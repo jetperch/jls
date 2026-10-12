@@ -1,6 +1,6 @@
 # Regression review fixes (2026-10-12)
 
-Status: IN PROGRESS.  Branch `fix/design_review` (e093a37) versus `main`
+Status: COMPLETE (2026-10-12).  Branch `fix/design_review` (e093a37) versus `main`
 (6de5f41), reviewed after the design review in
 `completed/design_review_2026_10.md` reported all findings fixed.
 
@@ -139,3 +139,34 @@ skip) and recover the speed if the fix is local.
 4. M4, m6: pyjoulescope_ui.
 5. m8: performance.
 6. m3 and CHANGELOG; move this plan to completed.
+
+
+## Results (2026-10-12)
+
+All findings fixed on `fix/design_review` (commits e144590, 462fb83,
+e08ed68, 9154c59) and pyjoulescope_ui `fix/jls_write_errors` (529d945).
+Each fix has a test that fails without it, except m8 (performance).
+
+* M1: close after a latched error now leaves the file without END;
+  `test_close_after_error_recovers` checks the recovered length equals
+  the crash-recovery length (1,163,264 f32 / 1,146,880 u8 samples).
+* M2: summaries store raw values; the reader scales by 2^-q.  A q=4 and
+  a q=0 file with the same raw data differ only in the signal_def.
+* M3: copy re-chunks over-cap definitions with the writer defaults and
+  stops on any other definition failure.
+* M4, m6: the Exporter and every range tool report errors and finalize;
+  canceling an export removes the partial file; UI_META is 0x401.
+* m1: combine keys the invalid marker on NaN min and max.
+* m2: sample statistics combine per chunk; memory is one chunk.
+* m4: `time_map_length()` returns 0 for VSR signals.
+* m5: the threaded writer reads and latches `jls_wr_error()` under the
+  process lock.
+* m7: `repair_test` has its own temp filename; `ctest -j4` passes.
+* m8: u1 sample statistics 36.6 ms -> 23.4 ms per 20M samples (main
+  24.6 ms); f32 41.4 -> 35.2 ms (main 36.8 ms).  Results unchanged.
+
+Verification: ASan+UBSan ctest 19/19 serial and `-j4`;
+`read_fault_test --full` 7/7; `writer_test --full` 20/20; pyjls 59
+passed; pyjoulescope_ui 164 passed; cross-version benchmark on a
+20M-sample file: identical mean, min, max to `main`, std differs only by
+the documented divisor fix, u1/u4 reads bit-exact.

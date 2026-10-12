@@ -6,7 +6,7 @@ This file contains the list of changes made to the JLS project.
 
 ## 0.19.0
 
-2026 Oct 10
+2026 Oct 13
 
 **BREAKING CHANGES**
 
@@ -33,11 +33,12 @@ This file contains the list of changes made to the JLS project.
    jls_rd_fsr_statistics(), which previously succeeded without
    reading, and for an out-of-range jls_rd_tmap_get() index, which
    previously returned UNAVAILABLE.
-
 3. **Writers latch the first write error.**  After any write failure,
    such as a full disk, every later jls_wr_* and jls_twr_* call returns
    that error, and jls_wr_close() and jls_twr_close() return it instead
-   of 0.  The threaded writer reports errors from its thread on the next
+   of 0.  Close then leaves the file not properly closed, without an END
+   chunk, so jls_rd_open() recovers the data written before the error.
+   The threaded writer reports errors from its thread on the next
    call, flush, or close instead of only logging them.  pyjls
    Writer.close() raises RuntimeError when the file may be incomplete.
 4. **pyjls callback exceptions propagate.**  An exception raised in a
@@ -52,10 +53,15 @@ This file contains the list of changes made to the JLS project.
    that use the reserved bits 15:12 instead of silently clearing them.
    Annotation and UTC decimate factors below 10 are raised to 10, and
    factors above 65536 are rejected.  Readers skip invalid or duplicate
-   signal definitions.
-6. **Fixed-point signals are scaled.**  Statistics and writer summaries
-   for data types with a nonzero fixed-point q now apply the documented
-   2**-q scale.  Previously the scale was never applied.
+   signal definitions, and FSR definitions whose chunks exceed 16 MiB of
+   sample data or 2**19 summary entries, or whose decimate factors do
+   not divide as the writer has always aligned them (see format.h).
+   jls_copy() keeps such signals by re-chunking them with the writer
+   defaults.
+6. **Fixed-point signals are scaled.**  Statistics for data types with
+   a nonzero fixed-point q now apply the documented 2**-q scale.
+   Previously the scale was never applied.  Summary chunks keep storing
+   raw values, as in every earlier version, and the reader scales them.
 
 * Fixed the FSR statistics std computed from summaries.  Summaries store
   the population std, but the reader treated it as the sample std, so
@@ -146,6 +152,16 @@ This file contains the list of changes made to the JLS project.
   chunk scan that skipped half the file or looped forever.  Corrupt file
   errors return MESSAGE_INTEGRITY, so pyjls raises RuntimeError, not
   ValueError, for them.
+* Fixed regressions found by a second review of this release
+  (doc/plans/completed/regression_review_2026_10_12.md): a writer closed
+  after a latched error wrote END, which hid the samples after the last
+  flushed summary from the reader; jls_copy() dropped a signal whose
+  definition exceeded the new writer caps; jls_statistics_combine()
+  discarded the min and max of a window holding both +inf and -inf;
+  statistics computed from samples allocated the whole window, which
+  the legacy 64-bit summary fallback made as large as the signal, and
+  ran up to 40% slower than 0.18; pyjls Reader.time_map_length() raised
+  for VSR signals instead of returning 0.
 * Statistics skip NaN samples, and windows with no finite samples return
   NaN.  UTC time maps ignore entries whose timestamps do not increase,
   so after a backward clock step, entries are skipped until UTC passes

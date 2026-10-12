@@ -231,6 +231,7 @@ Regressions found by the review and fixed:
   valid older files with large sub-byte or u8 chunks.  Read now bounds
   only the 16 MiB chunk size.
 
-Follow-ups outside jls: pyjoulescope_ui `SignalRecord.on_action_stop` and
-pyjoulescope_driver `Record.close()` should handle `Writer.close()`
-raising a latched write error.
+Follow-ups outside jls: pyjoulescope_ui `SignalRecord.on_action_stop`,
+pyjoulescope_ui `Exporter._run`, and pyjoulescope_driver `Record.close()`
+should handle `Writer.close()` raising a latched write error (all done,
+see `regression_review_2026_10_12.md`).
