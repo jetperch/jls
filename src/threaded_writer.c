@@ -237,6 +237,9 @@ int32_t jls_twr_run(struct jls_twr_s * self) {
                 default:
                     break;
             }
+            // Latch only what the writer latched: write failures, not validation errors.
+            // Read under the process lock, which guards self->wr.
+            int32_t wr_error = rc ? jls_wr_error(self->wr) : 0;
             jls_bkt_process_unlock(self->bk);
             counter_end = jls_time_counter();
             duration_ms = (1000 * (counter_end.value - counter_start.value)) / counter_end.frequency;
@@ -252,8 +255,7 @@ int32_t jls_twr_run(struct jls_twr_s * self) {
                          (int) hdr.msg_type,
                          (hdr.msg_type < MSG_ITEM_COUNT) ? message_str[hdr.msg_type] : "unknown",
                          (int) rc, jls_error_code_name(rc));
-                // Latch only what the writer latched: write failures, not validation errors.
-                error_latch(self, jls_wr_error(self->wr));
+                error_latch(self, wr_error);
             }
         }
     }
@@ -414,6 +416,7 @@ int32_t jls_twr_source_def(struct jls_twr_s * self, const struct jls_source_def_
     ROE(error_get(self));
     process_lock(self);
     int32_t rv = jls_wr_source_def(self->wr, source);
+    error_latch(self, jls_wr_error(self->wr));  // a write failure also stops the queue
     jls_bkt_process_unlock(self->bk);
     return rv;
 }
@@ -431,6 +434,7 @@ int32_t jls_twr_signal_def(struct jls_twr_s * self, const struct jls_signal_def_
         self->signal_type[signal->signal_id] = signal->signal_type;
         jls_bkt_msg_unlock(self->bk);
     }
+    error_latch(self, jls_wr_error(self->wr));  // a write failure also stops the queue
     jls_bkt_process_unlock(self->bk);
     return rv;
 }

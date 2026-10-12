@@ -68,10 +68,12 @@ JLS_API int32_t jls_wr_open(struct jls_wr_s ** instance, const char * path);
  * @return 0 or the first error.
  *
  * Normally, close writes the buffered sample data, the summaries, the END
- * chunk, and the file header.  After a latched write error, close skips
- * the buffered data and summaries, attempts only the END chunk and file
- * header, and returns the latched error.  The reader can recover the
- * data written before the error.
+ * chunk, and the file header.  After a latched write error, or when a
+ * close-time write fails, close skips the remaining buffered data,
+ * summaries, and the END chunk, rewrites only the file header, and
+ * returns the first error.  The file is left not properly closed, so
+ * jls_rd_open() runs its truncation recovery and reads the data written
+ * before the error.
  */
 JLS_API int32_t jls_wr_close(struct jls_wr_s * self);
 

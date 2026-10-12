@@ -90,9 +90,11 @@ static int32_t first_error(int32_t rc, int32_t rc_new) {
 }
 
 /*
- * Free all writer state.  When flush, write the pending data and summaries
- * until the first error.  Always attempt the END chunk and file header so
- * that the file stays readable, or at least recoverable.
+ * Free all writer state.  Without an error, write the pending data and
+ * summaries, then the END chunk.  After any error, skip END: the reader
+ * trusts an END-terminated file's summaries and indices, which no longer
+ * reach the last data chunks.  Without END, the reader recovers them.
+ * Always rewrite the file header.
  */
 static int32_t wr_finalize(struct jls_wr_s * self, int32_t rc) {
     struct jls_core_s * core = &self->core;
@@ -120,7 +122,9 @@ static int32_t wr_finalize(struct jls_wr_s * self, int32_t rc) {
         signal_info->track_utc = NULL;
     }
     if (core->raw) {
-        rc = first_error(rc, jls_core_wr_end(core));
+        if (!rc) {
+            rc = jls_core_wr_end(core);
+        }
         rc = first_error(rc, jls_raw_close(core->raw));
         core->raw = NULL;
     }

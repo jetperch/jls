@@ -37,6 +37,7 @@
 #include "jls/ec.h"
 #include <inttypes.h>
 #include <math.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -649,6 +650,65 @@ static void test_close_io_error(void **state) {
     remove(filename);
 }
 
+/*
+ * M1: write f32 signal 1 and u8 signal 2 under a write budget until the
+ * disk is full.  Then crash, or close after the latched error, and return
+ * the recovered lengths.  Returns the samples per signal accepted.
+ */
+static int64_t disk_full_run(bool crash, int64_t lengths[2]) {
+    struct jls_signal_def_s s1 = signal_def(JLS_DATATYPE_F32);  // default sizes
+    struct jls_signal_def_s s2 = signal_def(JLS_DATATYPE_U8);
+    s2.signal_id = 2;
+    float * f = calloc(1000, sizeof(float));
+    uint8_t * u = calloc(1000, 1);
+    struct jls_wr_s * wr = wr_open(&s1);
+    assert_int_equal(0, jls_wr_signal_def(wr, &s2));
+    jls_bk_write_limit_set(6000000);  // past the first u8 level-1 summary
+    int64_t accepted = 0;
+    int32_t err = 0;
+    while (!err) {
+        err = jls_wr_fsr_f32(wr, 1, accepted, f, 1000);
+        if (!err) {
+            err = jls_wr_fsr(wr, 2, accepted, u, 1000);
+            if (!err) {
+                accepted += 1000;
+            }
+        }
+    }
+    if (crash) {
+        jls_bk_write_limit_set(0);  // every close-time write fails: only frees
+        (void) jls_wr_close(wr);
+        jls_bk_write_limit_set(-1);
+    } else {
+        jls_bk_write_limit_set(-1);  // space freed: close writes succeed
+        assert_int_equal(err, jls_wr_close(wr));
+    }
+
+    struct jls_rd_s * rd = NULL;
+    assert_int_equal(0, jls_rd_open(&rd, filename));
+    assert_int_equal(0, jls_rd_fsr_length(rd, 1, &lengths[0]));
+    assert_int_equal(0, jls_rd_fsr_length(rd, 2, &lengths[1]));
+    jls_rd_close(rd);
+    remove(filename);
+    free(f);
+    free(u);
+    return accepted;
+}
+
+// M1: close after a latched error must not hide data from recovery.
+static void test_close_after_error_recovers(void **state) {
+    (void) state;
+    int64_t crash[2];
+    int64_t closed[2];
+    int64_t accepted = disk_full_run(true, crash);
+    assert_int_equal(accepted, disk_full_run(false, closed));
+    assert_int_equal(crash[0], closed[0]);
+    assert_int_equal(crash[1], closed[1]);
+    // at most one unwritten data chunk per signal: 8192 f32, 32768 u8
+    assert_true(closed[0] > accepted - 8192);
+    assert_true(closed[1] > accepted - 32768);
+}
+
 int main(int argc, char * argv[]) {
     for (int i = 1; i < argc; ++i) {
         if (0 == strcmp(argv[i], "--full")) {
@@ -683,6 +743,7 @@ int main(int argc, char * argv[]) {
             cmocka_unit_test(test_io_fault_anno),
             cmocka_unit_test(test_io_fault_u1),
             cmocka_unit_test(test_close_io_error),
+            cmocka_unit_test(test_close_after_error_recovers),
     };
 
     const char * filter = getenv("JLS_TEST_FILTER");  // run a subset, such as for negative controls

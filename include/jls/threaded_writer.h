@@ -79,7 +79,9 @@ JLS_API int32_t jls_twr_open(struct jls_twr_s ** instance, const char * path);
  * @return 0, the latched error, or the jls_wr_close() error.
  *
  * Close writes all queued messages before closing the file, even when
- * the queue is full.  See jls_wr_close().
+ * the queue is full.  After a latched error, the queued data messages are
+ * dropped and the file is left not properly closed, so jls_rd_open()
+ * recovers the data written before the error.  See jls_wr_close().
  */
 JLS_API int32_t jls_twr_close(struct jls_twr_s * self);
 

@@ -295,6 +295,39 @@ static void test_async_error_latch(void **state) {
     assert_int_equal(JLS_ERROR_IO, jls_twr_source_def(wr, &SOURCE_3));
     assert_int_equal(JLS_ERROR_IO, jls_twr_close(wr));
     free(data);
+
+    // M1: the reader recovers the data written before the error
+    struct jls_rd_s * rd = NULL;
+    int64_t length = 0;
+    assert_int_equal(0, jls_rd_open(&rd, filename));
+    assert_int_equal(0, jls_rd_fsr_length(rd, 5, &length));
+    assert_true(length > 2000);  // 16 KiB holds 3 data chunks; END hid all but 1
+    jls_rd_close(rd);
+    remove(filename);
+}
+
+// m5: a synchronous definition write error latches for the queued calls.
+static void test_def_error_latch(void **state) {
+    (void) state;
+    struct jls_twr_s * wr = NULL;
+    float data[10] = {0};
+    const char str[] = "hello";
+
+    assert_int_equal(0, jls_twr_open(&wr, filename));
+    jls_bk_write_limit_set(0);  // the thread is idle: no race
+    assert_int_equal(JLS_ERROR_IO, jls_twr_source_def(wr, &SOURCE_3));
+    jls_bk_write_limit_set(-1);
+    assert_int_equal(JLS_ERROR_IO, jls_twr_user_data(wr, 1, JLS_STORAGE_TYPE_STRING, (const uint8_t *) str, 0));
+    assert_int_equal(JLS_ERROR_IO, jls_twr_close(wr));
+
+    assert_int_equal(0, jls_twr_open(&wr, filename));
+    assert_int_equal(0, jls_twr_source_def(wr, &SOURCE_3));
+    jls_bk_write_limit_set(0);
+    assert_int_equal(JLS_ERROR_IO, jls_twr_signal_def(wr, &SIGNAL_5));
+    jls_bk_write_limit_set(-1);
+    assert_int_equal(JLS_ERROR_IO, jls_twr_utc(wr, 0, 0, 0));
+    assert_int_equal(JLS_ERROR_IO, jls_twr_fsr_f32(wr, 5, 0, data, 10));
+    assert_int_equal(JLS_ERROR_IO, jls_twr_close(wr));
     remove(filename);
 }
 
@@ -375,6 +408,7 @@ int main(void) {
             cmocka_unit_test(test_null_arguments),
             cmocka_unit_test(test_string_size_zero),
             cmocka_unit_test(test_async_error_latch),
+            cmocka_unit_test(test_def_error_latch),
 #if !defined(_WIN32)
             cmocka_unit_test(test_close_ring_full),
 #endif
