@@ -36,7 +36,7 @@
 #define SKIP_REALWORLD 1
 
 #define ARRAY_SIZE(x) ( sizeof(x) / sizeof((x)[0]) )
-const char * filename = "jls_test_tmp.jls";
+const char * filename = "repair_test_tmp.jls";
 const uint8_t USER_DATA_1[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
 const uint16_t CHUNK_META_1 = 0x0123;
 const uint16_t CHUNK_META_2 = 0x0BEE;

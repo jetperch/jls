@@ -21,6 +21,7 @@
 #include "jls/writer.h"
 #include "jls/buffer.h"
 #include "jls/cdef.h"
+#include "jls/core.h"
 #include <inttypes.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -66,12 +67,14 @@
  * @param buf The source chunk payload of hdr->payload_length bytes.
  * @param data_types The data type for each signal written to wr, 0 if undefined.
  * @param[out] desc The failure description.
+ * @param[out] fatal Set nonzero when the copy must stop on this error.
  * @return 0 or error code.
  *
  * The source is untrusted: validate every payload field before use.
  */
 static int32_t copy_chunk(struct jls_wr_s * wr, const struct jls_chunk_header_s * hdr,
-                          struct jls_buf_s * buf, uint32_t * data_types, const char ** desc) {
+                          struct jls_buf_s * buf, uint32_t * data_types, const char ** desc,
+                          int32_t * fatal) {
     uint32_t payload_length = hdr->payload_length;
     uint16_t signal_id = hdr->chunk_meta & 0x0fff;
     switch (hdr->tag) {
@@ -91,6 +94,7 @@ static int32_t copy_chunk(struct jls_wr_s * wr, const struct jls_chunk_header_s 
         }
         case JLS_TAG_SIGNAL_DEF: {
             struct jls_signal_def_s signal;
+            memset(&signal, 0, sizeof(signal));
             signal.signal_id = hdr->chunk_meta;
             ROD(jls_buf_rd_u16(buf, &signal.source_id), "signal_def parse");
             ROD(jls_buf_rd_u8(buf, &signal.signal_type), "signal_def parse");
@@ -107,7 +111,27 @@ static int32_t copy_chunk(struct jls_wr_s * wr, const struct jls_chunk_header_s 
             ROD(jls_buf_rd_str(buf, (const char **) &signal.name), "signal_def parse");
             ROD(jls_buf_rd_str(buf, (const char **) &signal.units), "signal_def parse");
             if ((signal.signal_id != 0) && (signal.signal_id < JLS_SIGNAL_COUNT)) {
-                ROD(jls_wr_signal_def(wr, &signal), "jls_wr_signal_def");
+                ROD(jls_core_signal_def_validate(&signal), "signal_def invalid");  // reader skips it too
+                struct jls_signal_def_s aligned = signal;
+                if (jls_core_signal_def_align(&aligned)) {
+                    // Older writers had no caps.  Copy re-chunks the data through
+                    // jls_wr_fsr(), so the writer's default layout is equivalent.
+                    signal.samples_per_data = 0;
+                    signal.sample_decimate_factor = 0;
+                    signal.entries_per_summary = 0;
+                    signal.summary_decimate_factor = 0;
+                    signal.annotation_decimate_factor = 0;
+                    signal.utc_decimate_factor = 0;
+                }
+                int32_t rc = jls_wr_signal_def(wr, &signal);
+                if (rc) {
+                    // Skip as the reader does: a duplicate keeps the first def, and a
+                    // missing (damaged) source loses only this signal.  Otherwise the
+                    // copy would silently drop a readable signal and all its data.
+                    *fatal = (JLS_ERROR_ALREADY_EXISTS != rc) && (JLS_ERROR_NOT_FOUND != rc);
+                    *desc = "jls_wr_signal_def";
+                    return rc;
+                }
                 if (JLS_SIGNAL_TYPE_FSR == signal.signal_type) {
                     data_types[signal.signal_id] = signal.data_type;
                 }
@@ -266,11 +290,12 @@ int32_t jls_copy(const char * src, const char * dst,
         buf->end = buf->start + buf->length;
 
         const char * desc = "";
-        rc = copy_chunk(wr, &hdr, buf, data_types, &desc);
+        int32_t fatal = 0;
+        rc = copy_chunk(wr, &hdr, buf, data_types, &desc, &fatal);
         if (rc) {
             MSG_ERROR(desc, rc);
-            if ((JLS_ERROR_NOT_ENOUGH_MEMORY == rc) || (JLS_ERROR_IO == rc)) {
-                break;  // destination failure: further writes cannot succeed
+            if (fatal || (JLS_ERROR_NOT_ENOUGH_MEMORY == rc) || (JLS_ERROR_IO == rc)) {
+                break;  // further writes cannot succeed or would make an incomplete copy
             }
             rc = 0;  // skip this chunk
         }

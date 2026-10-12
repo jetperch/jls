@@ -267,6 +267,28 @@ static void test_combine_invalid_order_independent(void **state) {
     assert_true(isnan(t2.mean) && isnan(t2.min) && isnan(t2.max));
 }
 
+// +inf and -inf give a NaN mean but valid min and max: not the invalid marker
+static void test_combine_inf_keeps_min_max(void **state) {
+    (void) state;
+    const double x_inf[] = {INFINITY, -INFINITY, 1.0};
+    const double x_finite[] = {2.0, 3.0};
+    struct jls_statistics_s a;
+    struct jls_statistics_s b;
+    jls_statistics_compute_f64(&a, x_inf, 3);
+    jls_statistics_compute_f64(&b, x_finite, 2);
+    assert_true(isnan(a.mean));
+    struct jls_statistics_s t[2];
+    jls_statistics_combine(&t[0], &a, &b);
+    jls_statistics_combine(&t[1], &b, &a);
+    for (int i = 0; i < 2; ++i) {
+        assert_int_equal(5, t[i].k);
+        assert_true(isnan(t[i].mean));
+        assert_true(isnan(t[i].s));
+        assert_true(isinf(t[i].min) && (t[i].min < 0));
+        assert_true(isinf(t[i].max) && (t[i].max > 0));
+    }
+}
+
 static void test_null_arguments(void **state) {
     (void) state;
     struct jls_statistics_s s;
@@ -303,6 +325,7 @@ int main(void) {
             cmocka_unit_test(test_combine_in_place),
             cmocka_unit_test(test_nan_skipped),
             cmocka_unit_test(test_combine_invalid_order_independent),
+            cmocka_unit_test(test_combine_inf_keeps_min_max),
             cmocka_unit_test(test_null_arguments),
     };
 

@@ -46,8 +46,10 @@ JLS_CPP_GUARD_START
  * NaN marks a missing sample.  jls_statistics_add() and
  * jls_statistics_compute_f32/f64() skip NaN values, so k counts only the
  * non-NaN samples.  With no samples (k == 0), the instance is in its
- * reset state.  An instance marked with jls_statistics_invalid() and
- * k > 0 makes jls_statistics_combine() produce an invalid (all NaN) result.
+ * reset state.  An instance marked with jls_statistics_invalid() (min and
+ * max NaN) and k > 0 makes jls_statistics_combine() produce an invalid
+ * (all NaN) result.  Samples of both +inf and -inf give a NaN mean and s
+ * with valid min and max; combine propagates them but keeps min and max.
  */
 struct jls_statistics_s {
     uint64_t k;    ///< Number of samples.

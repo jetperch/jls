@@ -193,8 +193,9 @@ void jls_statistics_combine(struct jls_statistics_s *tgt,
         jls_statistics_copy(tgt, b);
     } else if (b->k == 0) {
         jls_statistics_copy(tgt, a);
-    } else if (isnan(a->mean) || isnan(b->mean)) {
-        // invalid (see jls_statistics_invalid) taints the result regardless of order
+    } else if ((isnan(a->min) && isnan(a->max)) || (isnan(b->min) && isnan(b->max))) {
+        // invalid (see jls_statistics_invalid) taints the result regardless of order.
+        // Not mean: +inf and -inf samples give a NaN mean with valid min and max.
         jls_statistics_invalid(tgt);
         tgt->k = kt;
     } else {
@@ -205,8 +206,8 @@ void jls_statistics_combine(struct jls_statistics_s *tgt,
         tgt->s = (a->s + a->k * m1_diff * m1_diff) +
                  (b->s + b->k * m2_diff * m2_diff);
         tgt->mean = mean_new;
-        tgt->min = (a->min < b->min) ? a->min : b->min;
-        tgt->max = (a->max > b->max) ? a->max : b->max;
+        tgt->min = fmin(a->min, b->min);  // NaN mean and s propagate, min and max survive
+        tgt->max = fmax(a->max, b->max);
         tgt->k = kt;
     }
 }

@@ -618,6 +618,99 @@ static void test_copy_annotation_invalid(void ** state) {
     copy_corrupt_case(JLS_TAG_USER_DATA, 1, user_data_unterminated, "not terminated");
 }
 
+// Signal definition payload offsets, see core.c handle_signal_def().
+#define SIGNAL_DEF_SAMPLES_PER_DATA (12)
+#define SIGNAL_DEF_ANNOTATION_DECIMATE_FACTOR (28)
+#define U1_SAMPLE_COUNT (1000000)
+#define U1_SAMPLES_PER_DATA (6553600)  // main's alignment of the def below, > 2^22
+
+static const struct jls_signal_def_s SIGNAL_7_U1 = {
+        .signal_id = 7,
+        .source_id = 3,
+        .signal_type = JLS_SIGNAL_TYPE_FSR,
+        .data_type = JLS_DATATYPE_U1,
+        .sample_rate = 1000000,
+        .samples_per_data = 1 << 22,  // aligned to 3276800 = 100 entries
+        .sample_decimate_factor = 32768,
+        .entries_per_summary = 200,
+        .name = "gpi",
+        .units = "",
+};
+
+static void u32_set(uint8_t * payload, uint32_t offset, uint32_t value) {
+    memcpy(payload + offset, &value, sizeof(value));
+}
+
+// Grow entries per data chunk from 100 to 200, as main wrote this def.
+// Consistent with the file: all samples fit in one data and summary chunk.
+static void signal_def_samples_per_data_huge(uint8_t * payload, uint32_t length) {
+    (void) length;
+    u32_set(payload, SIGNAL_DEF_SAMPLES_PER_DATA, U1_SAMPLES_PER_DATA);
+}
+
+static void signal_def_annotation_decimate_huge(uint8_t * payload, uint32_t length) {
+    (void) length;
+    u32_set(payload, SIGNAL_DEF_ANNOTATION_DECIMATE_FACTOR, 1 << 20);
+}
+
+static uint8_t u1_data_[U1_SAMPLE_COUNT / 8];
+
+static void u1_read_assert(const char * path, uint32_t samples_per_data) {
+    struct jls_rd_s * rd = NULL;
+    struct jls_signal_def_s def;
+    static uint8_t data[U1_SAMPLE_COUNT / 8 + 1];
+    int64_t samples = 0;
+    assert_int_equal(0, jls_rd_open(&rd, path));
+    assert_int_equal(0, jls_rd_signal(rd, 7, &def));
+    if (samples_per_data) {
+        assert_int_equal(samples_per_data, def.samples_per_data);
+    }
+    assert_int_equal(0, jls_rd_fsr_length(rd, 7, &samples));
+    assert_int_equal(U1_SAMPLE_COUNT, samples);
+    assert_int_equal(0, jls_rd_fsr(rd, 7, 0, data, U1_SAMPLE_COUNT));
+    jls_rd_close(rd);
+    assert_memory_equal(u1_data_, data, sizeof(u1_data_));
+}
+
+// Older writers had no signal_def caps: the reader accepts such files and
+// copy must too, although the destination writer rejects the definition.
+static void test_copy_signal_def_over_write_caps(void ** state) {
+    (void) state;
+    struct copy_msg_s m = {0};
+    struct jls_wr_s * wr = NULL;
+    for (uint32_t i = 0; i < sizeof(u1_data_); ++i) {
+        u1_data_[i] = (uint8_t) ((i * 37) ^ (i >> 8));
+    }
+    assert_int_equal(0, jls_wr_open(&wr, PATH));
+    assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_3));
+    assert_int_equal(0, jls_wr_signal_def(wr, &SIGNAL_7_U1));
+    assert_int_equal(0, jls_wr_fsr(wr, 7, 0, u1_data_, U1_SAMPLE_COUNT));
+    assert_int_equal(0, jls_wr_close(wr));
+    int64_t offset = find_chunk(PATH, JLS_TAG_SIGNAL_DEF, 1, NULL);  // 0 is signal 0
+    assert_true(offset > 0);
+    payload_resign(PATH, offset, signal_def_samples_per_data_huge);
+    u1_read_assert(PATH, U1_SAMPLES_PER_DATA);
+
+    assert_int_equal(0, jls_copy(PATH, COPY_PATH, copy_msg_fn, &m, NULL, NULL));
+    assert_int_equal(0, m.count);
+    u1_read_assert(COPY_PATH, 0);
+    remove(PATH);
+    remove(COPY_PATH);
+
+    // annotation and utc decimate factors have write-only caps
+    memset(&m, 0, sizeof(m));
+    gen(PATH, 1);
+    offset = find_chunk(PATH, JLS_TAG_SIGNAL_DEF, 1, NULL);
+    assert_true(offset > 0);
+    payload_resign(PATH, offset, signal_def_annotation_decimate_huge);
+    assert_full_read(PATH);
+    assert_int_equal(0, jls_copy(PATH, COPY_PATH, copy_msg_fn, &m, NULL, NULL));
+    assert_int_equal(0, m.count);
+    assert_full_read(COPY_PATH);
+    remove(PATH);
+    remove(COPY_PATH);
+}
+
 int main(void) {
     const struct CMUnitTest tests[] = {
             cmocka_unit_test(test_repair_healthy_is_noop),
@@ -634,6 +727,7 @@ int main(void) {
             cmocka_unit_test(test_copy_fsr_entry_count),
             cmocka_unit_test(test_copy_resync_keeps_next_chunk),
             cmocka_unit_test(test_copy_annotation_invalid),
+            cmocka_unit_test(test_copy_signal_def_over_write_caps),
 #if !defined(_WIN32)
             cmocka_unit_test(test_repair_read_only),
 #endif
