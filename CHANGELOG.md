@@ -185,6 +185,22 @@ This file contains the list of changes made to the JLS project.
 * Added example/recovery_fuzz.py, which damages pyjls-written files and
   reads them back through the pyjls Reader, for use with an
   AddressSanitizer build.
+* Added the JLS_COVERAGE CMake option and a Linux CI job that publishes
+  a gcovr C unit test coverage report.  See doc/coverage.md.
+* Fixed a double free in jls_rd_open() when crash recovery failed to
+  close the file.
+* Fixed the reader after a transient read or seek error.  A failed seek
+  could permanently drop a signal's summary levels, so later
+  jls_rd_fsr_length() calls returned 0.  A failed read at the end of the
+  UTC track could cache an incomplete time map for
+  jls_rd_sample_id_to_timestamp() and jls_rd_timestamp_to_sample_id().
+  A failed chunk header read inside the file now returns JLS_ERROR_IO,
+  not JLS_ERROR_EMPTY.
+* Added test-only read and seek fault injection,
+  jls_bk_read_limit_set(), and test/read_fault_test.c, which sweeps an
+  I/O failure through the reader, crash recovery, jls_repair(), and
+  jls_copy().  Recovery and repair can still leave an inconsistent file
+  after an I/O failure: see doc/plans/recovery_io_faults.md.
 
 
 ## 0.18.0

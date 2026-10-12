@@ -81,6 +81,26 @@ JLS_API int64_t jls_bk_write_total(void);
 /// Internal: returns 0 to allow a write of count bytes, else error.
 int32_t jls_bk_write_limit_consume(uint32_t count);
 
+/**
+ * @brief Test-only read and seek fault injection: fail after an
+ *      operation budget.
+ *
+ * @param remaining_ops The number of future jls_bk_fread and jls_bk_fseek
+ *      calls that may succeed before they fail with JLS_ERROR_IO, or -1 to
+ *      disable (default).
+ *
+ * Unlike the write budget, the read budget counts calls, not bytes, so
+ * tests can sweep a failure through every read and seek.  A failed call
+ * does not read or move the file position.
+ */
+JLS_API void jls_bk_read_limit_set(int64_t remaining_ops);
+
+/// The total jls_bk_fread and jls_bk_fseek calls in this process.
+JLS_API int64_t jls_bk_read_total(void);
+
+/// Internal: returns 0 to allow one read or seek, else error.
+int32_t jls_bk_read_limit_consume(void);
+
 // forward declaration for "threaded_writer.h"
 struct jls_twr_s;
 struct jls_bkt_s * jls_bkt_initialize(struct jls_twr_s * wr);

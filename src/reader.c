@@ -71,9 +71,9 @@ struct jls_rd_s {
  * All other corruption requires the offline jls_repair() operation.
  */
 static int32_t rd_open_recover(struct jls_core_s * core, const char * path, int64_t pos) {
-    int32_t rc;
-    ROE(jls_raw_close(core->raw));
+    int32_t rc = jls_raw_close(core->raw);  // frees raw even on error
     core->raw = NULL;
+    ROE(rc);
     rc = jls_raw_open(&core->raw, path, "a");
     if (rc && (rc != JLS_ERROR_TRUNCATED)) {
         return JLS_ERROR_TRUNCATED;  // read-only or locked: cannot repair in place
@@ -150,8 +150,9 @@ static int32_t rd_open_recover(struct jls_core_s * core, const char * path, int6
 
     ROE(jls_raw_seek_end(core->raw));  // END must append, never overwrite
     ROE(jls_core_wr_end(core));
-    ROE(jls_raw_close(core->raw));
+    rc = jls_raw_close(core->raw);  // frees raw even on error
     core->raw = NULL;
+    ROE(rc);
     return jls_raw_open(&core->raw, path, "r");
 }
 
@@ -841,9 +842,13 @@ int32_t jls_core_utc(struct jls_core_s * self, uint16_t signal_id, int64_t sampl
             }
             if (tail_offset) {
                 // continue with the unsummarized tail data chunks (crash-recovered files)
-                if (jls_raw_chunk_seek(self->raw, tail_offset)
-                        || jls_raw_rd_header(self->raw, &hdr)
-                        || (hdr.tag != JLS_TAG_TRACK_UTC_DATA)) {
+                int32_t rc = jls_raw_chunk_seek(self->raw, tail_offset);
+                if (0 == rc) {
+                    rc = jls_raw_rd_header(self->raw, &hdr);
+                }
+                if (JLS_ERROR_IO == rc) {
+                    return rc;  // transient: a partial result must not look complete
+                } else if (rc || (hdr.tag != JLS_TAG_TRACK_UTC_DATA)) {
                     return 0;  // tail not locatable; the summarized entries were reported
                 }
                 pos_prev = tail_offset;

@@ -22,6 +22,7 @@
 #include "jls/backend.h"
 #include "jls/format.h"
 #include "jls/ec.h"
+#include "jls/version.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -247,6 +248,41 @@ static void test_tag_to_name(void **state) {
     (void) state;
     assert_string_equal("end", jls_tag_to_name(JLS_TAG_END));
     assert_string_equal("invalid", jls_tag_to_name(JLS_TAG_INVALID));
+    assert_string_equal("track_fsr_summary", jls_tag_to_name(JLS_TAG_TRACK_FSR_SUMMARY));
+    assert_string_equal("unknown", jls_tag_to_name(0x03));
+
+    // Every defined tag has its own name: guards the format.h CAUTION.
+    const uint8_t tags[] = {
+        JLS_TAG_SOURCE_DEF, JLS_TAG_SIGNAL_DEF,
+        JLS_TAG_TRACK_FSR_DEF, JLS_TAG_TRACK_FSR_HEAD, JLS_TAG_TRACK_FSR_DATA,
+        JLS_TAG_TRACK_FSR_INDEX, JLS_TAG_TRACK_FSR_SUMMARY,
+        JLS_TAG_TRACK_VSR_DEF, JLS_TAG_TRACK_VSR_HEAD, JLS_TAG_TRACK_VSR_DATA,
+        JLS_TAG_TRACK_VSR_INDEX, JLS_TAG_TRACK_VSR_SUMMARY,
+        JLS_TAG_TRACK_ANNOTATION_DEF, JLS_TAG_TRACK_ANNOTATION_HEAD, JLS_TAG_TRACK_ANNOTATION_DATA,
+        JLS_TAG_TRACK_ANNOTATION_INDEX, JLS_TAG_TRACK_ANNOTATION_SUMMARY,
+        JLS_TAG_TRACK_UTC_DEF, JLS_TAG_TRACK_UTC_HEAD, JLS_TAG_TRACK_UTC_DATA,
+        JLS_TAG_TRACK_UTC_INDEX, JLS_TAG_TRACK_UTC_SUMMARY,
+        JLS_TAG_USER_DATA,
+    };
+    for (size_t i = 0; i < sizeof(tags); ++i) {
+        const char * name = jls_tag_to_name(tags[i]);
+        assert_string_not_equal("unknown", name);
+        assert_string_not_equal("invalid", name);
+        assert_string_not_equal("end", name);
+        for (size_t k = 0; k < i; ++k) {
+            assert_string_not_equal(jls_tag_to_name(tags[k]), name);
+        }
+    }
+}
+
+static void test_version(void **state) {
+    (void) state;
+    char expect[32];
+    snprintf(expect, sizeof(expect), "%d.%d.%d", JLS_VERSION_MAJOR, JLS_VERSION_MINOR, JLS_VERSION_PATCH);
+    assert_string_equal(expect, jls_version_str());
+    assert_int_equal(JLS_VERSION_U32, jls_version_u32());
+    assert_int_equal(((uint32_t) JLS_VERSION_MAJOR << 24) | ((uint32_t) JLS_VERSION_MINOR << 16) | JLS_VERSION_PATCH,
+                     jls_version_u32());
 }
 
 static void test_chunks_scan(void **state) {
@@ -508,6 +544,7 @@ int main(void) {
             cmocka_unit_test(test_seek),
             cmocka_unit_test(test_items_nav),
             cmocka_unit_test(test_tag_to_name),
+            cmocka_unit_test(test_version),
             cmocka_unit_test(test_chunks_scan),
             cmocka_unit_test(test_payload_size_on_disk),
             cmocka_unit_test(test_payload_length_wrap),

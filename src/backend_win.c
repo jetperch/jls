@@ -108,6 +108,9 @@ int32_t jls_bk_fwrite(struct jls_bkf_s * self, const void * buffer, unsigned int
 }
 
 int32_t jls_bk_fread(struct jls_bkf_s * self, void * const buffer, unsigned const buffer_size) {
+    if (jls_bk_read_limit_consume()) {
+        return JLS_ERROR_IO;  // test-only fault injection
+    }
     int sz = _read(self->fd, buffer, buffer_size);
     if (sz < 0) {
         JLS_LOGE("read failed %d", errno);
@@ -122,6 +125,9 @@ int32_t jls_bk_fread(struct jls_bkf_s * self, void * const buffer, unsigned cons
 }
 
 int32_t jls_bk_fseek(struct jls_bkf_s * self, int64_t offset, int origin) {
+    if (jls_bk_read_limit_consume()) {
+        return JLS_ERROR_IO;  // test-only fault injection
+    }
     int64_t pos = _lseeki64(self->fd, offset, origin);
     if (pos < 0) {
         JLS_LOGE("seek fail %d", errno);

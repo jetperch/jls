@@ -1045,10 +1045,13 @@ int32_t jls_core_fsr_length(struct jls_core_s * self, uint16_t signal_id, int64_
     // unsigned math: hostile timestamps must not overflow, checked below
     uint64_t offset_u64 = (uint64_t) signal_def->sample_id_offset;
     int64_t * offsets = self->signal_info[signal_id].tracks[JLS_TRACK_TYPE_FSR].head_offsets;
+    // Skip levels whose head lies outside the file, but do not probe with a
+    // seek: a transient I/O error must not drop a valid level for good.
+    int64_t fend = jls_raw_backend(self->raw)->fend;
     int level = JLS_SUMMARY_LEVEL_COUNT - 1;
     for (; level >= 0; --level) {
         offset = offsets[level];
-        if (offset && (0 == jls_raw_chunk_seek(self->raw, offset))) {
+        if ((offset > 0) && (offset < fend)) {
             break;
         } else {
             offset = 0;

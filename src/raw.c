@@ -62,9 +62,11 @@ static inline void invalidate_current_chunk(struct jls_raw_s * self) {
     self->hdr.tag = JLS_TAG_INVALID;
 }
 
-// Test-only write fault injection; see jls/backend.h.
+// Test-only fault injection; see jls/backend.h.
 static int64_t bk_write_limit = -1;    // -1: unlimited
 static int64_t bk_write_total = 0;
+static int64_t bk_read_limit = -1;     // -1: unlimited
+static int64_t bk_read_total = 0;
 
 void jls_bk_write_limit_set(int64_t remaining_bytes) {
     bk_write_limit = remaining_bytes;
@@ -72,6 +74,14 @@ void jls_bk_write_limit_set(int64_t remaining_bytes) {
 
 int64_t jls_bk_write_total(void) {
     return bk_write_total;
+}
+
+void jls_bk_read_limit_set(int64_t remaining_ops) {
+    bk_read_limit = remaining_ops;
+}
+
+int64_t jls_bk_read_total(void) {
+    return bk_read_total;
 }
 
 // Read accounting for traversal-bound tests; see jls/raw.h.
@@ -86,17 +96,25 @@ int64_t jls_raw_rd_payload_total(void) {
     return raw_rd_payload_total;
 }
 
-int32_t jls_bk_write_limit_consume(uint32_t count) {
-    bk_write_total += count;
-    if (bk_write_limit < 0) {
+static int32_t limit_consume(int64_t * limit, int64_t * total, int64_t count) {
+    *total += count;
+    if (*limit < 0) {
         return 0;  // unlimited
     }
-    if ((int64_t) count > bk_write_limit) {
-        bk_write_limit = 0;  // budget exhausted; simulate crash mid-write
+    if (count > *limit) {
+        *limit = 0;  // budget exhausted: later calls fail too
         return JLS_ERROR_IO;
     }
-    bk_write_limit -= count;
+    *limit -= count;
     return 0;
+}
+
+int32_t jls_bk_write_limit_consume(uint32_t count) {
+    return limit_consume(&bk_write_limit, &bk_write_total, count);
+}
+
+int32_t jls_bk_read_limit_consume(void) {
+    return limit_consume(&bk_read_limit, &bk_read_total, 1);
 }
 
 // 64-bit: payload_length near UINT32_MAX must not wrap.
@@ -376,7 +394,9 @@ int32_t jls_raw_rd_header(struct jls_raw_s * self, struct jls_chunk_header_s * h
         self->offset = self->backend.fpos;
         if (jls_bk_fread(&self->backend, (uint8_t *) h, sizeof(*h))) {
             invalidate_current_chunk(self);
-            return JLS_ERROR_EMPTY;
+            // a header past the file end is the end, else an I/O error
+            int64_t hdr_end = self->offset + (int64_t) sizeof(*h);
+            return (hdr_end > self->backend.fend) ? JLS_ERROR_EMPTY : JLS_ERROR_IO;
         }
         ++raw_rd_header_total;
         uint32_t crc32 = jls_crc32c_hdr(h);
@@ -589,27 +609,6 @@ int32_t jls_raw_item_prev(struct jls_raw_s * self) {
     RLE(jls_bk_fseek(&self->backend, pos, SEEK_SET));
     self->offset = self->backend.fpos;
     return 0;
-}
-
-int64_t jls_raw_chunk_tell_end(struct jls_raw_s * self) {
-    int64_t starting_pos = jls_raw_chunk_tell(self);
-    int64_t end_pos = self->backend.fend - sizeof(struct jls_chunk_header_s);
-    if (end_pos < (int64_t) sizeof(struct jls_file_header_s)) {
-        end_pos = 0;
-    } else if (jls_raw_chunk_seek(self, end_pos)) {
-        JLS_LOGW("seek to end failed");
-        end_pos = 0;
-    } else if (jls_raw_rd_header(self, NULL)) {
-        JLS_LOGW("end chunk not found");
-        end_pos = 0;
-    } else if (self->hdr.tag != JLS_TAG_END) {
-        end_pos = 0;
-    }
-    if (jls_raw_chunk_seek(self, starting_pos)) {
-        JLS_LOGW("seek to starting_pos failed");
-        end_pos = 0;
-    }
-    return end_pos;
 }
 
 const char * jls_tag_to_name(uint8_t tag) {

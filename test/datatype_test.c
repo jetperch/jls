@@ -21,6 +21,7 @@
 #include "jls/datatype.h"
 #include "jls/format.h"
 #include "jls/ec.h"
+#include "jls/raw.h"
 #include <stdio.h>
 #include <string.h>
 #include <float.h>
@@ -235,6 +236,27 @@ static void test_invalid(void **state) {
     assert_float_equal(7.0, dst[0], 0.0);
 }
 
+static void test_dt_str(void **state) {
+    (void) state;
+    const struct {
+        uint32_t datatype;
+        const char * name;
+    } names[] = {
+        {JLS_DATATYPE_I4, "i4"}, {JLS_DATATYPE_I8, "i8"}, {JLS_DATATYPE_I16, "i16"},
+        {JLS_DATATYPE_I24, "i24"}, {JLS_DATATYPE_I32, "i32"}, {JLS_DATATYPE_I64, "i64"},
+        {JLS_DATATYPE_U1, "u1"}, {JLS_DATATYPE_U4, "u4"}, {JLS_DATATYPE_U8, "u8"},
+        {JLS_DATATYPE_U16, "u16"}, {JLS_DATATYPE_U24, "u24"}, {JLS_DATATYPE_U32, "u32"},
+        {JLS_DATATYPE_U64, "u64"}, {JLS_DATATYPE_F32, "f32"}, {JLS_DATATYPE_F64, "f64"},
+    };
+    for (size_t i = 0; i < ARRAY_SIZE(names); ++i) {
+        assert_string_equal(names[i].name, jls_dt_str(names[i].datatype));
+    }
+    // fixed point q does not change the name
+    assert_string_equal("i16", jls_dt_str(JLS_DATATYPE_DEF(INT, 16, 8)));
+    assert_string_equal("u8", jls_dt_str(JLS_DATATYPE_DEF(UINT, 8, -2)));
+    assert_string_equal("dt_unknown", jls_dt_str(JLS_DATATYPE_DEF(FLOAT, 16, 0)));
+}
+
 int main(void) {
     const struct CMUnitTest tests[] = {
             cmocka_unit_test(test_u1),
@@ -257,6 +279,7 @@ int main(void) {
             cmocka_unit_test(test_i24_u24),
             cmocka_unit_test(test_fixed_point),
             cmocka_unit_test(test_invalid),
+            cmocka_unit_test(test_dt_str),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);

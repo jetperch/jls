@@ -34,6 +34,7 @@
 #include "jls/raw.h"
 #include "jls/reader.h"
 #include "jls/writer.h"
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -700,6 +701,60 @@ static void test_fsr_omit_reconstruct_types(void ** state) {
     remove(PATH);
 }
 
+// The writer never omits f64 chunks, so zero an index offset to make the
+// reader rebuild one from its summary entries, as for legacy files.
+static void test_fsr_omit_reconstruct_f64(void ** state) {
+    (void) state;
+    const uint32_t sdf = 1000;
+    const uint32_t n = 6 * 2 * sdf;
+    const double mean[] = {1.0, -2.0, 10.0, -4.0, 3.0, 0.25};  // per data chunk
+    const double std = 0.5;
+    struct jls_signal_def_s def = signal_def_typed(JLS_DATATYPE_F64, 2 * sdf, sdf, 20, 10);
+    double * x = malloc(n * sizeof(double));
+    double * y = malloc(2 * sdf * sizeof(double));
+    assert_non_null(x);
+    assert_non_null(y);
+    for (uint32_t i = 0; i < n; ++i) {
+        x[i] = mean[i / (2 * sdf)] + ((i & 1) ? std : -std);  // population std is exactly std
+    }
+    gen_packed(PATH, &def, 0, (const uint8_t *) x, n, 0);
+
+    struct file_s f;
+    file_load(PATH, &f, 0);
+    struct jls_chunk_header_s * h = chunk_nth(&f, JLS_TAG_TRACK_FSR_INDEX, META_L1, 0);
+    assert_non_null(h);
+    struct jls_fsr_index_s * idx = chunk_payload(h);
+    assert_true(idx->header.entry_count >= 3);
+    idx->offsets[2] = 0;  // data chunk 2: samples 4000 to 5999
+    chunk_resign(h);
+    file_save(PATH, &f);
+
+    struct jls_rd_s * rd = NULL;
+    assert_int_equal(0, jls_rd_open(&rd, PATH));
+    assert_int_equal(0, jls_rd_fsr(rd, 1, 0, y, 2 * sdf));
+    assert_memory_equal(x, y, 2 * sdf * sizeof(double));  // other chunks unchanged
+    assert_int_equal(0, jls_rd_fsr(rd, 1, 4 * sdf, y, 2 * sdf));
+    for (uint32_t e = 0; e < 2; ++e) {  // each summary entry
+        double sum = 0.0;
+        double sum2 = 0.0;
+        for (uint32_t i = 0; i < sdf; ++i) {
+            double v = y[e * sdf + i];
+            assert_true(isfinite(v));
+            sum += v;
+            sum2 += v * v;
+        }
+        double m = sum / sdf;
+        double s = sqrt(sum2 / sdf - m * m);
+        assert_float_equal(mean[2], m, 0.1 * std);  // Gaussian, not the original samples
+        assert_float_equal(std, s, 0.1 * std);
+    }
+    assert_true(memcmp(x + 4 * sdf, y, 2 * sdf * sizeof(double)) != 0);
+    jls_rd_close(rd);
+    free(x);
+    free(y);
+    remove(PATH);
+}
+
 
 // --- C5: level-1 index & summary validation ---
 
@@ -928,6 +983,7 @@ int main(void) {
             cmocka_unit_test(test_fsr_data_timestamp_corrupt),
             cmocka_unit_test(test_fsr_omit_reconstruct_corrupt),
             cmocka_unit_test(test_fsr_omit_reconstruct_types),
+            cmocka_unit_test(test_fsr_omit_reconstruct_f64),
             cmocka_unit_test(test_fsr_level1_corrupt),
             cmocka_unit_test(test_fsr_read_bounds_overflow),
             cmocka_unit_test(test_rd_chunk_large),
