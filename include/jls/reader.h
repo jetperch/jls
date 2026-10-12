@@ -164,16 +164,29 @@ JLS_API int32_t jls_rd_fsr_f32(struct jls_rd_s * self, uint16_t signal_id, int64
  * for all four statistics.  Integer signals with a fixed-point q scale
  * each sample by 2^-q, see JLS_DATATYPE_DEF.
  *
+ * The reported std is the sample standard deviation (n - 1 divisor)
+ * whether computed from samples or from summaries.
+ *
  * Summary entries do not record their finite sample count.  When
  * statistics use summaries, an entry that contains some non-finite
  * samples contributes with the weight of its full sample count.
  *
- * For data_length 1, the statistics are sample-accurate.  For
- * larger data_lengths, the external boundaries for start and end
- * are computed exactly.  The internal boundaries are approximated,
- * perfect for waveform display, but perhaps not suitable for other use
- * cases.  If you need sample accurate statistics over multiple
- * increments, call this function repeatedly with data_length 1.
+ * For data_length 1, a window shorter than 25 * sample_decimate_factor
+ * samples is computed from the samples, so its statistics are
+ * sample-accurate.  A longer window computes its partial first and last
+ * summary entries from the samples and combines the stored summary
+ * entries between them.  Its min and max are exact.  Its mean and std
+ * are accurate to the summary precision: summaries store float64 for
+ * f64, u32, u64, i32, and i64 data and float32 for all other types,
+ * which limits the std of a signal whose mean is large relative to its
+ * std (about 2e-5 relative for 15 V with a 4 mV std).  Entries with
+ * some non-finite samples contribute their full count, as above.
+ *
+ * For larger data_lengths, the external boundaries for start and end
+ * are computed as for data_length 1.  The internal boundaries are
+ * approximated, perfect for waveform display, but perhaps not suitable
+ * for other use cases.  For sample-accurate statistics over a long
+ * window, read the samples with jls_rd_fsr() and compute them.
  */
 JLS_API int32_t jls_rd_fsr_statistics(struct jls_rd_s * self, uint16_t signal_id,
                                       int64_t start_sample_id, int64_t increment,

@@ -57,6 +57,22 @@ This file contains the list of changes made to the JLS project.
    for data types with a nonzero fixed-point q now apply the documented
    2**-q scale.  Previously the scale was never applied.
 
+* Fixed the FSR statistics std computed from summaries.  Summaries store
+  the population std, but the reader treated it as the sample std, so
+  windows spanning several summary entries reported a std that was too
+  low by up to (k - 1) / k in variance, where k is the entry size (0.4%
+  for k = 256).  Statistics now report the sample std (n - 1) from both
+  samples and summaries, so values change slightly.  The file format is
+  unchanged.  See doc/plans/completed/summary_std_divisor.md.
+* Documented that a gap in FSR sample_ids is filled with NaN for float
+  types and 0 otherwise, not interpolated.
+* Corrected the jls_rd_fsr_statistics() and Reader.fsr_statistics()
+  documentation for a single window (data_length 1), which claimed
+  sample-accurate results.  Only windows shorter than
+  25 * sample_decimate_factor samples are computed from the samples.
+  Longer windows combine summaries: min and max are exact, and mean and
+  std are accurate to the summary precision (float32 summaries for
+  types other than f64, u32, u64, i32, and i64).  Behavior is unchanged.
 * Fixed the inverted Writer.fsr_omit_data() enable argument (see above).
   Corrected the jls_twr_fsr_omit_data() documentation, which said these
   data types are omitted regardless of the setting.

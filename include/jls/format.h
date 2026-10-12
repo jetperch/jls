@@ -468,7 +468,7 @@ struct jls_track_head_s {
 /// The summary storage order for each entry
 enum jls_summary_fsr_e {
     JLS_SUMMARY_FSR_MEAN = 0,
-    JLS_SUMMARY_FSR_STD = 1,
+    JLS_SUMMARY_FSR_STD = 1,     // population standard deviation: divide by the sample count
     JLS_SUMMARY_FSR_MIN = 2,
     JLS_SUMMARY_FSR_MAX = 3,
     JLS_SUMMARY_FSR_COUNT = 4,   // must be last
@@ -658,7 +658,7 @@ struct jls_fsr_f32_summary_s {
 /**
  * @brief The FSR summary chunk format with f64 values.
  *
- * This summary format is used by u64, i64, f64.
+ * This summary format is used by u32, u64, i32, i64, f64.
  */
 struct jls_fsr_f64_summary_s {
     struct jls_payload_header_s header;   ///< The payload

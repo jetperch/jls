@@ -22,6 +22,7 @@
 #include "jls/writer.h"
 #include "jls/crc32c.h"
 #include "jls/log.h"
+#include <inttypes.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -930,9 +931,10 @@ static void test_fsr_statistics_u1(void **state) {
     assert_float_equal(0.0f, f32[JLS_SUMMARY_FSR_MIN], 1e-15);
     assert_float_equal(1.0f, f32[JLS_SUMMARY_FSR_MAX], 1e-15);
 
+    // from summaries: the same sample std as from samples above
     assert_int_equal(0, jls_rd_fsr_statistics(rd, signal_7.signal_id, 0, 1024, f32, 1024));
     assert_float_equal(0.75f, f32[JLS_SUMMARY_FSR_MEAN], 1e-15);
-    assert_float_equal(0.433013f, f32[JLS_SUMMARY_FSR_STD], 1e-6);
+    assert_float_equal(0.433224f, f32[JLS_SUMMARY_FSR_STD], 1e-6);
     assert_float_equal(0.0f, f32[JLS_SUMMARY_FSR_MIN], 1e-15);
     assert_float_equal(1.0f, f32[JLS_SUMMARY_FSR_MAX], 1e-15);
 
@@ -1008,6 +1010,690 @@ static void test_fsr_u1_sample_skip(void **state) {
     assert_memory_equal(data_zeros, data + 370, 5);
 
     jls_rd_close(rd);
+    remove(filename);
+}
+
+/*
+ * Missing samples, end to end: a forward skip in sample_id fills the gap
+ * with NaN (float) or 0 (integer); the reader returns the fill like any
+ * other sample.  Nothing interpolates.  Samples before the first write are
+ * not filled: the first written sample is API sample 0.
+ */
+#define GAP_OFFSET (1000)  // first written file sample_id
+#define GAP_SDF (1280)       // sample_decimate_factor valid for every type, even u24
+static const int64_t GAP_SEGMENTS[][2] = {  // {start, length} in API samples
+        {0, 65280},          // ends mid chunk, summary entry aligned
+        {640000, 13},        // 574720 sample gap; ends mid-byte for u1 and u4
+        {640016, 3000},      // 3 sample gap inside one summary entry
+};
+#define GAP_LENGTH (643016)
+#define GAP_LEVEL2 (GAP_SDF * 10)  // one level 2 summary entry, one straddles the large gap
+
+static uint64_t gap_bits_get(const uint8_t * p, uint64_t idx, uint8_t bits) {
+    uint64_t v = 0;
+    for (uint8_t b = 0; b < bits; ++b) {
+        uint64_t k = idx * bits + b;
+        v |= ((uint64_t) ((p[k >> 3] >> (k & 7)) & 1)) << b;
+    }
+    return v;
+}
+
+static void gap_bits_set(uint8_t * p, uint64_t idx, uint8_t bits, uint64_t v) {
+    for (uint8_t b = 0; b < bits; ++b) {
+        uint64_t k = idx * bits + b;
+        if ((v >> b) & 1) {
+            p[k >> 3] |= (uint8_t) (1 << (k & 7));
+        } else {
+            p[k >> 3] &= (uint8_t) ~(1 << (k & 7));
+        }
+    }
+}
+
+static int gap_contains(int64_t i) {
+    for (size_t k = 0; k < sizeof(GAP_SEGMENTS) / sizeof(GAP_SEGMENTS[0]); ++k) {
+        if ((i >= GAP_SEGMENTS[k][0]) && (i < (GAP_SEGMENTS[k][0] + GAP_SEGMENTS[k][1]))) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+// The raw bits of written sample i.
+static uint64_t gap_raw(uint32_t data_type, int64_t i) {
+    uint8_t bits = (uint8_t) ((data_type >> 8) & 0xff);
+    if (JLS_DATATYPE_F32 == data_type) {
+        float f = (float) (((i * 37) % 101) - 50);
+        uint32_t u;
+        memcpy(&u, &f, sizeof(u));
+        return u;
+    } else if (JLS_DATATYPE_F64 == data_type) {
+        double f = (double) (((i * 37) % 101) - 50);
+        uint64_t u;
+        memcpy(&u, &f, sizeof(u));
+        return u;
+    }
+    uint64_t v = ((uint64_t) i + 1) * 0x9E3779B97F4A7C15ULL;
+    v ^= v >> 29;
+    return (bits >= 64) ? v : (v & ((1ULL << bits) - 1));
+}
+
+// The value of raw bits, NaN for float fill.
+static double gap_value(uint32_t data_type, uint64_t raw) {
+    uint8_t bits = (uint8_t) ((data_type >> 8) & 0xff);
+    if (JLS_DATATYPE_F32 == data_type) {
+        float f;
+        uint32_t u = (uint32_t) raw;
+        memcpy(&f, &u, sizeof(f));
+        return f;
+    } else if (JLS_DATATYPE_F64 == data_type) {
+        double f;
+        memcpy(&f, &raw, sizeof(f));
+        return f;
+    } else if (data_type & JLS_DATATYPE_BASETYPE_UNSIGNED) {
+        return (double) raw;
+    } else if ((bits < 64) && ((raw >> (bits - 1)) & 1)) {
+        return (double) (int64_t) (raw | ~((1ULL << bits) - 1));  // sign extend
+    }
+    return (double) (int64_t) raw;
+}
+
+static int64_t gap_write(uint32_t data_type, uint32_t omit) {
+    uint8_t bits = (uint8_t) ((data_type >> 8) & 0xff);
+    struct jls_signal_def_s def = SIGNAL_5;
+    def.data_type = data_type;
+    def.samples_per_data = 2 * GAP_SDF;
+    def.sample_decimate_factor = GAP_SDF;
+    def.entries_per_summary = 20;
+    def.summary_decimate_factor = 10;  // statistics use level 2 for 25+ entries
+    struct jls_wr_s * wr = NULL;
+    assert_int_equal(0, jls_wr_open(&wr, filename));
+    assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_3));
+    assert_int_equal(0, jls_wr_signal_def(wr, &def));
+    if (omit) {
+        assert_int_equal(0, jls_wr_fsr_omit_data(wr, 5, 1));
+    }
+    for (size_t k = 0; k < sizeof(GAP_SEGMENTS) / sizeof(GAP_SEGMENTS[0]); ++k) {
+        int64_t start = GAP_SEGMENTS[k][0];
+        uint32_t length = (uint32_t) GAP_SEGMENTS[k][1];
+        uint8_t * p = calloc(1, ((size_t) length * bits + 7) / 8);
+        for (uint32_t i = 0; i < length; ++i) {
+            gap_bits_set(p, i, bits, gap_raw(data_type, start + i));
+        }
+        assert_int_equal(0, jls_wr_fsr(wr, 5, GAP_OFFSET + start, p, length));
+        free(p);
+    }
+    assert_int_equal(0, jls_wr_close(wr));
+    FILE * f = fopen(filename, "rb");
+    assert_non_null(f);
+    fseek(f, 0, SEEK_END);
+    int64_t sz = (int64_t) ftell(f);
+    fclose(f);
+    return sz;
+}
+
+// entry: the size of the summary entries (or sample groups) the reader combines
+static void gap_check_stats(struct jls_rd_s * rd, uint32_t data_type, const double * x,
+                            int64_t entry, int64_t increment) {
+    int is_float = (data_type & JLS_DATATYPE_BASETYPE_FLOAT) ? 1 : 0;
+    int64_t count = GAP_LENGTH / increment;
+    double * stats = malloc((size_t) count * JLS_SUMMARY_FSR_COUNT * sizeof(double));
+    assert_int_equal(0, jls_rd_fsr_statistics(rd, 5, 0, increment, stats, count));
+    for (int64_t w = 0; w < count; ++w) {
+        double * s = stats + w * JLS_SUMMARY_FSR_COUNT;
+        int64_t n = 0;
+        // Windows of several summary entries weight each entry fully, so a
+        // window holding an entry that mixes data and NaN fill is approximate.
+        int mixed = 0;
+        double sum = 0.0;
+        double sum2 = 0.0;
+        double v_min = INFINITY;
+        double v_max = -INFINITY;
+        double v_abs = 1.0;
+        for (int64_t e = w * increment; e < (w + 1) * increment; e += entry) {
+            int64_t e_nan = 0;
+            for (int64_t i = e; i < e + entry; ++i) {
+                if (isnan(x[i])) {
+                    ++e_nan;
+                    continue;
+                }
+                ++n;
+                sum += x[i];
+                sum2 += x[i] * x[i];
+                v_min = (x[i] < v_min) ? x[i] : v_min;
+                v_max = (x[i] > v_max) ? x[i] : v_max;
+                v_abs = (fabs(x[i]) > v_abs) ? fabs(x[i]) : v_abs;
+            }
+            mixed |= (e_nan > 0) && (e_nan < entry);
+        }
+        if (0 == n) {  // only float fill: every statistic is NaN
+            assert_true(is_float);
+            for (int k = 0; k < JLS_SUMMARY_FSR_COUNT; ++k) {
+                assert_true(isnan(s[k]));
+            }
+        } else if (!mixed || (increment == entry)) {
+            double tol = 1e-6 * v_abs;
+            assert_float_equal(sum / (double) n, s[JLS_SUMMARY_FSR_MEAN], tol);
+            assert_float_equal(v_min, s[JLS_SUMMARY_FSR_MIN], tol);
+            assert_float_equal(v_max, s[JLS_SUMMARY_FSR_MAX], tol);
+            // sample (n - 1) standard deviation; a mixed entry uses its full
+            // size for n, as it does not record its finite sample count
+            double mean = sum / (double) n;
+            double var = (sum2 / (double) n) - (mean * mean);
+            double std = sqrt((var > 0.0) ? var : 0.0);
+            double std_hi = (n > 1) ? (std * sqrt((double) n / (double) (n - 1))) : 0.0;
+            double std_lo = mixed ? (std * sqrt((double) entry / (double) (entry - 1))) : std_hi;
+            if (!((s[JLS_SUMMARY_FSR_STD] >= (std_lo - tol)) && (s[JLS_SUMMARY_FSR_STD] <= (std_hi + tol)))) {
+                print_error("type 0x%08x window %" PRIi64 ": std %.9g not in [%.9g, %.9g]\n",
+                            data_type, w, s[JLS_SUMMARY_FSR_STD], std_lo, std_hi);
+                fail();
+            }
+        }
+    }
+    free(stats);
+}
+
+static void gap_check(uint32_t data_type, uint32_t omit) {
+    uint8_t bits = (uint8_t) ((data_type >> 8) & 0xff);
+    int is_float = (data_type & JLS_DATATYPE_BASETYPE_FLOAT) ? 1 : 0;
+    struct jls_rd_s * rd = NULL;
+    assert_int_equal(0, jls_rd_open(&rd, filename));
+    struct jls_signal_def_s def;
+    assert_int_equal(0, jls_rd_signal(rd, 5, &def));
+    assert_int_equal(GAP_OFFSET, def.sample_id_offset);  // no fill before the first write
+    assert_int_equal(GAP_SDF, def.sample_decimate_factor);
+    assert_int_equal(GAP_LEVEL2, def.sample_decimate_factor * def.summary_decimate_factor);
+    int64_t samples = 0;
+    assert_int_equal(0, jls_rd_fsr_length(rd, 5, &samples));
+    assert_int_equal(GAP_LENGTH, samples);
+
+    uint8_t * p = malloc(((size_t) GAP_LENGTH * bits + 7) / 8);
+    double * x = malloc(GAP_LENGTH * sizeof(double));
+    assert_int_equal(0, jls_rd_fsr(rd, 5, 0, p, GAP_LENGTH));
+    for (int64_t i = 0; i < GAP_LENGTH; ++i) {
+        uint64_t raw = gap_bits_get(p, (uint64_t) i, bits);
+        x[i] = gap_value(data_type, raw);
+        if (!gap_contains(i)) {
+            assert_true(raw == gap_raw(data_type, i));
+        } else if (is_float) {
+            assert_true(isnan(x[i]));
+        } else if (0 != raw) {
+            print_error("type 0x%08x omit %u: sample %" PRIi64 " fill %" PRIu64 "\n",
+                        data_type, omit, i, raw);
+            fail();
+        }
+    }
+    gap_check_stats(rd, data_type, x, 100, 100);  // from samples
+    gap_check_stats(rd, data_type, x, GAP_SDF, GAP_SDF);  // level 1 summary entries
+    gap_check_stats(rd, data_type, x, GAP_LEVEL2, GAP_LEVEL2);  // level 2 summary entries
+    gap_check_stats(rd, data_type, x, GAP_LEVEL2, GAP_LEVEL2 * 4);
+
+    // A window starting mid entry: its head comes from a nested sample read.
+    const int64_t head = GAP_SDF / 2;
+    const int64_t incr = head + GAP_SDF * 13;  // ends entry aligned; 2 windows use level 1
+    double stats[2 * JLS_SUMMARY_FSR_COUNT];
+    assert_int_equal(0, jls_rd_fsr_statistics(rd, 5, GAP_SDF - head, incr, stats, 2));
+    double sum = 0.0;
+    double sum2 = 0.0;
+    for (int64_t i = GAP_SDF - head; i < GAP_SDF - head + incr; ++i) {
+        sum += x[i];
+    }
+    double mean = sum / (double) incr;
+    for (int64_t i = GAP_SDF - head; i < GAP_SDF - head + incr; ++i) {
+        sum2 += (x[i] - mean) * (x[i] - mean);
+    }
+    double std = sqrt(sum2 / (double) (incr - 1));
+    assert_float_equal(mean, stats[JLS_SUMMARY_FSR_MEAN], 1e-6 * (fabs(mean) + std + 1.0));
+    assert_float_equal(std, stats[JLS_SUMMARY_FSR_STD], 1e-6 * (fabs(mean) + std + 1.0));
+    free(x);
+    free(p);
+    jls_rd_close(rd);
+}
+
+static void test_fsr_gap(void **state) {
+    (void) state;
+    const uint32_t types[] = {
+            JLS_DATATYPE_F32, JLS_DATATYPE_F64,
+            JLS_DATATYPE_U1, JLS_DATATYPE_U4, JLS_DATATYPE_U8, JLS_DATATYPE_U16,
+            JLS_DATATYPE_U24, JLS_DATATYPE_U32, JLS_DATATYPE_U64,
+            JLS_DATATYPE_I4, JLS_DATATYPE_I8, JLS_DATATYPE_I16,
+            JLS_DATATYPE_I24, JLS_DATATYPE_I32, JLS_DATATYPE_I64,
+    };
+    for (size_t k = 0; k < sizeof(types) / sizeof(types[0]); ++k) {
+        uint32_t data_type = types[k];
+        int64_t sz = gap_write(data_type, 0);
+        gap_check(data_type, 0);
+        if (((data_type >> 8) & 0xff) <= 8) {
+            // omit_data drops the all-zero fill chunks; the reader rebuilds them
+            assert_true(gap_write(data_type, 1) < (sz / 2));
+            gap_check(data_type, 1);
+        }
+    }
+    remove(filename);
+}
+
+/*
+ * data_length 1 statistics (see jls_rd_fsr_statistics): windows shorter
+ * than 25 * sample_decimate_factor come from the samples and match an
+ * exact double precision computation.  Longer windows combine summaries:
+ * min and max stay exact, and mean and std are accurate to the summary
+ * precision.
+ */
+#define LEN1_N (200000)
+#define LEN1_SDF (256)
+#define LEN1_GAP_START (50000)  // NaN gap splits two summary entries (floats)
+#define LEN1_GAP_END (50200)
+
+static double len1_value(uint32_t data_type, int64_t i) {
+    uint32_t h = (uint32_t) (i + 1) * 2654435761U;
+    h ^= h >> 15;
+    switch (data_type) {
+        case JLS_DATATYPE_F32: return (double) (15.0f + 0.004f * ((float) (h & 0xffff) / 65536.0f - 0.5f));
+        case JLS_DATATYPE_F64: return 15.0 + 0.004 * ((double) (h & 0xffff) / 65536.0 - 0.5);
+        case JLS_DATATYPE_U8: return (double) (h & 0xff);
+        default: return (double) h;  // u32
+    }
+}
+
+static void len1_write(uint32_t data_type) {
+    struct jls_signal_def_s def = SIGNAL_5;
+    def.data_type = data_type;
+    def.samples_per_data = 4 * LEN1_SDF;
+    def.sample_decimate_factor = LEN1_SDF;
+    uint8_t bytes = (uint8_t) (((data_type >> 8) & 0xff) / 8);
+    uint8_t * p = malloc((size_t) LEN1_N * bytes);
+    for (int64_t i = 0; i < LEN1_N; ++i) {
+        double v = len1_value(data_type, i);
+        if (JLS_DATATYPE_F32 == data_type) {
+            ((float *) p)[i] = (float) v;
+        } else if (JLS_DATATYPE_F64 == data_type) {
+            ((double *) p)[i] = v;
+        } else if (JLS_DATATYPE_U8 == data_type) {
+            p[i] = (uint8_t) v;
+        } else {
+            ((uint32_t *) p)[i] = (uint32_t) v;
+        }
+    }
+    int is_float = (data_type & JLS_DATATYPE_BASETYPE_FLOAT) ? 1 : 0;
+    struct jls_wr_s * wr = NULL;
+    assert_int_equal(0, jls_wr_open(&wr, filename));
+    assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_3));
+    assert_int_equal(0, jls_wr_signal_def(wr, &def));
+    if (is_float) {  // integer gaps fill with 0, which is data
+        assert_int_equal(0, jls_wr_fsr(wr, 5, 0, p, LEN1_GAP_START));
+        assert_int_equal(0, jls_wr_fsr(wr, 5, LEN1_GAP_END, p + (size_t) LEN1_GAP_END * bytes,
+                                       LEN1_N - LEN1_GAP_END));
+    } else {
+        assert_int_equal(0, jls_wr_fsr(wr, 5, 0, p, LEN1_N));
+    }
+    assert_int_equal(0, jls_wr_close(wr));
+    free(p);
+}
+
+// Two-pass double precision statistics, skipping the NaN gap.
+static void len1_exact(uint32_t data_type, int64_t start, int64_t length, double * stats) {
+    int is_float = (data_type & JLS_DATATYPE_BASETYPE_FLOAT) ? 1 : 0;
+    double sum = 0.0;
+    double v_min = INFINITY;
+    double v_max = -INFINITY;
+    int64_t n = 0;
+    for (int64_t i = start; i < start + length; ++i) {
+        if (is_float && (i >= LEN1_GAP_START) && (i < LEN1_GAP_END)) {
+            continue;
+        }
+        double v = len1_value(data_type, i);
+        sum += v;
+        v_min = (v < v_min) ? v : v_min;
+        v_max = (v > v_max) ? v : v_max;
+        ++n;
+    }
+    double mean = sum / (double) n;
+    double s = 0.0;
+    for (int64_t i = start; i < start + length; ++i) {
+        if (is_float && (i >= LEN1_GAP_START) && (i < LEN1_GAP_END)) {
+            continue;
+        }
+        double d = len1_value(data_type, i) - mean;
+        s += d * d;
+    }
+    stats[JLS_SUMMARY_FSR_MEAN] = mean;
+    stats[JLS_SUMMARY_FSR_STD] = (n > 1) ? sqrt(s / (double) (n - 1)) : 0.0;
+    stats[JLS_SUMMARY_FSR_MIN] = v_min;
+    stats[JLS_SUMMARY_FSR_MAX] = v_max;
+}
+
+// rtol for mean and std, relative to |mean| + std
+static void len1_check(struct jls_rd_s * rd, uint32_t data_type, int64_t start, int64_t length, double rtol) {
+    double t[JLS_SUMMARY_FSR_COUNT];
+    double s[JLS_SUMMARY_FSR_COUNT];
+    len1_exact(data_type, start, length, t);
+    assert_int_equal(0, jls_rd_fsr_statistics(rd, 5, start, length, s, 1));
+    double tol = rtol * (fabs(t[JLS_SUMMARY_FSR_MEAN]) + t[JLS_SUMMARY_FSR_STD]);
+    if ((fabs(s[JLS_SUMMARY_FSR_MEAN] - t[JLS_SUMMARY_FSR_MEAN]) > tol)
+            || (fabs(s[JLS_SUMMARY_FSR_STD] - t[JLS_SUMMARY_FSR_STD]) > tol)
+            || (s[JLS_SUMMARY_FSR_MIN] != t[JLS_SUMMARY_FSR_MIN])
+            || (s[JLS_SUMMARY_FSR_MAX] != t[JLS_SUMMARY_FSR_MAX])) {
+        print_error("type 0x%08x window %" PRIi64 " + %" PRIi64 ": got %.17g %.17g %.17g %.17g, "
+                    "exact %.17g %.17g %.17g %.17g, tol %g\n", data_type, start, length,
+                    s[0], s[1], s[2], s[3], t[0], t[1], t[2], t[3], tol);
+        fail();
+    }
+}
+
+static void test_fsr_statistics_length_one(void **state) {
+    (void) state;
+    const uint32_t types[] = {JLS_DATATYPE_F32, JLS_DATATYPE_F64, JLS_DATATYPE_U8, JLS_DATATYPE_U32};
+    const int64_t threshold = 25 * LEN1_SDF;  // shorter windows read samples
+    const int64_t below[][2] = {  // {start, length}: exact, including the NaN gap
+            {0, 1}, {7, 2}, {49990, 300}, {LEN1_GAP_START - 1, 202}, {100, threshold - 1},
+            {LEN1_GAP_START - 3000, threshold - 1}, {123457, 4321}, {LEN1_N - threshold + 1, threshold - 1},
+    };
+    const int64_t above[][2] = {  // avoid the two summary entries the gap splits
+            {0, threshold}, {1, 40000}, {60000, 100000}, {51200, threshold}, {50433, LEN1_N - 50433},
+    };
+    for (size_t k = 0; k < sizeof(types) / sizeof(types[0]); ++k) {
+        uint32_t data_type = types[k];
+        // summary precision: float32 except for f64, u32, u64, i32, and i64.  Measured
+        // worst: 1.6e-9 (f32 at 15 V), 5e-15 (f64); the old std divisor bug: 1.4e-7.
+        double rtol_summary = ((JLS_DATATYPE_F64 == data_type) || (JLS_DATATYPE_U32 == data_type)) ? 1e-12 : 1e-8;
+        len1_write(data_type);
+        struct jls_rd_s * rd = NULL;
+        assert_int_equal(0, jls_rd_open(&rd, filename));
+        struct jls_signal_def_s def;
+        assert_int_equal(0, jls_rd_signal(rd, 5, &def));
+        assert_int_equal(LEN1_SDF, def.sample_decimate_factor);
+        for (size_t w = 0; w < sizeof(below) / sizeof(below[0]); ++w) {
+            len1_check(rd, data_type, below[w][0], below[w][1], 1e-12);
+        }
+        for (size_t w = 0; w < sizeof(above) / sizeof(above[0]); ++w) {
+            len1_check(rd, data_type, above[w][0], above[w][1], rtol_summary);
+        }
+        jls_rd_close(rd);
+    }
+    remove(filename);
+}
+
+/*
+ * Mean, min, and max through every statistics path: samples, data_length 1
+ * over the whole signal, and aligned level 1 and level 2 summary windows.
+ */
+#define STAT_N (330000)      // level 2 windows need 25 entries of STAT_L2
+#define STAT_SDF (1280)      // valid sample_decimate_factor for every type
+#define STAT_L2 (STAT_SDF * 10)
+
+static void stat_write(uint32_t data_type, const int64_t * v, int64_t n, uint32_t omit) {
+    uint8_t bits = (uint8_t) ((data_type >> 8) & 0xff);
+    struct jls_signal_def_s def = SIGNAL_5;
+    def.data_type = data_type;
+    def.samples_per_data = 2 * STAT_SDF;
+    def.sample_decimate_factor = STAT_SDF;
+    def.entries_per_summary = 20;
+    def.summary_decimate_factor = 10;
+    uint8_t * p = calloc(1, ((size_t) n * bits + 7) / 8);
+    for (int64_t i = 0; i < n; ++i) {
+        gap_bits_set(p, (uint64_t) i, bits, (uint64_t) v[i]);  // two's complement, truncated
+    }
+    struct jls_wr_s * wr = NULL;
+    assert_int_equal(0, jls_wr_open(&wr, filename));
+    assert_int_equal(0, jls_wr_source_def(wr, &SOURCE_3));
+    assert_int_equal(0, jls_wr_signal_def(wr, &def));
+    if (omit) {
+        assert_int_equal(0, jls_wr_fsr_omit_data(wr, 5, 1));
+    }
+    assert_int_equal(0, jls_wr_fsr(wr, 5, 0, p, (uint32_t) n));
+    assert_int_equal(0, jls_wr_close(wr));
+    free(p);
+}
+
+/*
+ * Check mean, min, and max of windows {start, increment, count} against x,
+ * which holds each sample's value (NaN or inf for non-finite samples).
+ * min and max are always exact.  mean is checked to rtol of the largest
+ * magnitude when every summary entry the window combines is all finite.
+ */
+static void stat_check(struct jls_rd_s * rd, const double * x, int64_t start, int64_t increment,
+                       int64_t count, double rtol) {
+    double * s = malloc((size_t) count * JLS_SUMMARY_FSR_COUNT * sizeof(double));
+    assert_int_equal(0, jls_rd_fsr_statistics(rd, 5, start, increment, s, count));
+    for (int64_t w = 0; w < count; ++w) {
+        double sum = 0.0;
+        double v_min = INFINITY;
+        double v_max = -INFINITY;
+        double v_abs = 0.0;
+        int64_t n = 0;
+        int partial = 0;  // a summary entry with some non-finite samples
+        int64_t w_end = start + (w + 1) * increment;
+        for (int64_t e = start + w * increment; e < w_end; e += STAT_SDF) {
+            int64_t e_end = ((e + STAT_SDF) < w_end) ? (e + STAT_SDF) : w_end;
+            int64_t bad = 0;
+            for (int64_t i = e; i < e_end; ++i) {
+                if (!isfinite(x[i])) {
+                    ++bad;
+                    continue;
+                }
+                sum += x[i];
+                v_min = (x[i] < v_min) ? x[i] : v_min;
+                v_max = (x[i] > v_max) ? x[i] : v_max;
+                v_abs = (fabs(x[i]) > v_abs) ? fabs(x[i]) : v_abs;
+                ++n;
+            }
+            partial |= (bad > 0) && (bad < (e_end - e));
+        }
+        double * sw = s + w * JLS_SUMMARY_FSR_COUNT;
+        int mean_ok = !partial || (increment <= STAT_SDF);
+        if ((sw[JLS_SUMMARY_FSR_MIN] != v_min) || (sw[JLS_SUMMARY_FSR_MAX] != v_max)
+                || (mean_ok && (fabs(sw[JLS_SUMMARY_FSR_MEAN] - sum / (double) n) > rtol * v_abs))) {
+            print_error("window %" PRIi64 " + %" PRIi64 " [%" PRIi64 "]: got mean %.17g min %.17g max %.17g, "
+                        "expect %.17g %.17g %.17g\n", start, increment, w, sw[JLS_SUMMARY_FSR_MEAN],
+                        sw[JLS_SUMMARY_FSR_MIN], sw[JLS_SUMMARY_FSR_MAX], sum / (double) n, v_min, v_max);
+            fail();
+        }
+    }
+    free(s);
+}
+
+static void stat_check_paths(const double * x, double rtol_summary) {
+    struct jls_rd_s * rd = NULL;
+    assert_int_equal(0, jls_rd_open(&rd, filename));
+    stat_check(rd, x, 0, 100, 3, 1e-12);                       // samples, first sample
+    stat_check(rd, x, 33300, 100, 3, 1e-12);                   // samples
+    stat_check(rd, x, STAT_N - 300, 100, 3, 1e-12);            // samples, last sample
+    stat_check(rd, x, 0, STAT_N, 1, rtol_summary);             // data_length 1, summaries
+    stat_check(rd, x, 0, STAT_SDF, STAT_N / STAT_SDF, rtol_summary);  // level 1
+    stat_check(rd, x, 0, STAT_L2, STAT_N / STAT_L2, rtol_summary);    // level 2
+    jls_rd_close(rd);
+}
+
+static double stat_scale(uint32_t data_type) {
+    return ldexp(1.0, -(int) ((data_type >> 16) & 0xff));  // fixed-point 2^-q
+}
+
+// Every integer type, with its extreme values mid signal and at both ends.
+static void test_fsr_statistics_extremes(void **state) {
+    (void) state;
+    const uint32_t types[] = {
+            JLS_DATATYPE_U1, JLS_DATATYPE_U4, JLS_DATATYPE_U8, JLS_DATATYPE_U16, JLS_DATATYPE_U24,
+            JLS_DATATYPE_U32, JLS_DATATYPE_U64, JLS_DATATYPE_I4, JLS_DATATYPE_I8, JLS_DATATYPE_I16,
+            JLS_DATATYPE_I24, JLS_DATATYPE_I32, JLS_DATATYPE_I64,
+            JLS_DATATYPE_DEF(INT, 16, 8), JLS_DATATYPE_DEF(UINT, 8, 4),
+    };
+    int64_t * v = malloc(STAT_N * sizeof(int64_t));
+    double * x = malloc(STAT_N * sizeof(double));
+    for (size_t k = 0; k < ARRAY_SIZE(types); ++k) {
+        uint32_t data_type = types[k];
+        uint8_t bits = (uint8_t) ((data_type >> 8) & 0xff);
+        int is_signed = (data_type & JLS_DATATYPE_BASETYPE_UNSIGNED) ? 0 : 1;
+        // extremes, and a middle range that excludes them
+        int64_t lo = is_signed ? (-(int64_t) ((1ULL << (bits - 1)) - 1) - 1) : 0;  // no INT64_MIN negation
+        uint64_t hi = is_signed ? ((1ULL << (bits - 1)) - 1) : ((bits >= 64) ? UINT64_MAX : ((1ULL << bits) - 1));
+        uint64_t mid_span = (bits >= 3) ? (1ULL << (bits - 2)) : 1;
+        int64_t mid_lo = is_signed ? -(int64_t) (mid_span / 2) : (int64_t) mid_span;
+        for (int64_t i = 0; i < STAT_N; ++i) {
+            uint64_t h = ((uint64_t) i + 1) * 0x9E3779B97F4A7C15ULL;
+            h ^= h >> 31;
+            v[i] = (1 == bits) ? (int64_t) (h & 1) : (mid_lo + (int64_t) (h % mid_span));
+        }
+        const int64_t at_max[] = {0, 33333, 170001};
+        const int64_t at_min[] = {STAT_N - 1, 250001, 33334};
+        for (size_t j = 0; j < ARRAY_SIZE(at_max); ++j) {
+            v[at_max[j]] = (int64_t) hi;
+            v[at_min[j]] = lo;
+        }
+        double scale = stat_scale(data_type);
+        for (int64_t i = 0; i < STAT_N; ++i) {
+            x[i] = scale * (is_signed ? (double) v[i] : (double) (uint64_t) v[i]);
+        }
+        stat_write(data_type, v, STAT_N, 0);
+        // f32 summaries round mean to float32; min and max stay exact
+        stat_check_paths(x, (jls_datatype_parse_size(data_type) >= 32) ? 1e-12 : 1e-6);
+    }
+    free(x);
+    free(v);
+    remove(filename);
+}
+
+// +/-inf and NaN samples are skipped by mean, min, and max on every path.
+static void test_fsr_statistics_nonfinite(void **state) {
+    (void) state;
+    const int64_t bad[] = {0, 1000, 1001, 33333, 200000, 200001, 250000, STAT_N - 1};
+    const double bad_v[] = {INFINITY, INFINITY, -INFINITY, NAN, NAN, -INFINITY, INFINITY, -INFINITY};
+    double * x = malloc(STAT_N * sizeof(double));
+    for (int f64 = 0; f64 < 2; ++f64) {
+        uint32_t data_type = f64 ? JLS_DATATYPE_F64 : JLS_DATATYPE_F32;
+        for (int64_t i = 0; i < STAT_N; ++i) {
+            x[i] = (double) (float) ((double) ((i * 7919) % 2003) - 1000.5);
+        }
+        for (size_t j = 0; j < ARRAY_SIZE(bad); ++j) {
+            x[bad[j]] = bad_v[j];
+        }
+        int64_t * raw = malloc(STAT_N * sizeof(int64_t));
+        for (int64_t i = 0; i < STAT_N; ++i) {
+            float f = (float) x[i];
+            uint32_t u32;
+            memcpy(&u32, &f, sizeof(u32));
+            uint64_t u64;
+            memcpy(&u64, &x[i], sizeof(u64));
+            raw[i] = f64 ? (int64_t) u64 : (int64_t) u32;
+        }
+        stat_write(data_type, raw, STAT_N, 0);
+        free(raw);
+        stat_check_paths(x, f64 ? 1e-12 : 1e-6);
+    }
+    free(x);
+    remove(filename);
+}
+
+// Omitted constant chunks: the reader rebuilds samples and keeps summaries.
+static void test_fsr_statistics_omitted(void **state) {
+    (void) state;
+    const uint32_t types[] = {JLS_DATATYPE_U1, JLS_DATATYPE_U4, JLS_DATATYPE_U8, JLS_DATATYPE_I8};
+    const int64_t constant[][2] = {{1, 0}, {9, 3}, {200, 7}, {-100, 55}};  // two constant runs
+    int64_t * v = malloc(STAT_N * sizeof(int64_t));
+    double * x = malloc(STAT_N * sizeof(double));
+    for (size_t k = 0; k < ARRAY_SIZE(types); ++k) {
+        uint32_t data_type = types[k];
+        uint8_t bits = (uint8_t) ((data_type >> 8) & 0xff);
+        int is_signed = (data_type & JLS_DATATYPE_BASETYPE_UNSIGNED) ? 0 : 1;
+        for (int64_t i = 0; i < STAT_N; ++i) {
+            if ((i >= 5000) && (i < 150000)) {
+                v[i] = constant[k][0];  // mid chunk start and end
+            } else if ((i >= 150000) && (i < 300000)) {
+                v[i] = constant[k][1];
+            } else {
+                int64_t r = (int64_t) (((uint64_t) i * 2654435761U) >> 7) & ((1LL << bits) - 1);
+                v[i] = (is_signed && (r >> (bits - 1))) ? (r - (1LL << bits)) : r;
+            }
+            x[i] = (double) v[i];
+        }
+        stat_write(data_type, v, STAT_N, 0);
+        FILE * f = fopen(filename, "rb");
+        fseek(f, 0, SEEK_END);
+        long sz_all = ftell(f);
+        fclose(f);
+        stat_write(data_type, v, STAT_N, 1);
+        f = fopen(filename, "rb");
+        fseek(f, 0, SEEK_END);
+        long sz_omit = ftell(f);
+        fclose(f);
+        assert_true(sz_omit < sz_all);  // the constant chunks were omitted
+        stat_check_paths(x, 1e-6);
+        struct jls_rd_s * rd = NULL;
+        assert_int_equal(0, jls_rd_open(&rd, filename));
+        stat_check(rd, x, 100000, 100, 3, 1e-12);  // samples rebuilt from summaries
+        stat_check(rd, x, 149900, 100, 3, 1e-12);  // across the constant runs
+        jls_rd_close(rd);
+    }
+    free(x);
+    free(v);
+    remove(filename);
+}
+
+/*
+ * Multiple windows approximate their internal boundaries with whole summary
+ * entries.  Every result still lies within the window widened to the entries
+ * of the summary level the reader selects (see jls_core_fsr_statistics).
+ */
+static void test_fsr_statistics_multi_window_bounds(void **state) {
+    (void) state;
+    const int64_t windows[][3] = {  // start, increment, count: none aligned to entries
+            {100, 3001, 100}, {37, 13337, 24}, {5, 2600, 120}, {999, 30011, 10},
+    };
+    int64_t * v = malloc(STAT_N * sizeof(int64_t));
+    double * x = malloc(STAT_N * sizeof(double));
+    int64_t walk = 0;
+    for (int64_t i = 0; i < STAT_N; ++i) {  // random walk, so neighbor entries differ
+        uint64_t h = ((uint64_t) i + 1) * 0x9E3779B97F4A7C15ULL;
+        walk += (int64_t) ((h >> 40) % 201) - 100;
+        walk = (walk > 30000) ? 30000 : ((walk < -30000) ? -30000 : walk);
+        v[i] = walk;
+        x[i] = (double) walk;
+    }
+    stat_write(JLS_DATATYPE_I16, v, STAT_N, 0);
+    struct jls_rd_s * rd = NULL;
+    assert_int_equal(0, jls_rd_open(&rd, filename));
+    double * s = malloc(200 * JLS_SUMMARY_FSR_COUNT * sizeof(double));
+    for (size_t k = 0; k < ARRAY_SIZE(windows); ++k) {
+        int64_t start = windows[k][0];
+        int64_t incr = windows[k][1];
+        int64_t count = windows[k][2];
+        int64_t step = 1;  // the entry size of the level the reader selects
+        int64_t level_step = STAT_SDF;
+        while ((incr >= level_step) && (((incr * count) / 25) >= level_step)) {
+            step = level_step;
+            level_step *= 10;  // summary_decimate_factor
+        }
+        assert_true(step > 1);  // these windows use summaries
+        assert_int_equal(0, jls_rd_fsr_statistics(rd, 5, start, incr, s, count));
+        for (int64_t w = 0; w < count; ++w) {
+            int64_t a = start + w * incr;
+            int64_t b = a + incr;
+            int64_t ea = (a / step) * step;
+            int64_t eb = ((b + step - 1) / step) * step;
+            eb = (eb > STAT_N) ? STAT_N : eb;
+            double t_min = INFINITY, t_max = -INFINITY, e_min = INFINITY, e_max = -INFINITY;
+            for (int64_t i = ea; i < eb; ++i) {
+                e_min = (x[i] < e_min) ? x[i] : e_min;
+                e_max = (x[i] > e_max) ? x[i] : e_max;
+                if ((i >= a) && (i < b)) {
+                    t_min = (x[i] < t_min) ? x[i] : t_min;
+                    t_max = (x[i] > t_max) ? x[i] : t_max;
+                }
+            }
+            double * sw = s + w * JLS_SUMMARY_FSR_COUNT;
+            if (!((e_min <= sw[JLS_SUMMARY_FSR_MIN]) && (sw[JLS_SUMMARY_FSR_MIN] <= t_min)
+                    && (t_max <= sw[JLS_SUMMARY_FSR_MAX]) && (sw[JLS_SUMMARY_FSR_MAX] <= e_max)
+                    && (e_min <= sw[JLS_SUMMARY_FSR_MEAN]) && (sw[JLS_SUMMARY_FSR_MEAN] <= e_max))) {
+                print_error("window %" PRIi64 " + %" PRIi64 " [%" PRIi64 "] step %" PRIi64
+                            ": mean %g min %g max %g, window [%g, %g], widened [%g, %g]\n",
+                            start, incr, w, step, sw[JLS_SUMMARY_FSR_MEAN], sw[JLS_SUMMARY_FSR_MIN],
+                            sw[JLS_SUMMARY_FSR_MAX], t_min, t_max, e_min, e_max);
+                fail();
+            }
+        }
+    }
+    free(s);
+    jls_rd_close(rd);
+    free(x);
+    free(v);
     remove(filename);
 }
 
@@ -1895,6 +2581,12 @@ int main(void) {
 
             cmocka_unit_test(test_fsr_f32_sample_skip),
             cmocka_unit_test(test_fsr_u1_sample_skip),
+            cmocka_unit_test(test_fsr_gap),
+            cmocka_unit_test(test_fsr_statistics_length_one),
+            cmocka_unit_test(test_fsr_statistics_extremes),
+            cmocka_unit_test(test_fsr_statistics_nonfinite),
+            cmocka_unit_test(test_fsr_statistics_omitted),
+            cmocka_unit_test(test_fsr_statistics_multi_window_bounds),
             cmocka_unit_test(test_fsr_u1_len_1),
             cmocka_unit_test(test_fsr_u1_ones),
             cmocka_unit_test(test_fsr_u1_auto_def),

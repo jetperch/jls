@@ -39,13 +39,13 @@ simultaneous, one-dimensional signals. This repository contains:
 * Support for multiple, simultaneous data sources
 * Support for multiple, simultaneous signal waveforms
 * Fixed sample rate signals (FSR)
-  * Handles missing samples gracefully (interpolate) 🔜
   * Multiple data types including:
     - Floating point: f32, f64
     - Unsigned integers: u1, u4, u8, u16, u24, u32, u64 
     - Signed integers: i4, i8, i16, i24, i32, i64
     - Fixed-point, signed integers (same bit sizes as signed integers)
     - Boolean (digital) 1-bit signals = u1
+  * Handles missing samples gracefully (fill with NaN for float, 0 for integer)
 * Variable sample rate (VSR) signals 🔜
 * Fast read performance
   * Signal Summaries
@@ -63,8 +63,8 @@ simultaneous, one-dimensional signals. This repository contains:
   * Support for text, binary, and JSON
 * Reliability
   * Integrated integrity checks using CRC32C
-  * File data still accessible in the case of improper program termination 🔜
-  * Uncorrupted data is still accessible in presence of file corruption 🔜
+  * File data still accessible in the case of improper program termination
+  * Uncorrupted data is still accessible in presence of file corruption
   * Write once, except for indices and the doubly-linked list pointers
 * Compression options 🔜
   * lossless 🔜
@@ -75,9 +75,8 @@ simultaneous, one-dimensional signals. This repository contains:
 Items marked with 🔜 are under development and coming soon.
 Items marked with ⏳ are planned for future release.
 
-As of June 2023, the JLS v2 file structure is well-defined and stable.
-However, the compression storage formats are not yet defined and
-corrupted file recovery is not yet implemented.
+As of Oct 2026, the JLS v2 file structure is well-defined and stable.
+However, the compression storage formats are not yet defined.
 
 
 ## Why JLS?

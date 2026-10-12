@@ -679,6 +679,10 @@ cdef class Writer:
             the final byte, and readers will see the padding samples.
             The C API, jls_twr_fsr(), accepts any sample count.
         :raise: On error.
+
+        A forward skip in sample_id fills the missing samples with NaN
+        for float types and 0 otherwise.  Samples that duplicate already
+        written sample ids are dropped, so a late write cannot fill a gap.
         """
         cdef c_jls.jls_twr_s * wr
         cdef uint16_t signal_id_u16
@@ -1087,12 +1091,26 @@ cdef class Reader:
               which are mean (average), standard deviation,
               minimum, and maximum.
 
-        For length 1, the return statistics are sample-accurate.
+        The standard deviation is the sample standard deviation (ddof=1).
+        Non-finite samples (NaN, inf) are skipped.
+
+        For length 1, a window shorter than 25 * sample_decimate_factor
+        samples is computed from the samples, so its statistics are
+        sample-accurate.  A longer window computes its partial first and
+        last summary entries from the samples and combines the stored
+        summary entries between them.  Its min and max are exact.  Its
+        mean and std are accurate to the summary precision: float64 for
+        f64, u32, u64, i32, and i64 data and float32 for all other types,
+        which limits the std of a signal whose mean is large relative to
+        its std (about 2e-5 relative for 15 V with a 4 mV std).  A summary
+        entry with some NaN samples counts with its full sample count.
+
         For larger lengths, the external boundaries for index 0 (first)
-        and index -1 (last) are computed exactly.  The internal boundaries
-        are approximated, perfect for waveform display, but perhaps not
-        suitable for other use cases.  If you need sample accurate statistics
-        over multiple increments, call this function repeatedly with length 1.
+        and index -1 (last) are computed as for length 1.  The internal
+        boundaries are approximated, perfect for waveform display, but
+        perhaps not suitable for other use cases.  For sample-accurate
+        statistics over a long window, read the samples with fsr() and
+        compute them.
         """
 
         cdef int32_t rc

@@ -312,11 +312,8 @@ static inline void f32_to_stats(struct jls_statistics_s * stats, const float * d
     stats->mean = data[JLS_SUMMARY_FSR_MEAN];
     stats->min = data[JLS_SUMMARY_FSR_MIN];
     stats->max = data[JLS_SUMMARY_FSR_MAX];
-    if (count > 1) {
-        stats->s = ((double) data[JLS_SUMMARY_FSR_STD]) * data[JLS_SUMMARY_FSR_STD] * (count - 1);
-    } else {
-        stats->s = 0.0;
-    }
+    // The writer stores population std (divide by count), see format.h.
+    stats->s = ((double) data[JLS_SUMMARY_FSR_STD]) * data[JLS_SUMMARY_FSR_STD] * count;
 }
 
 static inline void stats_to_f64(double * data, struct jls_statistics_s * stats) {
@@ -333,7 +330,10 @@ static inline void stats_to_f64(double * data, struct jls_statistics_s * stats) 
     data[JLS_SUMMARY_FSR_STD] = sqrt(jls_statistics_var(stats));
 }
 
-static inline void f64_to_stats(struct jls_statistics_s * stats, const double * data, int64_t count) {
+// var_divisor: count for stored summaries (population std, see format.h),
+// count - 1 for this reader's own results (sample std).
+static inline void f64_to_stats(struct jls_statistics_s * stats, const double * data, int64_t count,
+                                int64_t var_divisor) {
     if (isnan(data[JLS_SUMMARY_FSR_MEAN])) {
         jls_statistics_reset(stats);
         return;
@@ -342,11 +342,8 @@ static inline void f64_to_stats(struct jls_statistics_s * stats, const double * 
     stats->mean = data[JLS_SUMMARY_FSR_MEAN];
     stats->min = data[JLS_SUMMARY_FSR_MIN];
     stats->max = data[JLS_SUMMARY_FSR_MAX];
-    if (count > 1) {
-        stats->s = ((double) data[JLS_SUMMARY_FSR_STD]) * data[JLS_SUMMARY_FSR_STD] * (count - 1);
-    } else {
-        stats->s = 0.0;
-    }
+    double std = data[JLS_SUMMARY_FSR_STD];
+    stats->s = (var_divisor > 0) ? (std * std * (double) var_divisor) : 0.0;
 }
 
 static int32_t rd_stats_chunk(struct jls_core_s * self, uint16_t signal_id, uint8_t level, bool * is_f32) {
@@ -383,7 +380,7 @@ static void summary_to_stats(struct jls_core_s * self, bool is_f32, int64_t idx,
     if (is_f32) {
         f32_to_stats(stats, ((struct jls_fsr_f32_summary_s *) self->buf->start)->data[idx], count);
     } else {
-        f64_to_stats(stats, ((struct jls_fsr_f64_summary_s *) self->buf->start)->data[idx], count);
+        f64_to_stats(stats, ((struct jls_fsr_f64_summary_s *) self->buf->start)->data[idx], count, count);
     }
 }
 
@@ -434,7 +431,7 @@ static int32_t fsr_statistics(struct jls_core_s * self, uint16_t signal_id,
                                     incr, f64_tmp4, 1));
         ROE(jls_raw_chunk_seek(self->raw, pos));
         ROE(rd_stats_chunk(self, signal_id, level, &is_f32));
-        f64_to_stats(&stats_accum, f64_tmp4, incr);
+        f64_to_stats(&stats_accum, f64_tmp4, incr, incr - 1);
         incr_remaining -= incr;
         start_sample_id += incr;
     }
@@ -476,7 +473,7 @@ static int32_t fsr_statistics(struct jls_core_s * self, uint16_t signal_id,
             if (data_length == 1) {
                 ROE(jls_core_fsr_statistics(self, signal_id, i64_sub_wrap(start_sample_id, sample_id_offset),
                                             incr_remaining, f64_tmp4, 1));
-                f64_to_stats(&stats_next, f64_tmp4, incr_remaining);
+                f64_to_stats(&stats_next, f64_tmp4, incr_remaining, incr_remaining - 1);
             } else {
                 summary_to_stats(self, is_f32, src_offset, incr_remaining, &stats_next);
             }

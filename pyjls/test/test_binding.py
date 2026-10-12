@@ -194,6 +194,254 @@ class TestBinding(unittest.TestCase):
             np.testing.assert_allclose(np.max(data), stats[0, SummaryFSR.MAX])
             np.testing.assert_allclose(np.std(data, ddof=1), stats[0, SummaryFSR.STD], rtol=1e-6)
 
+    def _fsr_gap(self, data_type, a, b):
+        # Write a at sample_id 1000, then b after a 12800 sample gap, then a
+        # late write into the gap.  Edges align to the level 1 and 2 summary
+        # entries, so full-range statistics are exact.
+        with Writer(self._path) as w:
+            w.source_def(source_id=1, name='n')
+            w.signal_def(3, source_id=1, sample_rate=100000, data_type=data_type)
+            w.fsr(3, 1000, a)
+            w.fsr(3, 1000 + 1280 + 12800, b)
+            w.fsr(3, 1000 + 1280, b[:100])  # late: the gap is already filled
+        r = Reader(self._path)
+        self.addCleanup(r.close)
+        return r
+
+    def test_fsr_gap_f32_nan(self):
+        a = np.arange(1280, dtype=np.float32) + 1
+        b = -np.arange(5920, dtype=np.float32) - 1
+        r = self._fsr_gap(DataType.F32, a, b)
+        n = 1280 + 12800 + 5920
+        self.assertEqual(n, r.signals[3].length)  # no fill before the first write
+        d = r.fsr(3, 0, n)
+        np.testing.assert_equal(a, d[:1280])
+        self.assertTrue(np.all(np.isnan(d[1280:14080])))  # filled, not interpolated
+        np.testing.assert_equal(b, d[14080:])
+        x = np.concatenate([a, b]).astype(np.float64)
+        stats = r.fsr_statistics(3, 0, n, 1)  # NaN fill is skipped
+        np.testing.assert_allclose(np.mean(x), stats[0, SummaryFSR.MEAN], rtol=1e-6)
+        np.testing.assert_allclose(np.min(x), stats[0, SummaryFSR.MIN])
+        np.testing.assert_allclose(np.max(x), stats[0, SummaryFSR.MAX])
+        np.testing.assert_allclose(np.std(x, ddof=1), stats[0, SummaryFSR.STD], rtol=1e-6)
+        stats = r.fsr_statistics(3, 2560, 2560, 4)  # inside the gap
+        self.assertTrue(np.all(np.isnan(stats)))
+
+    def test_fsr_gap_u8_zero(self):
+        a = (np.arange(1280) % 200 + 50).astype(np.uint8)
+        b = (np.arange(5920) % 100 + 100).astype(np.uint8)
+        r = self._fsr_gap(DataType.U8, a, b)
+        n = 1280 + 12800 + 5920
+        d = r.fsr(3, 0, n)
+        x = np.concatenate([a, np.zeros(12800, dtype=np.uint8), b])
+        np.testing.assert_equal(x, d)
+        stats = r.fsr_statistics(3, 0, n, 1)  # zero fill is data
+        np.testing.assert_allclose(np.mean(x, dtype=np.float64), stats[0, SummaryFSR.MEAN], rtol=1e-6)
+        self.assertEqual(0, stats[0, SummaryFSR.MIN])
+
+    def test_fsr_gap_u1_zero(self):
+        ones = np.packbits(np.ones(16, dtype=np.uint8), bitorder='little')
+        with Writer(self._path) as w:
+            w.source_def(source_id=1, name='n')
+            w.signal_def(3, source_id=1, sample_rate=100000, data_type=DataType.U1)
+            w.fsr(3, 0, ones)
+            w.fsr(3, 40, ones)  # 24 sample gap
+        with Reader(self._path) as r:
+            self.assertEqual(56, r.signals[3].length)
+            d = np.unpackbits(r.fsr(3, 0, 56), count=56, bitorder='little')
+        np.testing.assert_equal(np.repeat([1, 0, 1], [16, 24, 16]), d)
+
+    @staticmethod
+    def _stats_ref(x, start, incr, count):
+        w = x[start:start + incr * count].reshape(count, incr)
+        return np.stack([w.mean(axis=1), w.std(axis=1, ddof=1), w.min(axis=1), w.max(axis=1)], axis=1)
+
+    def test_fsr_statistics_std_from_summaries(self):
+        # Summaries store the population std; the reader reports the sample std
+        # (ddof=1) from summaries and samples alike.  The jls C tests cover the
+        # same paths with NaN gaps (test_fsr_gap).
+        n = 100000
+        rng = np.random.default_rng(1)
+        cases = [  # data_type, values as float64, data to write, std rtol
+            (DataType.F32, rng.normal(10, 1, n).astype(np.float32), 1e-5),
+            (DataType.F64, rng.normal(10, 1, n), 1e-9),
+            (DataType.U8, rng.integers(0, 256, n).astype(np.uint8), 1e-5),
+            (DataType.U1, rng.integers(0, 2, n).astype(np.uint8), 1e-5),
+        ]
+        windows = [  # start, increment, count
+            (0, 256, n // 256),          # one level 1 summary entry each
+            (0, 2560, n // 2560),        # one level 2 summary entry each
+            (0, 256 * 7, 50),            # several level 1 entries
+            (100, 256 * 30 + 156, 2),    # head and final tail use nested sample reads
+        ]
+        for data_type, x, rtol in cases:
+            with self.subTest(data_type=data_type):
+                data = np.packbits(x, bitorder='little') if data_type == DataType.U1 else x
+                with Writer(self._path) as w:
+                    w.source_def(source_id=1, name='n')
+                    w.signal_def(3, source_id=1, sample_rate=100000, data_type=data_type,
+                                 samples_per_data=1024, sample_decimate_factor=256,
+                                 entries_per_summary=20, summary_decimate_factor=10)
+                    w.fsr(3, 0, data)
+                xf = x.astype(np.float64)
+                atol = rtol * np.max(np.abs(xf))
+                with Reader(self._path) as r:
+                    s = r.signals[3]
+                    self.assertEqual((256, 10), (s.sample_decimate_factor, s.summary_decimate_factor))
+                    for start, incr, count in windows:
+                        stats = r.fsr_statistics(3, start, incr, count)
+                        ref = self._stats_ref(xf, start, incr, count)
+                        msg = f'window {start}, {incr}, {count}'
+                        np.testing.assert_allclose(ref[:, SummaryFSR.MEAN], stats[:, SummaryFSR.MEAN],
+                                                   atol=atol, err_msg=msg)
+                        np.testing.assert_allclose(ref[:, SummaryFSR.MIN], stats[:, SummaryFSR.MIN], err_msg=msg)
+                        np.testing.assert_allclose(ref[:, SummaryFSR.MAX], stats[:, SummaryFSR.MAX], err_msg=msg)
+                        np.testing.assert_allclose(ref[:, SummaryFSR.STD], stats[:, SummaryFSR.STD],
+                                                   rtol=rtol, err_msg=msg)
+                    # the same window from summaries (many windows) and from samples (one)
+                    many = r.fsr_statistics(3, 0, 256, n // 256)[5]
+                    one = r.fsr_statistics(3, 256 * 5, 256, 1)[0]
+                    np.testing.assert_allclose(one, many, rtol=rtol, atol=atol)
+
+    def test_fsr_statistics_length_one(self):
+        # length 1: windows shorter than 25 * sample_decimate_factor come from the
+        # samples and are exact.  Longer windows combine summaries: min and max
+        # stay exact, and mean and std are accurate to the summary precision
+        # (float32 except for f64, u32, u64, i32, and i64).  See test_fsr_statistics_length_one
+        # in jls_test.c for the same checks in C.
+        n, sdf, gap = 200000, 256, (50000, 50200)  # NaN gap splits two summary entries
+        threshold = 25 * sdf
+        rng = np.random.default_rng(7)
+        cases = [  # data_type, data, summary rtol (measured worst: 1.6e-9 f32, 5e-15 f64)
+            (DataType.F32, (15 + rng.uniform(-0.002, 0.002, n)).astype(np.float32), 1e-8),
+            (DataType.F64, 15 + rng.uniform(-0.002, 0.002, n), 1e-12),
+            (DataType.U8, rng.integers(0, 256, n).astype(np.uint8), 1e-8),
+            (DataType.U32, rng.integers(0, 2**32, n).astype(np.uint32), 1e-12),
+        ]
+        below = [(0, 1), (7, 2), (49990, 300), (gap[0] - 1, 202), (100, threshold - 1),
+                 (gap[0] - 3000, threshold - 1), (123457, 4321), (n - threshold + 1, threshold - 1)]
+        above = [(0, threshold), (1, 40000), (60000, 100000), (51200, threshold), (50433, n - 50433)]
+        for data_type, data, rtol_summary in cases:
+            with self.subTest(data_type=data_type):
+                is_float = data.dtype.kind == 'f'
+                with Writer(self._path) as w:
+                    w.source_def(source_id=1, name='n')
+                    w.signal_def(3, source_id=1, sample_rate=100000, data_type=data_type,
+                                 samples_per_data=4 * sdf, sample_decimate_factor=sdf)
+                    if is_float:  # integer gaps fill with 0, which is data
+                        w.fsr(3, 0, data[:gap[0]])
+                        w.fsr(3, gap[1], data[gap[1]:])
+                    else:
+                        w.fsr(3, 0, data)
+                x = data.astype(np.float64)
+                if is_float:
+                    x[gap[0]:gap[1]] = np.nan
+                with Reader(self._path) as r:
+                    self.assertEqual(sdf, r.signals[3].sample_decimate_factor)
+                    for windows, rtol in [(below, 1e-12), (above, rtol_summary)]:
+                        for start, length in windows:
+                            v = x[start:start + length]
+                            v = v[np.isfinite(v)]
+                            exact = np.array([np.mean(v), np.std(v, ddof=1) if len(v) > 1 else 0.0,
+                                              np.min(v), np.max(v)])
+                            stats = r.fsr_statistics(3, start, length, 1)[0]
+                            tol = rtol * (abs(exact[0]) + exact[1])
+                            msg = f'window {start} + {length}: {stats} != {exact}'
+                            np.testing.assert_allclose(stats[:2], exact[:2], rtol=0, atol=tol, err_msg=msg)
+                            np.testing.assert_equal(stats[2:], exact[2:], err_msg=msg)
+
+    def _stats_signal(self, data_type, data, sdf=256):
+        # summary_decimate_factor 10: level 2 entries are 10 * sdf samples
+        with Writer(self._path) as w:
+            w.source_def(source_id=1, name='n')
+            w.signal_def(3, source_id=1, sample_rate=100000, data_type=data_type,
+                         samples_per_data=4 * sdf, sample_decimate_factor=sdf,
+                         entries_per_summary=20, summary_decimate_factor=10)
+            w.fsr(3, 0, data)
+        r = Reader(self._path)
+        self.addCleanup(r.close)
+        self.assertEqual(sdf, r.signals[3].sample_decimate_factor)
+        return r
+
+    def test_fsr_statistics_mean_min_max(self):
+        # Integer extremes and non-finite float samples through every path: samples,
+        # length 1 over the whole signal, and aligned level 1 and level 2 windows.
+        # min and max are exact; mean is exact to the summary precision.
+        # See test_fsr_statistics_extremes and _nonfinite in jls_test.c.
+        n, sdf = 70000, 256
+        rng = np.random.default_rng(11)
+        cases = []
+        for dtype, data_type in [(np.int8, DataType.I8), (np.int16, DataType.I16),
+                                 (np.int32, DataType.I32), (np.int64, DataType.I64),
+                                 (np.uint64, DataType.U64)]:
+            info = np.iinfo(dtype)
+            mid = (int(info.min) + int(info.max)) // 2
+            span = (int(info.max) - int(info.min)) // 4
+            d = np.array([mid + int(v) for v in rng.integers(-span // 2, span // 2, n, dtype=np.int64)],
+                         dtype=dtype)
+            d[[0, 33333, 50001]] = info.max
+            d[[n - 1, 20001, 33334]] = info.min
+            cases.append((data_type, d, d.astype(np.float64)))
+        for dtype, data_type in [(np.float32, DataType.F32), (np.float64, DataType.F64)]:
+            d = rng.normal(0, 100, n).astype(dtype)
+            d[[0, 1000, 33333, n - 1]] = [np.inf, -np.inf, np.nan, -np.inf]
+            cases.append((data_type, d, d.astype(np.float64)))
+        windows = [(0, 100, 3), (33300, 100, 3), (n - 300, 100, 3),  # samples
+                   (0, n, 1),                                         # length 1
+                   (0, sdf, n // sdf),                                # level 1
+                   (0, 10 * sdf, n // (10 * sdf))]                    # level 2
+        for data_type, data, x in cases:
+            with self.subTest(data_type=data_type):
+                # summary entries with some, but not all, non-finite samples
+                finite = np.isfinite(np.pad(x, (0, -n % sdf), constant_values=0)).reshape(-1, sdf)
+                partial = finite.any(axis=1) & ~finite.all(axis=1)
+                r = self._stats_signal(data_type, data, sdf)
+                rtol = 1e-12 if data.dtype.itemsize >= 4 and data_type != DataType.F32 else 1e-6
+                for start, incr, count in windows:
+                    stats = r.fsr_statistics(3, start, incr, count)
+                    w = x[start:start + incr * count].reshape(count, incr)
+                    with np.errstate(invalid='ignore'):
+                        w = np.where(np.isfinite(w), w, np.nan)
+                    msg = f'window {start}, {incr}, {count}'
+                    np.testing.assert_equal(np.nanmin(w, axis=1), stats[:, SummaryFSR.MIN], err_msg=msg)
+                    np.testing.assert_equal(np.nanmax(w, axis=1), stats[:, SummaryFSR.MAX], err_msg=msg)
+                    # summary entries with some non-finite samples weight fully (documented
+                    # approximation): check mean only for windows computed from samples or
+                    # combining no such entry
+                    clean = np.array([(incr <= sdf) or not partial[(start + i * incr) // sdf:
+                                                                   -(-(start + (i + 1) * incr) // sdf)].any()
+                                      for i in range(count)])
+                    scale = np.nanmax(np.abs(w), axis=1)
+                    err = np.abs(stats[:, SummaryFSR.MEAN] - np.nanmean(w, axis=1))
+                    self.assertTrue(np.all((err <= rtol * scale)[clean]), msg)
+
+    def test_fsr_statistics_multi_window_bounds(self):
+        # Multiple windows approximate their internal boundaries with whole summary
+        # entries.  Every result still lies within the window widened to the entries
+        # of the summary level the reader selects (see jls_core_fsr_statistics).
+        n, sdf, sumdf = 400000, 256, 10
+        rng = np.random.default_rng(13)
+        for data_type, data in [(DataType.F32, np.cumsum(rng.normal(0, 1, n)).astype(np.float32)),
+                                (DataType.I16, rng.integers(-30000, 30000, n).astype(np.int16))]:
+            with self.subTest(data_type=data_type):
+                r = self._stats_signal(data_type, data, sdf)
+                x = data.astype(np.float64)
+                for start, incr, count in [(100, 1000, 300), (37, 10007, 30), (0, 3333, 100),
+                                           (5, 2600, 150), (999, 30011, 13)]:
+                    step, level_step = 1, sdf
+                    while incr >= level_step and (incr * count) // 25 >= level_step:
+                        step, level_step = level_step, level_step * sumdf
+                    stats = r.fsr_statistics(3, start, incr, count)
+                    for i in range(count):
+                        a, b = start + i * incr, start + (i + 1) * incr
+                        ea, eb = (a // step) * step, min(-(-b // step) * step, n)
+                        t, e = x[a:b], x[ea:eb]
+                        mean, mn, mx = stats[i, [SummaryFSR.MEAN, SummaryFSR.MIN, SummaryFSR.MAX]]
+                        msg = f'window {start}, {incr}, {count} [{i}] step {step}'
+                        self.assertTrue(e.min() <= mn <= t.min(), msg)
+                        self.assertTrue(t.max() <= mx <= e.max(), msg)
+                        self.assertTrue(e.min() <= mean <= e.max(), msg)
+
     def test_user_data(self):
         data = [
             (1, b'user binary'),
