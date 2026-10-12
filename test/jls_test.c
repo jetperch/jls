@@ -2068,7 +2068,7 @@ static void test_fsr_statistics_24bit(void **state) {
     stats_int_check(JLS_DATATYPE_U24, values, ARRAY_SIZE(values));
 }
 
-// Fixed-point signals scale by 2^-q at level 0 and in the writer summaries.
+// Fixed-point signals scale by 2^-q at level 0 and when the reader converts raw summaries.
 static void test_fsr_statistics_fixed_point(void **state) {
     (void) state;
     struct jls_wr_s * wr = NULL;

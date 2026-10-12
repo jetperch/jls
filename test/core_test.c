@@ -33,7 +33,9 @@
 #include "jls/format.h"
 #include "jls/raw.h"
 #include "jls/reader.h"
+#include "jls/statistics.h"
 #include "jls/writer.h"
+#include <inttypes.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -756,6 +758,243 @@ static void test_fsr_omit_reconstruct_f64(void ** state) {
 }
 
 
+// --- M2: fixed-point q: files store raw summaries, the reader scales ---
+
+#define Q_SPD (64)
+#define Q_SDF (32)
+#define Q_N (Q_SPD * 200)  // whole-signal windows reach level 2 (320 samples per entry)
+#define META_L2 ((2 << 12) | 1)  // signal 1, level 2
+
+static void q_gen(uint32_t data_type, const uint8_t * x, int omit) {
+    struct jls_signal_def_s def = signal_def_typed(data_type, Q_SPD, Q_SDF, 20, 10);
+    gen_packed(PATH, &def, 0, x, Q_N, omit);
+}
+
+static void q_fill(uint8_t * x) {
+    for (uint32_t i = 0; i < Q_N; ++i) {
+        x[i] = (uint8_t) (((i + 1) * 2654435761U) >> 24);
+    }
+}
+
+static double q_value(uint32_t data_type, uint8_t raw) {
+    int q = (int8_t) jls_datatype_parse_q(data_type);
+    int is_signed = !(jls_datatype_parse_basetype(data_type) & JLS_DATATYPE_BASETYPE_UNSIGNED);
+    return ldexp(is_signed ? (double) (int8_t) raw : (double) raw, -q);
+}
+
+// Check reader statistics against the scaled samples x[start, start + incr * count).
+static void q_stats_check(struct jls_rd_s * rd, uint32_t data_type, const uint8_t * x,
+                          int64_t start, int64_t incr, int64_t count) {
+    double * s = malloc((size_t) count * JLS_SUMMARY_FSR_COUNT * sizeof(double));
+    double * v = malloc((size_t) incr * sizeof(double));
+    assert_non_null(s);
+    assert_non_null(v);
+    assert_int_equal(0, jls_rd_fsr_statistics(rd, 1, start, incr, s, count));
+    for (int64_t w = 0; w < count; ++w) {
+        for (int64_t i = 0; i < incr; ++i) {
+            v[i] = q_value(data_type, x[start + w * incr + i]);
+        }
+        struct jls_statistics_s e;
+        jls_statistics_compute_f64(&e, v, (uint64_t) incr);
+        double * sw = s + w * JLS_SUMMARY_FSR_COUNT;
+        double std = sqrt(jls_statistics_var(&e));
+        if ((sw[JLS_SUMMARY_FSR_MIN] != e.min) || (sw[JLS_SUMMARY_FSR_MAX] != e.max)
+                || (fabs(sw[JLS_SUMMARY_FSR_MEAN] - e.mean) > 1e-6 * fabs(e.max))
+                || (fabs(sw[JLS_SUMMARY_FSR_STD] - std) > 1e-5 * std)) {
+            print_error("0x%08x window %" PRIi64 " + %" PRIi64 " [%" PRIi64 "]: got %g %g %g %g, expect %g %g %g %g\n",
+                        data_type, start, incr, w, sw[JLS_SUMMARY_FSR_MEAN], sw[JLS_SUMMARY_FSR_MIN],
+                        sw[JLS_SUMMARY_FSR_MAX], sw[JLS_SUMMARY_FSR_STD], e.mean, e.min, e.max, std);
+            fail();
+        }
+    }
+    free(v);
+    free(s);
+}
+
+static void test_fsr_q_summary_raw_stats_scaled(void ** state) {
+    (void) state;
+    const uint32_t types[] = {JLS_DATATYPE_DEF(UINT, 8, 4), JLS_DATATYPE_DEF(INT, 8, 2)};
+    uint8_t * x = malloc(Q_N);
+    assert_non_null(x);
+    q_fill(x);
+    for (size_t k = 0; k < ARRAY_SIZE(types); ++k) {
+        q_gen(types[k], x, 0);
+
+        // The level 1 summary entry 0 holds the raw maximum, as in every format version.
+        struct file_s f;
+        file_load(PATH, &f, 0);
+        assert_non_null(chunk_nth(&f, JLS_TAG_TRACK_FSR_SUMMARY, META_L2, 0));
+        struct jls_chunk_header_s * h = chunk_nth(&f, JLS_TAG_TRACK_FSR_SUMMARY, META_L1, 0);
+        assert_non_null(h);
+        struct jls_fsr_f32_summary_s * s = chunk_payload(h);
+        double raw_max = -INFINITY;
+        for (int i = 0; i < Q_SDF; ++i) {
+            double r = q_value(types[k] & 0xffff, x[i]);
+            raw_max = (r > raw_max) ? r : raw_max;
+        }
+        assert_float_equal(raw_max, s->data[0][JLS_SUMMARY_FSR_MAX], 0.0);
+        free(f.data);
+
+        struct jls_rd_s * rd = NULL;
+        assert_int_equal(0, jls_rd_open(&rd, PATH));
+        q_stats_check(rd, types[k], x, 7, 100, 3);            // samples
+        q_stats_check(rd, types[k], x, 0, Q_SDF, Q_N / Q_SDF);  // level 1
+        q_stats_check(rd, types[k], x, 0, 10 * Q_SDF, Q_N / (10 * Q_SDF));  // level 2
+        q_stats_check(rd, types[k], x, 0, Q_N, 1);            // level 2, whole signal
+        q_stats_check(rd, types[k], x, 5, Q_N - 10, 1);       // samples and summaries
+        jls_rd_close(rd);
+    }
+    free(x);
+    remove(PATH);
+}
+
+// Only the signal definition (data_type and its CRC) differs between q=0 and q=4.
+static void test_fsr_q_file_matches_q0(void ** state) {
+    (void) state;
+    uint8_t * x = malloc(Q_N);
+    assert_non_null(x);
+    q_fill(x);
+    struct file_s f0;
+    struct file_s f4;
+    q_gen(JLS_DATATYPE_U8, x, 0);
+    file_load(PATH, &f0, 0);
+    q_gen(JLS_DATATYPE_DEF(UINT, 8, 4), x, 0);
+    file_load(PATH, &f4, 0);
+    assert_int_equal(f0.size, f4.size);
+    struct jls_chunk_header_s * h = chunk_nth(&f4, JLS_TAG_SIGNAL_DEF, 1, 0);
+    assert_non_null(h);
+    size_t def_start = (size_t) chunk_offset(&f4, h);
+    size_t def_end = def_start + sizeof(*h) + payload_size_on_disk(h->payload_length);
+    size_t diffs = 0;
+    for (size_t i = 0; i < f0.size; ++i) {
+        if (f0.data[i] != f4.data[i]) {
+            if ((i < def_start) || (i >= def_end)) {
+                print_error("byte %zu differs outside the signal definition [%zu, %zu)\n", i, def_start, def_end);
+                fail();
+            }
+            ++diffs;
+        }
+    }
+    assert_true(diffs > 0);
+    free(f0.data);
+    free(f4.data);
+    free(x);
+    remove(PATH);
+}
+
+// Omitted constant chunks of q signals rebuild the raw byte from the raw summary mean.
+static void test_fsr_q_omit_reconstruct(void ** state) {
+    (void) state;
+    const uint32_t data_type = JLS_DATATYPE_DEF(UINT, 8, 4);
+    const int64_t c_start = 10 * Q_SPD;
+    const int64_t c_len = 100 * Q_SPD;  // long enough for a level 1 statistics window
+    uint8_t * x = malloc(Q_N);
+    uint8_t * y = malloc(Q_N);
+    assert_non_null(x);
+    assert_non_null(y);
+    q_fill(x);
+    memset(x + c_start, 0x57, (size_t) c_len);
+    q_gen(data_type, x, 1);
+
+    struct file_s f;
+    file_load(PATH, &f, 0);
+    assert_true(chunk_count(&f, JLS_TAG_TRACK_FSR_DATA, 1) < (Q_N / Q_SPD - 90));  // omitted
+    free(f.data);
+
+    struct jls_rd_s * rd = NULL;
+    assert_int_equal(0, jls_rd_open(&rd, PATH));
+    assert_int_equal(0, jls_rd_fsr(rd, 1, 0, y, Q_N));
+    assert_memory_equal(x, y, Q_N);
+    double s[JLS_SUMMARY_FSR_COUNT];
+    const double expect = 0x57 / 16.0;
+    assert_int_equal(0, jls_rd_fsr_statistics(rd, 1, c_start + 3, 100, s, 1));  // samples
+    assert_float_equal(expect, s[JLS_SUMMARY_FSR_MEAN], 0.0);
+    assert_float_equal(expect, s[JLS_SUMMARY_FSR_MIN], 0.0);
+    assert_float_equal(expect, s[JLS_SUMMARY_FSR_MAX], 0.0);
+    assert_int_equal(0, jls_rd_fsr_statistics(rd, 1, c_start, c_len, s, 1));  // summaries
+    assert_float_equal(expect, s[JLS_SUMMARY_FSR_MEAN], 1e-6);
+    assert_float_equal(expect, s[JLS_SUMMARY_FSR_MIN], 0.0);
+    assert_float_equal(expect, s[JLS_SUMMARY_FSR_MAX], 0.0);
+    q_stats_check(rd, data_type, x, 0, Q_N, 1);
+    jls_rd_close(rd);
+    free(y);
+    free(x);
+    remove(PATH);
+}
+
+
+// --- m2: sample statistics combine per data chunk ---
+
+// Halve every summary payload, as writers before 0.19.0 did for 64-bit
+// summaries, so statistics fall back to the samples for any window.
+static void test_fsr_statistics_legacy_64bit_fallback(void ** state) {
+    (void) state;
+    const uint32_t n = 50000;
+    struct jls_signal_def_s def = signal_def_typed(JLS_DATATYPE_F64, 1000, 100, 200, 10);
+    double * x = malloc(n * sizeof(double));
+    assert_non_null(x);
+    for (uint32_t i = 0; i < n; ++i) {
+        x[i] = (double) ((i * 7919) % 2003) - 1000.5;
+    }
+    x[999] = NAN;          // chunk ends
+    x[1000] = INFINITY;    // chunk starts
+    x[23456] = -INFINITY;
+    gen_packed(PATH, &def, 0, (const uint8_t *) x, n, 0);
+
+    struct file_s f;
+    file_load(PATH, &f, 0);
+    // Find every chunk first: the walk uses payload_length, which the patch changes.
+    struct jls_chunk_header_s * summaries[64];
+    int halved = 0;
+    for (uint16_t level = 1; level < JLS_SUMMARY_LEVEL_COUNT; ++level) {
+        struct jls_chunk_header_s * h;
+        for (int k = 0; NULL != (h = chunk_nth(&f, JLS_TAG_TRACK_FSR_SUMMARY, (uint16_t) ((level << 12) | 1), k)); ++k) {
+            assert_true(halved < (int) ARRAY_SIZE(summaries));
+            summaries[halved++] = h;
+        }
+    }
+    assert_true(halved >= 3);
+    for (int k = 0; k < halved; ++k) {
+        struct jls_chunk_header_s * h = summaries[k];
+        h->payload_length = sizeof(struct jls_payload_header_s)
+                + (h->payload_length - sizeof(struct jls_payload_header_s)) / 2;
+        chunk_resign(h);  // the reader follows offsets, not the on-disk chunk sizes
+    }
+    file_save(PATH, &f);
+
+    struct jls_rd_s * rd = NULL;
+    assert_int_equal(0, jls_rd_open(&rd, PATH));
+    const int64_t windows[][3] = {{0, n, 1}, {3, n - 10, 1}, {0, 997, 50}, {500, 4000, 12}};
+    for (size_t w = 0; w < ARRAY_SIZE(windows); ++w) {
+        int64_t start = windows[w][0];
+        int64_t incr = windows[w][1];
+        int64_t count = windows[w][2];
+        double * s = malloc((size_t) count * JLS_SUMMARY_FSR_COUNT * sizeof(double));
+        assert_non_null(s);
+        assert_int_equal(0, jls_rd_fsr_statistics(rd, 1, start, incr, s, count));
+        for (int64_t k = 0; k < count; ++k) {
+            struct jls_statistics_s e;
+            jls_statistics_reset(&e);
+            for (int64_t i = start + k * incr; i < start + (k + 1) * incr; ++i) {
+                if (isfinite(x[i])) {
+                    jls_statistics_add(&e, x[i]);
+                }
+            }
+            double * sw = s + k * JLS_SUMMARY_FSR_COUNT;
+            double std = sqrt(jls_statistics_var(&e));
+            assert_float_equal(e.min, sw[JLS_SUMMARY_FSR_MIN], 0.0);
+            assert_float_equal(e.max, sw[JLS_SUMMARY_FSR_MAX], 0.0);
+            assert_float_equal(e.mean, sw[JLS_SUMMARY_FSR_MEAN], 1e-9);
+            assert_float_equal(std, sw[JLS_SUMMARY_FSR_STD], 1e-9 * std);
+        }
+        free(s);
+    }
+    jls_rd_close(rd);
+    free(x);
+    remove(PATH);
+}
+
+
 // --- C5: level-1 index & summary validation ---
 
 static void test_fsr_level1_corrupt(void ** state) {
@@ -984,6 +1223,10 @@ int main(void) {
             cmocka_unit_test(test_fsr_omit_reconstruct_corrupt),
             cmocka_unit_test(test_fsr_omit_reconstruct_types),
             cmocka_unit_test(test_fsr_omit_reconstruct_f64),
+            cmocka_unit_test(test_fsr_q_summary_raw_stats_scaled),
+            cmocka_unit_test(test_fsr_q_file_matches_q0),
+            cmocka_unit_test(test_fsr_q_omit_reconstruct),
+            cmocka_unit_test(test_fsr_statistics_legacy_64bit_fallback),
             cmocka_unit_test(test_fsr_level1_corrupt),
             cmocka_unit_test(test_fsr_read_bounds_overflow),
             cmocka_unit_test(test_rd_chunk_large),

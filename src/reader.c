@@ -251,8 +251,6 @@ void jls_rd_close(struct jls_rd_s * self) {
         jls_buf_free(core->buf);
         jls_buf_free(core->rd_index);
         jls_buf_free(core->rd_summary);
-        jls_core_f64_buf_free(core->f64_stats_buf);
-        core->f64_stats_buf = NULL;
         jls_core_f64_buf_free(core->f64_sample_buf);
         core->f64_sample_buf = NULL;
         free(self);
@@ -385,12 +383,19 @@ static int32_t rd_stats_chunk(struct jls_core_s * self, uint16_t signal_id, uint
 }
 
 // Derive the entry from self->buf on each use: nested reads reload (and may grow) it.
+// Entries hold raw values in every format version: scale them as the sample path does.
 static void summary_to_stats(struct jls_core_s * self, bool is_f32, int64_t idx, int64_t count,
-                             struct jls_statistics_s * stats) {
+                             double scale, struct jls_statistics_s * stats) {
     if (is_f32) {
         f32_to_stats(stats, ((struct jls_fsr_f32_summary_s *) self->buf->start)->data[idx], count);
     } else {
         f64_to_stats(stats, ((struct jls_fsr_f64_summary_s *) self->buf->start)->data[idx], count, count);
+    }
+    if ((scale != 1.0) && stats->k) {  // reset min/max (+/-DBL_MAX) would overflow
+        stats->mean *= scale;
+        stats->min *= scale;
+        stats->max *= scale;
+        stats->s *= scale * scale;
     }
 }
 
@@ -409,6 +414,7 @@ static int32_t fsr_statistics(struct jls_core_s * self, uint16_t signal_id,
     int64_t step_size = jls_core_fsr_step_size(signal_def, level);  // <= increment, see level selection
     double f64_tmp4[JLS_SUMMARY_FSR_COUNT];
     const int64_t sample_id_offset = signal_def->sample_id_offset;
+    const double scale = jls_dt_scale(signal_def->data_type);
 
     ROE(jls_core_fsr_seek(self, signal_id, level, start_sample_id)); // returns the index
     ROE(jls_raw_chunk_next(self->raw));  // statistics
@@ -485,7 +491,7 @@ static int32_t fsr_statistics(struct jls_core_s * self, uint16_t signal_id,
                                             incr_remaining, f64_tmp4, 1));
                 f64_to_stats(&stats_next, f64_tmp4, incr_remaining, incr_remaining - 1);
             } else {
-                summary_to_stats(self, is_f32, src_offset, incr_remaining, &stats_next);
+                summary_to_stats(self, is_f32, src_offset, incr_remaining, scale, &stats_next);
             }
             jls_statistics_combine(&stats_accum, &stats_accum, &stats_next);
             stats_to_f64(data, &stats_accum);
@@ -498,11 +504,11 @@ static int32_t fsr_statistics(struct jls_core_s * self, uint16_t signal_id,
             if (incr == 0) {
                 jls_statistics_reset(&stats_accum);
             } else {
-                summary_to_stats(self, is_f32, src_offset, incr, &stats_accum);
+                summary_to_stats(self, is_f32, src_offset, incr, scale, &stats_accum);
             }
             incr_remaining = increment - incr;
         } else {
-            summary_to_stats(self, is_f32, src_offset, step_size, &stats_next);
+            summary_to_stats(self, is_f32, src_offset, step_size, scale, &stats_next);
             jls_statistics_combine(&stats_accum, &stats_accum, &stats_next);
             incr_remaining -= step_size;
         }
@@ -541,40 +547,50 @@ static int32_t rd_data_f64(struct jls_core_s * self, uint16_t signal_id, int64_t
     return 0;
 }
 
-// Sample-accurate statistics from the level 0 sample data.
+// Sample-accurate statistics from the level 0 sample data.  Combine per data
+// chunk so memory stays at one chunk for any increment (legacy fallback).
 static int32_t fsr_statistics_samples(struct jls_core_s * self, uint16_t signal_id,
                                       int64_t start_sample_id, int64_t increment,
                                       double * data, int64_t data_length) {
     JLS_LOGD2("f32(signal_id=%d, start_id=%" PRIi64 ", incr=%" PRIi64 ", level=0, len=%" PRIi64 ")",
               (int) signal_id, start_sample_id, increment, data_length);
-    if ((uint64_t) increment > (SIZE_MAX / sizeof(double))) {
-        return JLS_ERROR_NOT_ENOUGH_MEMORY;
-    }
-    ROE(jls_core_f64_buf_alloc((size_t) increment, &self->f64_stats_buf));
-
     int64_t src_idx = 0;
     int64_t src_count = 0;
-    int64_t window_count = 0;
-    int64_t finite_count = 0;
+    int64_t window_remaining = increment;
     struct jls_statistics_s stats;
+    struct jls_statistics_s run;
+    jls_statistics_reset(&stats);
 
     while (data_length > 0) {
         if (src_idx >= src_count) {
             ROE(rd_data_f64(self, signal_id, start_sample_id, &src_idx, &src_count));
         }
-        double v = self->f64_sample_buf->start[src_idx++];
-        if (isfinite(v)) {  // match the writer summaries, which skip non-finite samples
-            self->f64_stats_buf->start[finite_count++] = v;
+        int64_t n = src_count - src_idx;
+        if (n > window_remaining) {
+            n = window_remaining;
         }
-        if (++window_count >= increment) {
-            jls_statistics_compute_f64(&stats, self->f64_stats_buf->start, (uint64_t) finite_count);
+        // Skip non-finite samples to match the writer summaries.
+        const double * x = self->f64_sample_buf->start + src_idx;
+        int64_t run_start = 0;
+        for (int64_t i = 0; i <= n; ++i) {
+            if ((i == n) || !isfinite(x[i])) {
+                if (i > run_start) {
+                    jls_statistics_compute_f64(&run, x + run_start, (uint64_t) (i - run_start));
+                    jls_statistics_combine(&stats, &stats, &run);
+                }
+                run_start = i + 1;
+            }
+        }
+        src_idx += n;
+        start_sample_id += n;
+        window_remaining -= n;
+        if (0 == window_remaining) {
             stats_to_f64(data, &stats);
             data += JLS_SUMMARY_FSR_COUNT;
-            window_count = 0;
-            finite_count = 0;
             --data_length;
+            window_remaining = increment;
+            jls_statistics_reset(&stats);
         }
-        ++start_sample_id;
     }
     return 0;
 }

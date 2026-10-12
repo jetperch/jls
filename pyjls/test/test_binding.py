@@ -412,6 +412,34 @@ class TestBinding(unittest.TestCase):
                     err = np.abs(stats[:, SummaryFSR.MEAN] - np.nanmean(w, axis=1))
                     self.assertTrue(np.all((err <= rtol * scale)[clean]), msg)
 
+    def test_fsr_statistics_fixed_point(self):
+        # u8 q=4: reads return raw bytes, statistics scale by 2^-4 on every path,
+        # and omitted constant chunks rebuild the raw byte.  See core_test.c M2.
+        n, sdf = 40960, 256
+        data = np.random.default_rng(3).integers(0, 256, n, dtype=np.uint8)
+        data[4 * sdf:84 * sdf] = 0x57
+        with Writer(self._path) as w:
+            w.source_def(source_id=1, name='n')
+            w.signal_def(3, source_id=1, sample_rate=100000, data_type=DataType.U8 | (4 << 16),
+                         samples_per_data=4 * sdf, sample_decimate_factor=sdf,
+                         entries_per_summary=20, summary_decimate_factor=10)
+            w.fsr_omit_data(3, True)
+            w.fsr(3, 0, data)
+        x = data.astype(np.float64) / 16
+        with Reader(self._path) as r:
+            np.testing.assert_equal(data, r.fsr(3, 0, n))
+            for start, incr, count in [(7, 100, 3), (0, sdf, n // sdf), (0, 10 * sdf, n // (10 * sdf)),
+                                       (0, n, 1), (5, n - 10, 1), (4 * sdf + 3, 100, 1)]:
+                stats = r.fsr_statistics(3, start, incr, count)
+                win = x[start:start + incr * count].reshape(count, incr)
+                msg = f'window {start}, {incr}, {count}'
+                np.testing.assert_equal(np.min(win, axis=1), stats[:, SummaryFSR.MIN], err_msg=msg)
+                np.testing.assert_equal(np.max(win, axis=1), stats[:, SummaryFSR.MAX], err_msg=msg)
+                np.testing.assert_allclose(np.mean(win, axis=1), stats[:, SummaryFSR.MEAN],
+                                           rtol=1e-6, err_msg=msg)
+                np.testing.assert_allclose(np.std(win, axis=1, ddof=1), stats[:, SummaryFSR.STD],
+                                           rtol=1e-5, err_msg=msg)
+
     def test_fsr_statistics_multi_window_bounds(self):
         # Multiple windows approximate their internal boundaries with whole summary
         # entries.  Every result still lies within the window widened to the entries
@@ -679,11 +707,22 @@ class TestBinding(unittest.TestCase):
                         fn(signal_id)
                 with self.assertRaisesRegex(ValueError, error):
                     r.annotations(signal_id, 0, self._on_annotations)
-            for fn in fns:
+            for fn in fns[:5] + fns[7:]:  # time map: see test_time_map_length_vsr
                 with self.assertRaisesRegex(ValueError, 'NOT_SUPPORTED'):
                     fn(4)
             r.annotations(4, 0, self._on_annotations)
         self.assertEqual([], self.annotations)
+
+    def test_time_map_length_vsr(self):
+        # VSR signals have no time map: length 0, as before 0.19.0, not an error.
+        self._fsr_vsr_gen()
+        with Reader(self._path) as r:
+            for signal_id in [0, 4]:
+                self.assertEqual(SignalType.VSR, r.signals[signal_id].signal_type)
+                self.assertEqual(0, r.time_map_length(signal_id))
+                self.assertEqual(0, len(TimeMap(r, signal_id)))
+                self.assertEqual(0, len(r.time_map_get(signal_id)))
+            self.assertEqual(1, r.time_map_length(3))
 
     def test_reader_length_zero_and_negative(self):
         self._fsr_vsr_gen()

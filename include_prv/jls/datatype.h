@@ -55,6 +55,16 @@ extern "C" {
  */
 int32_t jls_dt_buffer_to_f64(const void * src, uint32_t src_datatype, double * dst, size_t samples);
 
+/**
+ * @brief The scale from raw values to values.
+ * @param datatype The datatype, see JLS_DATATYPE_*.
+ * @return 2^-q for fixed-point integer types (q != 0), otherwise 1.0.
+ *
+ * FSR summaries store raw values in every format version, so readers
+ * apply this scale to summary entries.
+ */
+double jls_dt_scale(uint32_t datatype);
+
 
 /** @} */
 

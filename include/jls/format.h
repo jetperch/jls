@@ -465,7 +465,8 @@ struct jls_track_head_s {
     uint64_t offset[16];  // 0 = data, 1 = first summary, ...
 };
 
-/// The summary storage order for each entry
+/// The summary storage order for each entry.  Entries hold raw values:
+/// readers scale fixed-point (q != 0) signals by 2^-q, see JLS_DATATYPE_DEF.
 enum jls_summary_fsr_e {
     JLS_SUMMARY_FSR_MEAN = 0,
     JLS_SUMMARY_FSR_STD = 1,     // population standard deviation: divide by the sample count

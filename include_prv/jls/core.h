@@ -148,7 +148,6 @@ struct jls_core_s {
 
     struct jls_core_chunk_s chunk_cur;           // most recent read chunk header, payload in buf
     struct jls_core_f64_buf_s * f64_sample_buf;  // for reading samples
-    struct jls_core_f64_buf_s * f64_stats_buf;   // for reading statistics
 
     // Truncation recovery in progress: scans treat reads past the truncated
     // end as chain terminations rather than integrity failures.

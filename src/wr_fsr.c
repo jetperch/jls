@@ -413,7 +413,8 @@ static void data_to_f64(struct jls_core_fsr_s * self) {
     void * src = &self->data->data[0];
     double * dst = self->data_f64;
     const uint32_t count = self->data->header.entry_count;
-    if (jls_dt_buffer_to_f64(src, self->parent->signal_def.data_type, dst, count)) {
+    // Strip q: summaries store raw values in every format version, see jls_dt_scale().
+    if (jls_dt_buffer_to_f64(src, self->parent->signal_def.data_type & 0xffff, dst, count)) {
         // Unsupported conversion: NaN summaries, never uninitialized memory.
         for (uint32_t idx = 0; idx < count; ++idx) {
             dst[idx] = NAN;

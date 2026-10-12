@@ -1202,6 +1202,9 @@ cdef class Reader:
         cdef c_jls.jls_utc_summary_entry_s entry
         cdef uint16_t signal_id_u16 = _u16('signal_id', signal_id)
         cdef c_jls.jls_rd_s * rd = self._rd_get()
+        signal_def = self._signals.get(signal_id_u16)
+        if signal_def is not None and signal_def.signal_type != c_jls.JLS_SIGNAL_TYPE_FSR:
+            return 0  # only FSR signals have a time map; 0.18 and earlier returned 0
         # jls_rd_tmap_length() returns 0 on error, so get the error here.
         # A valid FSR signal always has at least one entry.
         rc = c_jls.jls_rd_tmap_get(rd, signal_id_u16, 0, &entry)

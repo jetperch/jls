@@ -228,6 +228,16 @@ static void test_fixed_point(void **state) {
     assert_float_equal(12.0, dst[0], 1e-15);
 }
 
+static void test_scale(void **state) {
+    (void) state;
+    assert_float_equal(1.0 / 256, jls_dt_scale(JLS_DATATYPE_DEF(INT, 16, 8)), 0.0);
+    assert_float_equal(1.0 / 16, jls_dt_scale(JLS_DATATYPE_DEF(UINT, 8, 4)), 0.0);
+    assert_float_equal(4.0, jls_dt_scale(JLS_DATATYPE_DEF(UINT, 8, -2)), 0.0);
+    assert_float_equal(1.0, jls_dt_scale(JLS_DATATYPE_U8), 0.0);
+    assert_float_equal(1.0, jls_dt_scale(JLS_DATATYPE_F32), 0.0);
+    assert_float_equal(1.0, jls_dt_scale(JLS_DATATYPE_DEF(FLOAT, 32, 4)), 0.0);  // q invalid for float
+}
+
 static void test_invalid(void **state) {
     (void) state;
     uint8_t src[8] = {0};
@@ -278,6 +288,7 @@ int main(void) {
             cmocka_unit_test(test_packed_odd_count),
             cmocka_unit_test(test_i24_u24),
             cmocka_unit_test(test_fixed_point),
+            cmocka_unit_test(test_scale),
             cmocka_unit_test(test_invalid),
             cmocka_unit_test(test_dt_str),
     };

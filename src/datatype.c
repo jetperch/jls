@@ -84,15 +84,22 @@ int32_t jls_dt_buffer_to_f64(const void * src, uint32_t src_datatype, double * d
             return JLS_ERROR_PARAMETER_INVALID;
     }
 
-    // fixed point: value = raw * 2^-q, see JLS_DATATYPE_DEF
-    int8_t q = (int8_t) jls_datatype_parse_q(src_datatype);
-    if ((jls_datatype_parse_basetype(src_datatype) & JLS_DATATYPE_BASETYPE_INT) && q) {
-        double scale = ldexp(1.0, -q);
+    double scale = jls_dt_scale(src_datatype);
+    if (scale != 1.0) {
         for (size_t i = 0; i < samples; ++i) {
             dst[i] *= scale;
         }
     }
     return 0;
+}
+
+double jls_dt_scale(uint32_t datatype) {
+    // fixed point: value = raw * 2^-q, see JLS_DATATYPE_DEF
+    int8_t q = (int8_t) jls_datatype_parse_q(datatype);
+    if ((jls_datatype_parse_basetype(datatype) & JLS_DATATYPE_BASETYPE_INT) && q) {
+        return ldexp(1.0, -q);
+    }
+    return 1.0;
 }
 
 const char * jls_dt_str(uint32_t datatype) {
