@@ -114,7 +114,11 @@ int32_t jls_bk_write_limit_consume(uint32_t count) {
 }
 
 int32_t jls_bk_read_limit_consume(void) {
-    return limit_consume(&bk_read_limit, &bk_read_total, 1);
+    int32_t rc = limit_consume(&bk_read_limit, &bk_read_total, 1);
+    if (rc) {
+        bk_read_limit = -1;  // transient: only this call fails
+    }
+    return rc;
 }
 
 // 64-bit: payload_length near UINT32_MAX must not wrap.
@@ -185,14 +189,12 @@ static int32_t rd_file_header(struct jls_raw_s * self, struct jls_file_header_s 
     return 0;
 }
 
-static void fend_get(struct jls_raw_s * self) {
+static int32_t fend_get(struct jls_raw_s * self) {
     int64_t pos = jls_bk_ftell(&self->backend);
-    if (jls_bk_fseek(&self->backend, 0, SEEK_END)) {
-        JLS_LOGE("seek to end failed");
-    } else {
-        self->backend.fend = self->backend.fpos;
-        jls_bk_fseek(&self->backend, pos, SEEK_SET);
-    }
+    RLE(jls_bk_fseek(&self->backend, 0, SEEK_END));
+    self->backend.fend = self->backend.fpos;
+    RLE(jls_bk_fseek(&self->backend, pos, SEEK_SET));
+    return 0;
 }
 
 static int32_t read_verify(struct jls_raw_s * self) {
@@ -205,7 +207,10 @@ static int32_t read_verify(struct jls_raw_s * self) {
     if (rc) {
         return rc;  // file_hdr is not valid
     }
-    fend_get(self);
+    rc = fend_get(self);
+    if (rc) {
+        return rc;
+    }
     if (0 == file_hdr.length) {
         JLS_LOGW("file header length 0, not closed gracefully");
         rc = JLS_ERROR_TRUNCATED;
@@ -472,9 +477,10 @@ int32_t jls_raw_rd_payload(struct jls_raw_s * self, uint32_t payload_length_max,
 
 int32_t jls_raw_chunk_seek(struct jls_raw_s * self, int64_t offset) {
     invalidate_current_chunk(self);
-    if (offset == 0) {
-        JLS_LOGW("seek to 0");
-        return JLS_ERROR_IO;
+    if (offset <= 0) {
+        // a corrupt file offset, not an I/O error: recovery treats these differently
+        JLS_LOGW("seek to %" PRIi64, offset);
+        return JLS_ERROR_MESSAGE_INTEGRITY;
     }
     if (jls_bk_fseek(&self->backend, offset, SEEK_SET)) {
         return JLS_ERROR_IO;

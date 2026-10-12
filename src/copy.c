@@ -215,13 +215,19 @@ int32_t jls_copy(const char * src, const char * dst,
     // has no further chunks or the destination fails.
     while ((offset < offset_end) && !cancel) {
         rc = jls_raw_rd_header(rd, &hdr);
-        if (rc) {
+        if (JLS_ERROR_IO == rc) {
+            MSG_ERROR("jls_raw_rd_header", rc);
+            break;  // not damage: a skipped chunk would make an incomplete copy
+        } else if (rc) {
             MSG_ERROR("jls_raw_rd_header", rc);
             rc = jls_raw_chunk_seek(rd, offset + 1);
             if (0 == rc) {
                 rc = jls_raw_chunk_scan(rd);
             }
-            if (rc) {
+            if (JLS_ERROR_IO == rc) {
+                MSG_ERROR("jls_raw_chunk_scan", rc);
+                break;
+            } else if (rc) {
                 MSG_ERROR("jls_raw_chunk_scan", rc);
                 rc = 0;  // no further valid chunks
                 break;
@@ -237,7 +243,10 @@ int32_t jls_copy(const char * src, const char * dst,
         }
         uint32_t payload_max = (buf->alloc_size > UINT32_MAX) ? UINT32_MAX : (uint32_t) buf->alloc_size;
         rc = jls_raw_rd_payload(rd, payload_max, buf->start);
-        if (rc) {
+        if (JLS_ERROR_IO == rc) {
+            MSG_ERROR("jls_raw_rd_payload", rc);
+            break;  // not damage: a skipped chunk would make an incomplete copy
+        } else if (rc) {
             MSG_ERROR("jls_raw_rd_payload", rc);
             // the valid header bounds the payload within the file
             rc = jls_raw_chunk_seek(rd, offset);

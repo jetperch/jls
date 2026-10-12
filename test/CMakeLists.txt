@@ -49,6 +49,7 @@ target_include_directories(repair_offline_test PRIVATE ${CMAKE_CURRENT_SOURCE_DI
 target_include_directories(repair_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../include_prv)
 ADD_CMOCKA_TEST(recovery_test)
 ADD_CMOCKA_TEST(read_fault_test)
+set_tests_properties(read_fault_test PROPERTIES TIMEOUT 120)  # a hang must fail fast
 target_include_directories(recovery_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../include_prv)
 ADD_CMOCKA_TEST(fsr_omit_test)
 ADD_CMOCKA_TEST(log_test)

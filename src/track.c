@@ -209,8 +209,11 @@ int32_t jls_track_repair_pointers(struct jls_core_track_s * track) {
     int level = JLS_SUMMARY_LEVEL_COUNT - 1;
     for (; (level > 0); --level) {
         if (offsets[level]) {
-            if (0 == jls_raw_chunk_seek(raw, offsets[level])) {
+            int32_t rc = jls_raw_chunk_seek(raw, offsets[level]);
+            if (0 == rc) {
                 break;
+            } else if (JLS_ERROR_IO == rc) {
+                return rc;  // an I/O error is not damage: never drop a level for it
             } else {
                 offsets[level] = 0;
                 track->index_head[level].offset = 0;
@@ -232,8 +235,13 @@ int32_t jls_track_repair_pointers(struct jls_core_track_s * track) {
         uint16_t meta = (uint16_t) ((signal_id & 0x0fff) | (level << 12));
         uint8_t index_tag = jls_track_tag_pack(track->track_type, JLS_TRACK_CHUNK_INDEX);
         uint8_t summary_tag = jls_track_tag_pack(track->track_type, JLS_TRACK_CHUNK_SUMMARY);
-        if (jls_raw_chunk_seek(raw, offset)
-                || jls_core_rd_chunk_validate(core, index_tag, meta)) {  // index
+        int32_t rc = jls_raw_chunk_seek(raw, offset);
+        if (0 == rc) {
+            rc = jls_core_rd_chunk_validate(core, index_tag, meta);  // index
+        }
+        if (JLS_ERROR_IO == rc) {
+            return rc;
+        } else if (rc) {
             descend = true;
         } else {
             index_chunk_next = core->chunk_cur;
@@ -259,7 +267,10 @@ int32_t jls_track_repair_pointers(struct jls_core_track_s * track) {
                     offset_descend_next = r->entries[r->header.entry_count - 1].offset;
                 }
             }
-            if (!index_valid || jls_core_rd_chunk_validate(core, summary_tag, meta)) {
+            rc = index_valid ? jls_core_rd_chunk_validate(core, summary_tag, meta) : 0;
+            if (JLS_ERROR_IO == rc) {
+                return rc;
+            } else if (!index_valid || rc) {
                 descend = true;
             } else {
                 index_chunk = index_chunk_next;
@@ -283,8 +294,8 @@ int32_t jls_track_repair_pointers(struct jls_core_track_s * track) {
                          (int) signal_id, (int) track->track_type, (int) level, offset_descend);
                 index_chunk.hdr.item_next = 0;
                 summary_chunk.hdr.item_next = 0;
-                jls_core_update_chunk_header(core, &index_chunk);
-                jls_core_update_chunk_header(core, &summary_chunk);
+                ROE(jls_core_update_chunk_header(core, &index_chunk));
+                ROE(jls_core_update_chunk_header(core, &summary_chunk));
                 offset = offset_descend;
             } else {
                 JLS_LOGI("restart signal_id %d track %d, level %d, offset %" PRIi64,

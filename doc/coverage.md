@@ -21,5 +21,13 @@ With clang, give gcovr the matching gcov wrapper, such as
 The Linux CI job `coverage` in .github/workflows/packaging.yml uploads
 the HTML report as the `coverage` artifact.
 
+To keep ctest fast, test/read_fault_test samples its I/O fault points,
+and test/writer_test runs fewer split, duplicate, and I/O fault cases,
+with the same coverage.  Before a release, or after changing the writer,
+recovery, repair, or copy, run every case with `--full`:
+
+    <build>/test/read_fault_test --full    # about a minute (Release)
+    <build>/test/writer_test --full        # a few seconds
+
 See doc/plans/completed/code_coverage.md for the baseline and the uncovered
 code.

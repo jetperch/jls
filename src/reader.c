@@ -122,12 +122,20 @@ static int32_t rd_open_recover(struct jls_core_s * core, const char * path, int6
     }
 
     if (core->user_data_head.offset) {
-        if (JLS_ERROR_NOT_FOUND ==
-                jls_core_repair_chain(core, core->user_data_head.offset, JLS_TAG_USER_DATA, -1)) {
+        rc = jls_core_repair_chain(core, core->user_data_head.offset, JLS_TAG_USER_DATA, -1);
+        if (JLS_ERROR_NOT_FOUND == rc) {
             JLS_LOGW("user data head unreadable");
-        } else if ((0 == jls_raw_chunk_seek(core->raw, core->user_data_head.offset))
-                   && (0 == jls_core_rd_chunk(core))) {
-            core->user_data_head.hdr = core->chunk_cur.hdr;  // refresh: clamp may have rewritten it
+        } else {
+            ROE(rc);
+            rc = jls_raw_chunk_seek(core->raw, core->user_data_head.offset);
+            if (0 == rc) {
+                rc = jls_core_rd_chunk(core);
+            }
+            if (JLS_ERROR_IO == rc) {
+                return rc;
+            } else if (0 == rc) {
+                core->user_data_head.hdr = core->chunk_cur.hdr;  // refresh: clamp may have rewritten it
+            }
         }
     }
 
@@ -190,8 +198,9 @@ int32_t jls_rd_open(struct jls_rd_s ** instance, const char * path) {
         goto exit;
     }
 
-    if (jls_core_rd_chunk_end(core)) {
-        GOE(JLS_ERROR_EMPTY);  // no valid chunk found
+    rc = jls_core_rd_chunk_end(core);
+    if (rc) {
+        GOE((JLS_ERROR_IO == rc) ? rc : JLS_ERROR_EMPTY);  // else no valid chunk found
     }
     int64_t pos = jls_raw_chunk_tell(core->raw);
 

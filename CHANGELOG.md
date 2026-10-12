@@ -199,8 +199,21 @@ This file contains the list of changes made to the JLS project.
 * Added test-only read and seek fault injection,
   jls_bk_read_limit_set(), and test/read_fault_test.c, which sweeps an
   I/O failure through the reader, crash recovery, jls_repair(), and
-  jls_copy().  Recovery and repair can still leave an inconsistent file
-  after an I/O failure: see doc/plans/recovery_io_faults.md.
+  jls_copy().  ctest runs a sampled sweep; run
+  `read_fault_test --full` for every fault point (about a minute).
+  writer_test also runs fewer cases by default, with the same coverage,
+  and every case with `--full`.
+* Fixed crash recovery and jls_repair() after an I/O error.  A failed
+  read was treated as damage or as the end of the data, so recovery could
+  truncate or drop valid data, or leave a file that no longer opened.
+  Recovery and repair now stop with JLS_ERROR_IO and leave the file as
+  after a crash at that point.  jls_raw_chunk_seek() now returns
+  JLS_ERROR_MESSAGE_INTEGRITY, not JLS_ERROR_IO, for a corrupt offset.
+* Fixed jls_copy() after a read error.  It skipped the chunk as damaged
+  and reported success with an incomplete copy.  It now fails with
+  JLS_ERROR_IO.  Opening a file now also fails if a seek fails while
+  finding the file end.
+  See doc/plans/completed/recovery_io_faults.md.
 
 
 ## 0.18.0

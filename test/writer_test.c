@@ -18,6 +18,11 @@
  * Writer path tests.  Written data is checked by parsing the raw chunks,
  * independent of the reader.  Caller buffers are exact-size heap
  * allocations so ASan flags any over-read.
+ *
+ * By default, the split, duplicate, and I/O fault sweeps use fewer cases
+ * to keep the test fast, with the same coverage and detection in negative
+ * controls.  Run "writer_test --full" for every case, which is about five
+ * times slower, before a release or after changing the writer.
  */
 
 #include <stdarg.h>
@@ -35,6 +40,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+
+// The sweep sizes: reduced by default, see main() for --full.
+static uint32_t split_n_max_ = 9;       // u1 split writes: crosses a byte from both starts
+static uint32_t dup_n1_max_ = 10;       // duplicate writes: first write length limit
+static int64_t io_step_fsr_ = 7993;     // I/O fault byte strides: primes, so the
+static int64_t io_step_ts_ = 3989;      // failures vary within 8-byte chunk alignment
+static int64_t io_step_u1_ = 773;
 
 static const char * filename = "writer_test_tmp.jls";
 
@@ -193,7 +206,7 @@ static void sub_byte_split(uint32_t data_type, uint32_t (*value_fn)(uint64_t), u
 
 static void test_u1_tail_and_split(void **state) {
     (void) state;
-    sub_byte_split(JLS_DATATYPE_U1, value_u1, 17);
+    sub_byte_split(JLS_DATATYPE_U1, value_u1, split_n_max_);
 }
 
 static void test_u4_tail_and_split(void **state) {
@@ -231,7 +244,7 @@ static void test_chunked(void **state) {
 // W2, W10: duplicate (overlapping) writes append only the new samples.
 static void duplicates(uint32_t data_type, uint32_t (*value_fn)(uint64_t)) {
     uint8_t bits = (uint8_t) (data_type >> 8);
-    for (uint32_t n1 = 1; n1 < 20; n1 += 3) {
+    for (uint32_t n1 = 1; n1 < dup_n1_max_; n1 += 3) {
         for (uint32_t ffwd = 1; ffwd <= n1; ++ffwd) {
             for (uint32_t n2 = 1; n2 < 20; n2 += 4) {
                 struct jls_signal_def_s s = signal_def(data_type);
@@ -604,22 +617,22 @@ static void io_fault_sweep(enum fault_mode_e mode, int64_t limit_max, int64_t li
 
 static void test_io_fault_fsr(void **state) {
     (void) state;
-    io_fault_sweep(FAULT_FSR, 400000, 997);
+    io_fault_sweep(FAULT_FSR, 400000, io_step_fsr_);
 }
 
 static void test_io_fault_utc(void **state) {
     (void) state;
-    io_fault_sweep(FAULT_UTC, 200000, 499);
+    io_fault_sweep(FAULT_UTC, 200000, io_step_ts_);
 }
 
 static void test_io_fault_anno(void **state) {
     (void) state;
-    io_fault_sweep(FAULT_ANNO, 250000, 499);
+    io_fault_sweep(FAULT_ANNO, 250000, io_step_ts_);
 }
 
 static void test_io_fault_u1(void **state) {
     (void) state;
-    io_fault_sweep(FAULT_U1, 60000, 97);
+    io_fault_sweep(FAULT_U1, 60000, io_step_u1_);
 }
 
 // W12: a close-time write failure is returned.
@@ -636,7 +649,20 @@ static void test_close_io_error(void **state) {
     remove(filename);
 }
 
-int main(void) {
+int main(int argc, char * argv[]) {
+    for (int i = 1; i < argc; ++i) {
+        if (0 == strcmp(argv[i], "--full")) {
+            split_n_max_ = 17;
+            dup_n1_max_ = 20;
+            io_step_fsr_ = 997;
+            io_step_ts_ = 499;
+            io_step_u1_ = 97;
+        } else {
+            printf("usage: writer_test [--full]\n"
+                   "  --full  Run every split, duplicate, and I/O fault case (slower).\n");
+            return 1;
+        }
+    }
     const struct CMUnitTest tests[] = {
             cmocka_unit_test(test_u1_tail_and_split),
             cmocka_unit_test(test_u4_tail_and_split),

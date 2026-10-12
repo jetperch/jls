@@ -2,7 +2,7 @@
 
 Status: complete (2026-10-12).  Stages 1 to 5 done; stage 6 not planned.
 Stage 5 found recovery and repair defects, now in
-doc/plans/recovery_io_faults.md.
+doc/plans/completed/recovery_io_faults.md.
 Baseline measured on branch `fix/design_review` with the uncommitted
 statistics tests.
 
@@ -68,16 +68,16 @@ test/writer_test.c); allocation and read errors do not.
 4. Done (`test_fsr_omit_reconstruct_f64` in test/core_test.c).  Cover
    `construct_f64()` with a crafted omitted f64 chunk.
 5. Done (test/read_fault_test.c).  `jls_bk_read_limit_set()` fails
-   reads and seeks after an operation budget.  The test sweeps one
+   one read or seek after an operation budget.  The test sweeps one
    failure through every read and seek of the reader, crash recovery,
    jls_repair(), and jls_copy(), and through the writes of the last
    three.  After the fault, the same reader, or a fault-free open,
    repair, or copy, must return the fault-free results.  Fixed defects
    it found: a double free when recovery failed to close the file, a
    reader that dropped a signal after a transient seek error, and an
-   incomplete UTC time map after a transient read error.  Recovery and
-   repair still leave inconsistent files after some faults: see
-   doc/plans/recovery_io_faults.md.
+   incomplete UTC time map after a transient read error.  Recovery,
+   repair, and copy defects it found are fixed in
+   doc/plans/completed/recovery_io_faults.md.
 6. Not planned.  Allocation failure coverage would need a test-only
    allocator hook, and its complexity outweighs the value of these paths
    (decided 2026-10-12).

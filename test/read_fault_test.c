@@ -15,9 +15,16 @@
  */
 
 /*
- * Sweep a backend I/O failure through every read and seek (and, for the
- * paths that write, every write) of the reader, crash recovery, repair,
- * and copy.  See doc/plans/completed/code_coverage.md, stage 5.
+ * Sweep a backend I/O failure through the reads and seeks (and, for the
+ * paths that write, the writes) of the reader, crash recovery, repair,
+ * and copy.  See doc/plans/completed/code_coverage.md, stage 5, and
+ * doc/plans/completed/recovery_io_faults.md.
+ *
+ * By default, the recovery, repair, and copy sweeps sample the fault
+ * points to keep the test fast with nearly the same coverage.  Run
+ * "read_fault_test --full" to fail every read, seek, and write byte,
+ * which takes about a minute, before a release or after changing
+ * recovery, repair, or copy.
  *
  * A failure must return an error without crashing or leaking, and must
  * not poison later work: the same reader, or a later open, repair, or
@@ -46,7 +53,7 @@ static const char * SRC_PATH = "read_fault_test_src.jls";
 static const char * TST_PATH = "read_fault_test_tmp.jls";
 static const char * DST_PATH = "read_fault_test_dst.jls";
 
-#define SAMPLE_COUNT (30000)
+#define SAMPLE_COUNT (12000)
 #define WINDOW_SIZE (937)
 #define UTC_PERIOD (97)
 
@@ -90,6 +97,11 @@ static const struct jls_signal_def_s SIGNAL_6 = {
         .name = "gpi",
         .units = "",
 };
+
+// The fault point strides: sampled by default, 1 with --full.
+static int64_t read_step_ = 5;          // reads and seeks
+static int64_t write_step_ = 37;        // write bytes: recovery and repair
+static int64_t copy_write_step_ = 97;   // write bytes: copy
 
 enum fault_e {
     FAULT_READ,     // jls_bk_fread and jls_bk_fseek calls
@@ -295,55 +307,59 @@ static void test_reader(void ** state) {
 }
 
 /*
- * Recovery and repair are not yet consistent after an I/O failure: the
- * next open can fail or return wrong data.  See
- * doc/plans/recovery_io_faults.md.  Until fixed, these sweeps require no
- * crash, leak, or sanitizer error, and report the inconsistent faults.
+ * After a fault, the file must read exactly as without the fault: either
+ * the next open (or repair then open) succeeds, or it fails and
+ * jls_repair() restores the file.  Data loss is never allowed.  Recovery
+ * stops on an I/O error, so the file is left as after a crash at that
+ * point, and a crash during recovery can need jls_repair(), see
+ * doc/plans/completed/recovery_io_faults.md.
  */
-static const int RECOVERY_STRICT = 0;
-
 struct sweep_s {
     int64_t faults;
-    int64_t unreadable;     // the fault-free open or workload fails
-    int64_t wrong;          // the fault-free workload returns other results
+    int64_t repaired;       // needed jls_repair() to open
 };
 
-// After a fault, the fault-free rc and results must match ref.
+static int32_t open_and_read(const char * path, struct result_s * r) {
+    struct jls_rd_s * rd = NULL;
+    int32_t rc = jls_rd_open(&rd, path);
+    if (0 == rc) {
+        rc = workload(rd, r);
+        jls_rd_close(rd);
+    }
+    return rc;
+}
+
 static void sweep_check(struct sweep_s * sw, int32_t rc, const char * path,
                         const struct result_s * ref, int64_t limit) {
     struct result_s r;
-    struct jls_rd_s * rd = NULL;
     ++sw->faults;
     if (0 == rc) {
-        rc = jls_rd_open(&rd, path);
-    }
-    if (0 == rc) {
-        rc = workload(rd, &r);
-        jls_rd_close(rd);
+        rc = open_and_read(path, &r);
     }
     if (rc) {
-        ++sw->unreadable;
-    } else if (memcmp(ref, &r, sizeof(r))) {
-        ++sw->wrong;
-    } else {
-        return;
+        ++sw->repaired;
+        rc = jls_repair(path, NULL, NULL, NULL, NULL);
+        if (0 == rc) {
+            rc = open_and_read(path, &r);
+        }
     }
-    if (RECOVERY_STRICT) {
-        print_error("limit %" PRIi64 ": rc %d\n", limit, rc);
+    if (rc) {
+        print_error("limit %" PRIi64 ": unreadable after repair, rc %d\n", limit, rc);
         fail();
     }
+    result_check(ref, &r, limit);
 }
 
 static void sweep_report(const char * name, const struct sweep_s * sw) {
-    print_message("%s: of %" PRIi64 " faults, %" PRIi64 " leave the file unreadable and %" PRIi64
-                  " leave wrong data\n", name, sw->faults, sw->unreadable, sw->wrong);
+    print_message("%s: %" PRIi64 " faults, %" PRIi64 " needed jls_repair()\n",
+                  name, sw->faults, sw->repaired);
 }
 
 // Crash recovery on open: fail each I/O, then a fault-free open must
 // complete the recovery with the same results.
 static void recovery_sweep(const char * name, enum fault_e fault, int64_t step) {
     struct result_s ref;
-    struct sweep_s sw = {0, 0, 0};
+    struct sweep_s sw = {0, 0};
     struct jls_rd_s * rd = NULL;
     gen(SRC_PATH, 0);
     file_copy(SRC_PATH, TST_PATH);
@@ -352,8 +368,8 @@ static void recovery_sweep(const char * name, enum fault_e fault, int64_t step) 
     int64_t ops = limit_total(fault) - t0;
     jls_rd_close(rd);
     open_workload(TST_PATH, &ref);
-    assert_true(ref.length[0] > 25000);
-    assert_true(ref.length[1] > 25000);
+    assert_true(ref.length[0] > (SAMPLE_COUNT * 5 / 6));  // recovery keeps most data
+    assert_true(ref.length[1] > (SAMPLE_COUNT * 5 / 6));
 
     for (int64_t limit = 0; limit < ops; limit += step) {
         file_copy(SRC_PATH, TST_PATH);
@@ -372,27 +388,27 @@ static void recovery_sweep(const char * name, enum fault_e fault, int64_t step) 
 
 static void test_recovery_read(void ** state) {
     (void) state;
-    recovery_sweep("recovery read", FAULT_READ, 1);
+    recovery_sweep("recovery read", FAULT_READ, read_step_);
 }
 
 static void test_recovery_write(void ** state) {
     (void) state;
-    recovery_sweep("recovery write", FAULT_WRITE, 13);
+    recovery_sweep("recovery write", FAULT_WRITE, write_step_);
 }
 
 // Offline repair: fail each I/O, then a fault-free repair must produce
 // the same results.
 static void repair_sweep(const char * name, enum fault_e fault, int64_t step) {
     struct result_s ref;
-    struct sweep_s sw = {0, 0, 0};
+    struct sweep_s sw = {0, 0};
     gen(SRC_PATH, 0);
     file_copy(SRC_PATH, TST_PATH);
     int64_t t0 = limit_total(fault);
     assert_int_equal(0, jls_repair(TST_PATH, NULL, NULL, NULL, NULL));
     int64_t ops = limit_total(fault) - t0;
     open_workload(TST_PATH, &ref);
-    assert_true(ref.length[0] > 25000);
-    assert_true(ref.length[1] > 25000);
+    assert_true(ref.length[0] > (SAMPLE_COUNT * 5 / 6));  // recovery keeps most data
+    assert_true(ref.length[1] > (SAMPLE_COUNT * 5 / 6));
 
     for (int64_t limit = 0; limit < ops; limit += step) {
         file_copy(SRC_PATH, TST_PATH);
@@ -409,12 +425,12 @@ static void repair_sweep(const char * name, enum fault_e fault, int64_t step) {
 
 static void test_repair_read(void ** state) {
     (void) state;
-    repair_sweep("repair read", FAULT_READ, 1);
+    repair_sweep("repair read", FAULT_READ, read_step_);
 }
 
 static void test_repair_write(void ** state) {
     (void) state;
-    repair_sweep("repair write", FAULT_WRITE, 13);
+    repair_sweep("repair write", FAULT_WRITE, write_step_);
 }
 
 // Copy: fail each I/O.  A copy that reports success must be complete.
@@ -447,15 +463,26 @@ static void copy_sweep(enum fault_e fault, int64_t step) {
 
 static void test_copy_read(void ** state) {
     (void) state;
-    copy_sweep(FAULT_READ, 1);
+    copy_sweep(FAULT_READ, read_step_);
 }
 
 static void test_copy_write(void ** state) {
     (void) state;
-    copy_sweep(FAULT_WRITE, 97);
+    copy_sweep(FAULT_WRITE, copy_write_step_);
 }
 
-int main(void) {
+int main(int argc, char * argv[]) {
+    for (int i = 1; i < argc; ++i) {
+        if (0 == strcmp(argv[i], "--full")) {
+            read_step_ = 1;
+            write_step_ = 1;
+            copy_write_step_ = 1;
+        } else {
+            printf("usage: read_fault_test [--full]\n"
+                   "  --full  Fail every read, seek, and write byte (slow).\n");
+            return 1;
+        }
+    }
     const struct CMUnitTest tests[] = {
             cmocka_unit_test(test_reader),
             cmocka_unit_test(test_recovery_read),
