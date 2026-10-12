@@ -172,7 +172,7 @@ jobs:
           if-no-files-found: error
 
   build_python_wheels:
-    name: Build on ${{ matrix.os }}
+    name: Build ${{ matrix.python_version }} on ${{ matrix.os }}
     needs:
       - build_native_win
       - build_native_posix

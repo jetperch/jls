@@ -204,38 +204,37 @@ class TestBinding(unittest.TestCase):
             w.fsr(3, 1000, a)
             w.fsr(3, 1000 + 1280 + 12800, b)
             w.fsr(3, 1000 + 1280, b[:100])  # late: the gap is already filled
-        r = Reader(self._path)
-        self.addCleanup(r.close)
-        return r
 
     def test_fsr_gap_f32_nan(self):
         a = np.arange(1280, dtype=np.float32) + 1
         b = -np.arange(5920, dtype=np.float32) - 1
-        r = self._fsr_gap(DataType.F32, a, b)
+        self._fsr_gap(DataType.F32, a, b)
         n = 1280 + 12800 + 5920
-        self.assertEqual(n, r.signals[3].length)  # no fill before the first write
-        d = r.fsr(3, 0, n)
+        x = np.concatenate([a, b]).astype(np.float64)
+        with Reader(self._path) as r:
+            self.assertEqual(n, r.signals[3].length)  # no fill before the first write
+            d = r.fsr(3, 0, n)
+            stats = r.fsr_statistics(3, 0, n, 1)  # NaN fill is skipped
+            gap_stats = r.fsr_statistics(3, 2560, 2560, 4)  # inside the gap
         np.testing.assert_equal(a, d[:1280])
         self.assertTrue(np.all(np.isnan(d[1280:14080])))  # filled, not interpolated
         np.testing.assert_equal(b, d[14080:])
-        x = np.concatenate([a, b]).astype(np.float64)
-        stats = r.fsr_statistics(3, 0, n, 1)  # NaN fill is skipped
         np.testing.assert_allclose(np.mean(x), stats[0, SummaryFSR.MEAN], rtol=1e-6)
         np.testing.assert_allclose(np.min(x), stats[0, SummaryFSR.MIN])
         np.testing.assert_allclose(np.max(x), stats[0, SummaryFSR.MAX])
         np.testing.assert_allclose(np.std(x, ddof=1), stats[0, SummaryFSR.STD], rtol=1e-6)
-        stats = r.fsr_statistics(3, 2560, 2560, 4)  # inside the gap
-        self.assertTrue(np.all(np.isnan(stats)))
+        self.assertTrue(np.all(np.isnan(gap_stats)))
 
     def test_fsr_gap_u8_zero(self):
         a = (np.arange(1280) % 200 + 50).astype(np.uint8)
         b = (np.arange(5920) % 100 + 100).astype(np.uint8)
-        r = self._fsr_gap(DataType.U8, a, b)
+        self._fsr_gap(DataType.U8, a, b)
         n = 1280 + 12800 + 5920
-        d = r.fsr(3, 0, n)
+        with Reader(self._path) as r:
+            d = r.fsr(3, 0, n)
+            stats = r.fsr_statistics(3, 0, n, 1)  # zero fill is data
         x = np.concatenate([a, np.zeros(12800, dtype=np.uint8), b])
         np.testing.assert_equal(x, d)
-        stats = r.fsr_statistics(3, 0, n, 1)  # zero fill is data
         np.testing.assert_allclose(np.mean(x, dtype=np.float64), stats[0, SummaryFSR.MEAN], rtol=1e-6)
         self.assertEqual(0, stats[0, SummaryFSR.MIN])
 
@@ -358,10 +357,6 @@ class TestBinding(unittest.TestCase):
                          samples_per_data=4 * sdf, sample_decimate_factor=sdf,
                          entries_per_summary=20, summary_decimate_factor=10)
             w.fsr(3, 0, data)
-        r = Reader(self._path)
-        self.addCleanup(r.close)
-        self.assertEqual(sdf, r.signals[3].sample_decimate_factor)
-        return r
 
     def test_fsr_statistics_mean_min_max(self):
         # Integer extremes and non-finite float samples through every path: samples,
@@ -395,10 +390,12 @@ class TestBinding(unittest.TestCase):
                 # summary entries with some, but not all, non-finite samples
                 finite = np.isfinite(np.pad(x, (0, -n % sdf), constant_values=0)).reshape(-1, sdf)
                 partial = finite.any(axis=1) & ~finite.all(axis=1)
-                r = self._stats_signal(data_type, data, sdf)
+                self._stats_signal(data_type, data, sdf)
+                with Reader(self._path) as r:
+                    self.assertEqual(sdf, r.signals[3].sample_decimate_factor)
+                    results = [r.fsr_statistics(3, *window) for window in windows]
                 rtol = 1e-12 if data.dtype.itemsize >= 4 and data_type != DataType.F32 else 1e-6
-                for start, incr, count in windows:
-                    stats = r.fsr_statistics(3, start, incr, count)
+                for (start, incr, count), stats in zip(windows, results):
                     w = x[start:start + incr * count].reshape(count, incr)
                     with np.errstate(invalid='ignore'):
                         w = np.where(np.isfinite(w), w, np.nan)
@@ -424,14 +421,17 @@ class TestBinding(unittest.TestCase):
         for data_type, data in [(DataType.F32, np.cumsum(rng.normal(0, 1, n)).astype(np.float32)),
                                 (DataType.I16, rng.integers(-30000, 30000, n).astype(np.int16))]:
             with self.subTest(data_type=data_type):
-                r = self._stats_signal(data_type, data, sdf)
+                self._stats_signal(data_type, data, sdf)
                 x = data.astype(np.float64)
-                for start, incr, count in [(100, 1000, 300), (37, 10007, 30), (0, 3333, 100),
-                                           (5, 2600, 150), (999, 30011, 13)]:
+                windows = [(100, 1000, 300), (37, 10007, 30), (0, 3333, 100),
+                           (5, 2600, 150), (999, 30011, 13)]
+                with Reader(self._path) as r:
+                    self.assertEqual(sdf, r.signals[3].sample_decimate_factor)
+                    results = [r.fsr_statistics(3, *window) for window in windows]
+                for (start, incr, count), stats in zip(windows, results):
                     step, level_step = 1, sdf
                     while incr >= level_step and (incr * count) // 25 >= level_step:
                         step, level_step = level_step, level_step * sumdf
-                    stats = r.fsr_statistics(3, start, incr, count)
                     for i in range(count):
                         a, b = start + i * incr, start + (i + 1) * incr
                         ea, eb = (a // step) * step, min(-(-b // step) * step, n)
