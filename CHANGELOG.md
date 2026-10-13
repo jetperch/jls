@@ -166,6 +166,9 @@ This file contains the list of changes made to the JLS project.
   as several Joulescopes recorded together.  It used the latest end time
   instead of the earliest, so the shorter signals were read past their
   end and the export failed with PARAMETER_INVALID.
+* `pyjls extract` clamps each signal to its own length when converting the
+  common time window to sample ids, and `pyjls plot` handles signals
+  shorter than the requested point count.
 * jls_wr_flush() treats an fsync() that the file system does not support
   (EINVAL, ENOTSUP) as success instead of latching JLS_ERROR_IO, so an
   export to such a mount no longer reports an incomplete file.

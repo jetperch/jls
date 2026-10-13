@@ -20,7 +20,8 @@ import tempfile
 import unittest
 import numpy as np
 from pyjls import Writer, DataType, time64
-from pyjls.entry_points import csv
+from pyjls import Reader
+from pyjls.entry_points import csv, extract, plot
 
 
 _FS = 100_000
@@ -67,6 +68,53 @@ class TestCsv(unittest.TestCase):
         rc, data = self._run(100, signals='1')
         self.assertEqual(0, rc)
         self.assertEqual((100, 2), data.shape)
+
+
+class TestExtract(TestCsv):
+    """Extract over the common window of signals with different extents."""
+
+    def test_different_extents(self):
+        out = os.path.join(self._tempdir.name, 'extract.jls')
+        p = argparse.ArgumentParser()
+        on_cmd = extract.parser_config(p)
+        self.assertEqual(0, on_cmd(p.parse_args([self._path, out])))
+        with Reader(out) as r:
+            lengths = {s.signal_id: s.length for s in r.signals.values() if s.signal_id}
+            self.assertEqual({1, 2}, set(lengths.keys()))
+            # the common window is 10 ms shorter than the first signal
+            self.assertAlmostEqual(_FS - _FS // 100, lengths[1], delta=2)
+            self.assertAlmostEqual(_FS - _FS // 100, lengths[2], delta=2)
+            for signal_id in (1, 2):
+                np.testing.assert_allclose(r.fsr(signal_id, 0, lengths[signal_id]), float(signal_id))
+
+    def test_single_signal(self):
+        out = os.path.join(self._tempdir.name, 'extract.jls')
+        p = argparse.ArgumentParser()
+        on_cmd = extract.parser_config(p)
+        self.assertEqual(0, on_cmd(p.parse_args(['--signals', '1', self._path, out])))
+        with Reader(out) as r:
+            self.assertEqual(_FS, r.signals[1].length)
+
+
+class TestPlot(TestCsv):
+
+    def _plot(self, *args):
+        try:
+            import matplotlib
+        except ImportError:
+            self.skipTest('matplotlib not installed')
+        matplotlib.use('Agg')
+        out = os.path.join(self._tempdir.name, 'plot.png')
+        p = argparse.ArgumentParser()
+        on_cmd = plot.parser_config(p)
+        self.assertEqual(0, on_cmd(p.parse_args(list(args) + ['--out', out, self._path])))
+        self.assertTrue(os.path.getsize(out) > 0)
+
+    def test_different_extents(self):
+        self._plot()
+
+    def test_short_signal(self):
+        self._plot('--sample_count', str(_FS * 10))  # fewer samples than points: every sample
 
 
 if __name__ == '__main__':
