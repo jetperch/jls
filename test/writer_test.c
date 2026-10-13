@@ -709,6 +709,19 @@ static void test_close_after_error_recovers(void **state) {
     assert_true(closed[1] > accepted - 32768);
 }
 
+#ifndef _WIN32
+// fsync on a special file fails with EINVAL, as on file systems without fsync.
+// The backend must report success so that jls_wr_flush() does not latch it.
+// A JLS file cannot live on /dev/null (seeks fail), so test the backend call.
+static void test_flush_fsync_unsupported(void ** state) {
+    (void) state;
+    struct jls_bkf_s bk = {.fpos = 0, .fend = 0, .fd = -1};
+    assert_int_equal(0, jls_bk_fopen(&bk, "/dev/null", "w"));
+    assert_int_equal(0, jls_bk_fflush(&bk));
+    assert_int_equal(0, jls_bk_fclose(&bk));
+}
+#endif
+
 int main(int argc, char * argv[]) {
     for (int i = 1; i < argc; ++i) {
         if (0 == strcmp(argv[i], "--full")) {
@@ -744,6 +757,9 @@ int main(int argc, char * argv[]) {
             cmocka_unit_test(test_io_fault_u1),
             cmocka_unit_test(test_close_io_error),
             cmocka_unit_test(test_close_after_error_recovers),
+#ifndef _WIN32
+            cmocka_unit_test(test_flush_fsync_unsupported),
+#endif
     };
 
     const char * filter = getenv("JLS_TEST_FILTER");  // run a subset, such as for negative controls

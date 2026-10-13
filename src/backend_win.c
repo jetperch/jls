@@ -26,6 +26,7 @@
 #include <fcntl.h>
 #include <sys\stat.h>
 #include <share.h>
+#include <errno.h>
 
 
 struct jls_bkt_s {
@@ -147,7 +148,14 @@ int64_t jls_bk_ftell(struct jls_bkf_s * self) {
 
 int32_t jls_bk_fflush(struct jls_bkf_s * self) {
     if (_commit(self->fd)) {
-        JLS_LOGE("commit failed %d", errno);
+        int err = errno;
+        if ((EINVAL == err) || (ENOTSUP == err)) {
+            // Devices and some network mounts cannot flush.  The writes
+            // succeeded, so only durability is unknown: do not latch.
+            JLS_LOGW("commit not supported %d", err);
+            return 0;
+        }
+        JLS_LOGE("commit failed %d", err);
         return JLS_ERROR_IO;
     }
     return 0;

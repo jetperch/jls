@@ -196,7 +196,14 @@ int64_t jls_bk_ftell(struct jls_bkf_s * self) {
 
 int32_t jls_bk_fflush(struct jls_bkf_s * self) {
     if (fsync(self->fd)) {
-        JLS_LOGE("fsync failed %d", errno);
+        int err = errno;
+        if ((EINVAL == err) || (ENOTSUP == err) || (EOPNOTSUPP == err)) {
+            // Special files and some FUSE and network mounts cannot fsync.  The
+            // writes succeeded, so only durability is unknown: do not latch.
+            JLS_LOGW("fsync not supported %d", err);
+            return 0;
+        }
+        JLS_LOGE("fsync failed %d", err);
         return JLS_ERROR_IO;
     }
     return 0;

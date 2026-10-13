@@ -162,6 +162,9 @@ This file contains the list of changes made to the JLS project.
   the legacy 64-bit summary fallback made as large as the signal, and
   ran up to 40% slower than 0.18; pyjls Reader.time_map_length() raised
   for VSR signals instead of returning 0.
+* jls_wr_flush() treats an fsync() that the file system does not support
+  (EINVAL, ENOTSUP) as success instead of latching JLS_ERROR_IO, so an
+  export to such a mount no longer reports an incomplete file.
 * Statistics skip NaN samples, and windows with no finite samples return
   NaN.  UTC time maps ignore entries whose timestamps do not increase,
   so after a backward clock step, entries are skipped until UTC passes
