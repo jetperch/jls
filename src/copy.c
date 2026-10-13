@@ -43,6 +43,16 @@
     }                                                                                               \
 } while (0)
 
+/**
+ * @brief Validate a field of an untrusted source chunk.
+ *
+ * @param x The condition that a well-formed chunk satisfies.
+ * @param description The failure description for MSG_ERROR().
+ *
+ * When x is false, store description in the enclosing function's
+ * `desc` out-parameter and return JLS_ERROR_MESSAGE_INTEGRITY.
+ * The caller reports the chunk through msg_fn and skips it.
+ */
 #define VALIDATE(x, description) do {   \
     if (!(x)) {                         \
         *desc = (description);          \
@@ -50,6 +60,16 @@
     }                                   \
 } while (0)
 
+/**
+ * @brief Return On error with Description.
+ *
+ * @param x The expression that returns 0 or a JLS error code.
+ * @param description The failure description for MSG_ERROR().
+ *
+ * Like ROE(), but also store description in the enclosing function's
+ * `desc` out-parameter before returning the error code, so the caller
+ * can report which step failed.
+ */
 #define ROD(x, description) do {        \
     int32_t rc__ = (x);                 \
     if (rc__) {                         \
