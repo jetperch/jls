@@ -162,6 +162,10 @@ This file contains the list of changes made to the JLS project.
   the legacy 64-bit summary fallback made as large as the signal, and
   ran up to 40% slower than 0.18; pyjls Reader.time_map_length() raised
   for VSR signals instead of returning 0.
+* Fixed `pyjls csv` on files with signals of different time extents, such
+  as several Joulescopes recorded together.  It used the latest end time
+  instead of the earliest, so the shorter signals were read past their
+  end and the export failed with PARAMETER_INVALID.
 * jls_wr_flush() treats an fsync() that the file system does not support
   (EINVAL, ENOTSUP) as success instead of latching JLS_ERROR_IO, so an
   export to such a mount no longer reports an incomplete file.
