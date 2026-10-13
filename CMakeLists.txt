@@ -16,7 +16,7 @@ cmake_minimum_required (VERSION 3.10)
 set(PARENT_PROJECT_DIR ${PROJECT_SOURCE_DIR})
 set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "" FORCE)  # universal2
 project(JLS
-        VERSION 0.18.0
+        VERSION 0.19.0
         LANGUAGES C)
 SET(PROJECT_PREFIX JLS)
 SET(VERSION_STRING "${PROJECT_VERSION}")
@@ -35,6 +35,7 @@ option(JLS_UNIT_TEST "Build the JLS unit tests" ON)
 option(JLS_EXAMPLES "Build the JLS examples" ON)
 option(BUILD_SHARED_LIBS "Build using shared libraries" OFF)
 option(JLS_OPTIMIZE_CRC "Perform CRC optimizations" ON)
+option(JLS_COVERAGE "Instrument for gcov code coverage, see doc/coverage.md" OFF)
 
 function (SET_FILENAME _filename)
     get_filename_component(b ${_filename} NAME)
@@ -82,6 +83,16 @@ if (JLS_TOPLEVEL)
     endif()
 endif()
 remove_definitions(-D__cplusplus)
+
+if (JLS_COVERAGE)
+    if (NOT CMAKE_C_COMPILER_ID MATCHES "^(GNU|(Apple)?Clang)$")
+        message(FATAL_ERROR "JLS_COVERAGE requires gcc or clang")
+    endif()
+    message(STATUS "code coverage instrumentation enabled")
+    add_compile_options(--coverage -O0)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} --coverage")
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} --coverage")
+endif()
 
 set(JLS_SOURCE_PATH ${CMAKE_CURRENT_SOURCE_DIR}
     CACHE INTERNAL "JLS source path" FORCE

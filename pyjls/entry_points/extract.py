@@ -142,8 +142,9 @@ def on_cmd(args):
     try:  # Create signals and copy data
         for signal_id in signals_used:
             w.signal_def_from_struct(signals[signal_id])
-            offset = r.timestamp_to_sample_id(signal_id, t64_start)
-            offset_end = r.timestamp_to_sample_id(signal_id, t64_stop)
+            # clamp: time map rounding must not read past the signal
+            offset = max(0, r.timestamp_to_sample_id(signal_id, t64_start))
+            offset_end = min(signals[signal_id].length - 1, r.timestamp_to_sample_id(signal_id, t64_stop))
             signal_name = f'{sources[signals[signal_id].source_id].name}.{signals[signal_id].name}'
             verbose(f'Copy signal {signal_id} {signal_name:30s} {offset_end - offset + 1} samples')
             w.utc(signal_id, offset, t64_start)

@@ -93,6 +93,39 @@ jobs:
           path: |
             cmake_build_static/example/jls
 
+  coverage:
+    name: C unit test coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Build with coverage
+        run: |
+          cmake -S . -B build_cov -DCMAKE_BUILD_TYPE=Debug -DJLS_COVERAGE=ON
+          cmake --build build_cov -j4
+
+      - name: Run tests
+        run: ctest --test-dir build_cov --output-on-failure
+
+      - name: Report coverage
+        run: |
+          python -m pip install gcovr
+          mkdir -p build_cov/coverage
+          gcovr -r . --filter src/ --object-directory build_cov
+          gcovr -r . --filter src/ --object-directory build_cov --html-details build_cov/coverage/index.html
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage
+          path: build_cov/coverage
+
   build_python_sdist:
     name: Build python sdist
     runs-on: ubuntu-latest
@@ -139,7 +172,7 @@ jobs:
           if-no-files-found: error
 
   build_python_wheels:
-    name: Build on ${{ matrix.os }}
+    name: Build ${{ matrix.python_version }} on ${{ matrix.os }}
     needs:
       - build_native_win
       - build_native_posix

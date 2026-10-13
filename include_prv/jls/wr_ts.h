@@ -47,7 +47,7 @@ extern "C" {
  * @param instance[out] The new instance
  * @param parent The parent instance.
  * @param track_type The track type (ANNOTATION, UTC) for this timeseries.
- * @param decimate_factor The decimation factor for each index level.
+ * @param decimate_factor The decimation factor for each index level, >= 2.
  * @return 0 or error code.
  */
 int32_t jls_wr_ts_open(
@@ -59,10 +59,17 @@ int32_t jls_wr_ts_open(
 /**
  * @brief Close the timeseries and write summary information to disk.
  *
- * @param self The timeseries instance.
- * @return 0 or error code.
+ * @param self The timeseries instance, which is always freed.
+ * @return 0 or the first error.  Writing stops at the first error.
  */
 int32_t jls_wr_ts_close(struct jls_core_ts_s * self);
+
+/**
+ * @brief Free the timeseries without writing pending summaries.
+ *
+ * @param self The timeseries instance.
+ */
+void jls_wr_ts_free(struct jls_core_ts_s * self);
 
 /**
  * @brief Add a timeseries annotation entry.

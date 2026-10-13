@@ -399,6 +399,24 @@ struct jls_source_def_s {
 
 /**
  * @brief The signal definition.
+ *
+ * On write, zero values select per-data-type defaults.  The writer then
+ * aligns the FSR parameters: sample_decimate_factor >= 10 and a multiple
+ * of 256 bits of samples, samples_per_data a multiple of
+ * sample_decimate_factor, entries_per_summary a multiple of both
+ * summary_decimate_factor (>= 10) and the entries per data chunk, and
+ * annotation_decimate_factor and utc_decimate_factor >= 10.
+ *
+ * Caps: the writer rejects definitions that exceed them after alignment,
+ * and the reader skips FSR signals whose definitions violate them:
+ * - samples_per_data <= 2^22 (4 Mi samples),
+ * - samples_per_data * sample size <= 16 MiB of data per chunk,
+ * - entries_per_summary <= 2^19 (16 MiB of 64-bit summaries),
+ * - annotation_decimate_factor and utc_decimate_factor <= 2^16 (write).
+ * On read, an FSR definition must also have sample_decimate_factor
+ * dividing samples_per_data, a whole number of bytes per summary entry,
+ * entries_per_summary a multiple of the entries per data chunk and of
+ * summary_decimate_factor, and summary_decimate_factor >= 2.
  */
 struct jls_signal_def_s {       // 0 reserved for VSR annotations
     // store unique signal_id in chunk_meta
@@ -447,10 +465,11 @@ struct jls_track_head_s {
     uint64_t offset[16];  // 0 = data, 1 = first summary, ...
 };
 
-/// The summary storage order for each entry
+/// The summary storage order for each entry.  Entries hold raw values:
+/// readers scale fixed-point (q != 0) signals by 2^-q, see JLS_DATATYPE_DEF.
 enum jls_summary_fsr_e {
     JLS_SUMMARY_FSR_MEAN = 0,
-    JLS_SUMMARY_FSR_STD = 1,
+    JLS_SUMMARY_FSR_STD = 1,     // population standard deviation: divide by the sample count
     JLS_SUMMARY_FSR_MIN = 2,
     JLS_SUMMARY_FSR_MAX = 3,
     JLS_SUMMARY_FSR_COUNT = 4,   // must be last
@@ -640,7 +659,7 @@ struct jls_fsr_f32_summary_s {
 /**
  * @brief The FSR summary chunk format with f64 values.
  *
- * This summary format is used by u64, i64, f64.
+ * This summary format is used by u32, u64, i32, i64, f64.
  */
 struct jls_fsr_f64_summary_s {
     struct jls_payload_header_s header;   ///< The payload

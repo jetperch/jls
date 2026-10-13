@@ -60,9 +60,10 @@ def on_cmd(args):
             signals = [s for s in r.signals.values()]
         signals = [s for s in signals if s.signal_type == SignalType.FSR]
 
-        # find the earliest starting time for any signal (time64)
+        # the time window common to every signal (time64): the latest start to
+        # the earliest end, since signals from several devices differ
         t_start = max([r.sample_id_to_timestamp(signal.signal_id, 0) for signal in signals])
-        t_end = max([r.sample_id_to_timestamp(signal.signal_id, signal.length - 1) for signal in signals])
+        t_end = min([r.sample_id_to_timestamp(signal.signal_id, signal.length - 1) for signal in signals])
 
         fmt = ['%.6f']
         count = [args.count]
@@ -70,8 +71,9 @@ def on_cmd(args):
         for signal in signals:
             fmt.append(_FORMAT.get(signal.data_type, '%g'))
             columns.append(f'{r.sources[signal.source_id].name}.{signal.name}')
-            s_start = r.timestamp_to_sample_id(signal.signal_id, t_start)
-            s_end = r.timestamp_to_sample_id(signal.signal_id, t_end)
+            # clamp: time map rounding must not request past the signal
+            s_start = max(0, r.timestamp_to_sample_id(signal.signal_id, t_start))
+            s_end = min(signal.length, r.timestamp_to_sample_id(signal.signal_id, t_end) + 1)
             signal_info.append([s_start, s_end])
             count.append(s_end - s_start)
         count = min(count)

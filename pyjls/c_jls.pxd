@@ -16,6 +16,12 @@ from libc.stdint cimport uint8_t, uint16_t, uint32_t, uint64_t, int32_t, int64_t
 
 
 cdef extern from "jls/ec.h":
+    enum jls_error_code_e:
+        JLS_ERROR_PARAMETER_INVALID
+        JLS_ERROR_NOT_SUPPORTED
+        JLS_ERROR_TOO_BIG
+        JLS_ERROR_NOT_FOUND
+        JLS_ERROR_ALREADY_EXISTS
     const char * jls_error_code_name(int ec)
     const char * jls_error_code_description(int ec)
 
@@ -87,8 +93,8 @@ cdef extern from "jls/format.h":
 
 
 cdef extern from "jls/log.h":
-    void jls_log_printf(const char * format, ...)
-    ctypedef void (*jls_log_cbk)(const char * msg)
+    void jls_log_printf(const char * format, ...) nogil
+    ctypedef void (*jls_log_cbk)(const char * msg) noexcept nogil
     void jls_log_register(jls_log_cbk handler)
     void jls_log_unregister()
 
@@ -103,16 +109,16 @@ cdef extern from "jls/threaded_writer.h":
         JLS_TWR_FLAG_DROP_ON_OVERFLOW = (1 << 0)
     int32_t jls_twr_open(jls_twr_s ** instance, const char * path) nogil
     int32_t jls_twr_close(jls_twr_s * self) nogil
-    uint32_t jls_twr_flags_get(jls_twr_s * self)
-    int32_t jls_twr_flags_set(jls_twr_s * self, uint32_t flags)
+    uint32_t jls_twr_flags_get(jls_twr_s * self) nogil
+    int32_t jls_twr_flags_set(jls_twr_s * self, uint32_t flags) nogil
     int32_t jls_twr_flush(jls_twr_s * self) nogil
-    int32_t jls_twr_source_def(jls_twr_s * self, const jls_source_def_s * source)
-    int32_t jls_twr_signal_def(jls_twr_s * self, const jls_signal_def_s * signal)
+    int32_t jls_twr_source_def(jls_twr_s * self, const jls_source_def_s * source) nogil
+    int32_t jls_twr_signal_def(jls_twr_s * self, const jls_signal_def_s * signal) nogil
     int32_t jls_twr_user_data(jls_twr_s * self, uint16_t chunk_meta,
             jls_storage_type_e storage_type, const uint8_t * data, uint32_t data_size) nogil
     int32_t jls_twr_fsr(jls_twr_s * self, uint16_t signal_id,
             int64_t sample_id, const void * data, uint32_t data_length) nogil
-    int32_t jls_twr_fsr_omit_data(jls_twr_s * self, uint16_t signal_id, uint32_t enable)
+    int32_t jls_twr_fsr_omit_data(jls_twr_s * self, uint16_t signal_id, uint32_t enable) nogil
     int32_t jls_twr_annotation(jls_twr_s * self, uint16_t signal_id,
             int64_t timestamp,
             float y,
@@ -126,7 +132,7 @@ cdef extern from "jls/threaded_writer.h":
 
 cdef extern from "jls/reader.h":
     struct jls_rd_s
-    int32_t jls_rd_open(jls_rd_s ** instance, const char * path)
+    int32_t jls_rd_open(jls_rd_s ** instance, const char * path) nogil
     void jls_rd_close(jls_rd_s * self) nogil
     int32_t jls_rd_sources(jls_rd_s * self, jls_source_def_s ** sources, uint16_t * count)
     int32_t jls_rd_signals(jls_rd_s * self, jls_signal_def_s ** signals, uint16_t * count)
@@ -159,9 +165,9 @@ cdef extern from "jls/progress.h":
 cdef extern from "jls/copy.h":
     int32_t jls_copy(const char * src, const char * dst,
                      jls_msg_fn msg_fn, void * msg_user_data,
-                     jls_progress_fn progress_fn, void * progress_user_data)
+                     jls_progress_fn progress_fn, void * progress_user_data) nogil
 
 cdef extern from "jls/repair.h":
     int32_t jls_repair(const char * path,
                        jls_msg_fn msg_fn, void * msg_user_data,
-                       jls_progress_fn progress_fn, void * progress_user_data)
+                       jls_progress_fn progress_fn, void * progress_user_data) nogil

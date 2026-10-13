@@ -48,6 +48,56 @@ struct jls_twr_s;
 
 int32_t jls_twr_run(struct jls_twr_s * self);
 
+/**
+ * @brief Validate an annotation type.
+ *
+ * @param annotation_type The jls_annotation_type_e.
+ * @return 0 or JLS_ERROR_PARAMETER_INVALID.
+ */
+int32_t jls_wr_annotation_type_validate(uint32_t annotation_type);
+
+/**
+ * @brief Validate a user_data or annotation payload.
+ *
+ * @param storage_type The jls_storage_type_e, which must be a defined value.
+ * @param data The payload, which STRING and JSON require.
+ * @param data_size The payload size in bytes, which BINARY requires.
+ * @return 0 or JLS_ERROR_PARAMETER_INVALID.
+ */
+int32_t jls_wr_payload_validate(uint32_t storage_type, const uint8_t * data, uint32_t data_size);
+
+/**
+ * @brief Validate jls_wr_user_data() arguments.
+ *
+ * @param chunk_meta The chunk metadata, which must have bits 15:12 clear.
+ * @param storage_type The jls_storage_type_e.
+ * @param data The payload.
+ * @param data_size The payload size in bytes.
+ * @return 0 or JLS_ERROR_PARAMETER_INVALID.
+ */
+int32_t jls_wr_user_data_validate(uint16_t chunk_meta, uint32_t storage_type,
+                                  const uint8_t * data, uint32_t data_size);
+
+/**
+ * @brief Validate jls_wr_annotation() arguments.
+ *
+ * @param annotation_type The jls_annotation_type_e.
+ * @param storage_type The jls_storage_type_e, which must not be INVALID.
+ * @param data The payload.
+ * @param data_size The payload size in bytes.
+ * @return 0 or JLS_ERROR_PARAMETER_INVALID.
+ */
+int32_t jls_wr_annotation_validate(uint32_t annotation_type, uint32_t storage_type,
+                                   const uint8_t * data, uint32_t data_size);
+
+/**
+ * @brief Get the latched write error.
+ *
+ * @param self The writer instance.
+ * @return 0 or the first write error.
+ */
+int32_t jls_wr_error(struct jls_wr_s * self);
+
 /** @} */
 
 #ifdef __cplusplus

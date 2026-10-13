@@ -4,6 +4,244 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.19.0
+
+2026 Oct 13
+
+**BREAKING CHANGES**
+
+1. **pyjls Writer.fsr_omit_data(signal_id, enable) was inverted and is
+   now fixed.**  Previously, `enable=True` disabled data omission and
+   `enable=False` enabled it, the opposite of the documented behavior
+   and of the C API.  Now `enable=True` omits constant data chunks and
+   `enable=False` writes all data chunks.  If your code passed `False`
+   to enable omission, change it to `True`.  Omission only affects data
+   types of 8 bits or less (u1, u4, u8, i4, i8), and readers reconstruct
+   omitted data from the summaries, so existing files read the same.
+   The C API, jls_wr_fsr_omit_data() and jls_twr_fsr_omit_data(), is
+   unchanged.
+2. **pyjls raises ValueError, not RuntimeError, for invalid arguments.**
+   When the JLS library rejects an argument with PARAMETER_INVALID,
+   NOT_FOUND, NOT_SUPPORTED, TOO_BIG, or ALREADY_EXISTS, Writer and
+   Reader methods now raise ValueError.  Examples: an undefined
+   signal_id, a non-FSR signal where FSR is required, reading past the
+   end of a signal, or defining a signal twice.  Other library errors,
+   such as IO and MESSAGE_INTEGRITY, still raise RuntimeError.  Code
+   that catches RuntimeError for these cases must also catch
+   ValueError.  The C API now also returns PARAMETER_INVALID for
+   negative lengths in jls_rd_fsr(), jls_rd_fsr_f32(), and
+   jls_rd_fsr_statistics(), which previously succeeded without
+   reading, and for an out-of-range jls_rd_tmap_get() index, which
+   previously returned UNAVAILABLE.
+3. **Writers latch the first write error.**  After any write failure,
+   such as a full disk, every later jls_wr_* and jls_twr_* call returns
+   that error, and jls_wr_close() and jls_twr_close() return it instead
+   of 0.  Close then leaves the file not properly closed, without an END
+   chunk, so jls_rd_open() recovers the data written before the error.
+   The threaded writer reports errors from its thread on the next
+   call, flush, or close instead of only logging them.  pyjls
+   Writer.close() raises RuntimeError when the file may be incomplete.
+4. **pyjls callback exceptions propagate.**  An exception raised in a
+   Reader annotations(), user_data(), or utc() callback, or in a copy()
+   or repair() callback, now propagates from the method, including
+   KeyboardInterrupt.  Previously it was logged and iteration silently
+   stopped.  close() called from a callback or from another thread while
+   a method is running now raises RuntimeError instead of crashing.
+5. **Stricter signal and user data validation.**  jls_wr_signal_def()
+   rejects definitions above the documented size caps (format.h)
+   instead of crashing, and jls_wr_user_data() rejects chunk_meta values
+   that use the reserved bits 15:12 instead of silently clearing them.
+   Annotation and UTC decimate factors below 10 are raised to 10, and
+   factors above 65536 are rejected.  Readers skip invalid or duplicate
+   signal definitions, and FSR definitions whose chunks exceed 16 MiB of
+   sample data or 2**19 summary entries, or whose decimate factors do
+   not divide as the writer has always aligned them (see format.h).
+   jls_copy() keeps such signals by re-chunking them with the writer
+   defaults.
+6. **Fixed-point signals are scaled.**  Statistics for data types with
+   a nonzero fixed-point q now apply the documented 2**-q scale.
+   Previously the scale was never applied.  Summary chunks keep storing
+   raw values, as in every earlier version, and the reader scales them.
+
+* Fixed the FSR statistics std computed from summaries.  Summaries store
+  the population std, but the reader treated it as the sample std, so
+  windows spanning several summary entries reported a std that was too
+  low by up to (k - 1) / k in variance, where k is the entry size (0.4%
+  for k = 256).  Statistics now report the sample std (n - 1) from both
+  samples and summaries, so values change slightly.  The file format is
+  unchanged.  See doc/plans/completed/summary_std_divisor.md.
+* Documented that a gap in FSR sample_ids is filled with NaN for float
+  types and 0 otherwise, not interpolated.
+* Corrected the jls_rd_fsr_statistics() and Reader.fsr_statistics()
+  documentation for a single window (data_length 1), which claimed
+  sample-accurate results.  Only windows shorter than
+  25 * sample_decimate_factor samples are computed from the samples.
+  Longer windows combine summaries: min and max are exact, and mean and
+  std are accurate to the summary precision (float32 summaries for
+  types other than f64, u32, u64, i32, and i64).  Behavior is unchanged.
+* Fixed the inverted Writer.fsr_omit_data() enable argument (see above).
+  Corrected the jls_twr_fsr_omit_data() documentation, which said these
+  data types are omitted regardless of the setting.
+* Fixed a crash on calling Writer.close() or Reader.close() twice, or on
+  using a Writer or Reader after close().  close() freed the native handle
+  but kept it, so the interpreter crashed with a segmentation fault.  A
+  second close() now does nothing, and the other methods raise
+  ValueError.  Closing a Reader inside its `with` block crashed the
+  same way.
+* Garbage collection now closes a Writer or Reader left open.  Previously,
+  the native handle leaked, and a Writer never finalized its file.
+* Documented thread safety.  Writer methods may be called from multiple
+  threads, except that close() must not overlap another call.  Reader is
+  not thread-safe; use one Reader per thread.  Reader callbacks must not
+  call the same Reader.
+* Fixed memory safety issues found by an argument validation review:
+  * Writer.signal_def() with signal_id 256 or more wrote past the end of
+    the Writer, in both the binding and jls_twr_signal_def().
+  * Writer.fsr() and jls_twr_fsr() read signal state past the end of their
+    tables for signal_id 256 or more.  jls_twr_fsr() also read
+    uninitialized state for undefined signals, and its byte count could
+    overflow.
+  * jls_core_signal_validate() returned success for undefined signals, so
+    reading statistics, UTC, or time maps for one crashed.
+  * Writing FSR data or fsr_omit_data to a VSR signal dereferenced NULL.
+  * Reader.fsr() computed its buffer size in 32 bits, which wrapped for
+    reads of 2**30 or more samples and overflowed the heap.
+  * jls_rd_tmap_length() returned error codes as lengths, so
+    Reader.time_map_get() returned uninitialized memory.
+  * Fixed out-of-bounds reads in the threaded writer message log names,
+    the time map interpolation search, and annotations whose data_size
+    exceeds their chunk.
+  * The threaded writer now rejects STRING and JSON payloads that are not
+    NUL-terminated.
+  * Reading FSR samples or statistics from a file whose level-1 index or
+    summary timestamp is corrupt (with valid CRCs) read before the chunk
+    buffer.  These reads now return MESSAGE_INTEGRITY.  Found by the
+    read_fuzzer bitflip campaign under AddressSanitizer.
+* Fixed memory safety and logic defects found by a full design review
+  (see doc/plans/completed/design_review_2026_10.md).  Defects reachable from valid
+  files or normal API use:
+  * Reading u1 and u4 samples could write past the caller's buffer,
+    returned wrong samples, and failed some valid reads across chunks.
+  * Writing u1 and u4 data lost the final partial byte, over-read the
+    caller's buffer by one byte, and stored wrong samples for duplicate
+    sample_ids.  An odd u4 overlap looped forever, growing the file.
+  * Chunks over 1 MiB, such as large user data, could not be read, and
+    chunks of about 1 MiB hung the reader.
+  * Filling a sample_id gap for data types wider than 8 bits wrote heap
+    memory into the file.
+  * A write error followed by more writes overflowed the index and
+    summary buffers.  The threaded writer could hang on close.
+  * Threaded writer messages near the queue size overflowed its buffer.
+  * Omitted constant I4 and I8 data chunks could not be read.
+  * Summary statistics for I32, U32, I64, U64, and F64 signals always
+    failed: writers stored only half of each 64-bit summary.  New files
+    store full summaries.  Existing files compute exact statistics from
+    the samples.  Sample statistics now support 64-bit data types.
+  * I24 and U24 statistics used uninitialized memory.
+  * Statistics with a huge increment overflowed the heap.
+  * Nested reads inside annotation and user data callbacks silently
+    truncated the outer iteration.
+  * The reader leaked its time map for each FSR signal.
+  * pyjls Writer could deadlock when the library logged from its thread,
+    and an open Writer could hang interpreter exit.
+* Hardened reading of corrupt or hostile files with valid CRCs: chunk
+  lengths that wrap or exceed the file, signal definitions that divide by
+  zero or overflow, untrusted entry counts and timestamps in data, index,
+  and summary chunks, recovery that overflowed or appended junk to a
+  failed file, jls_copy() over-reads, jls_repair() head rewrites, and a
+  chunk scan that skipped half the file or looped forever.  Corrupt file
+  errors return MESSAGE_INTEGRITY, so pyjls raises RuntimeError, not
+  ValueError, for them.
+* Fixed regressions found by a second review of this release
+  (doc/plans/completed/regression_review_2026_10_12.md): a writer closed
+  after a latched error wrote END, which hid the samples after the last
+  flushed summary from the reader; jls_copy() dropped a signal whose
+  definition exceeded the new writer caps; jls_statistics_combine()
+  discarded the min and max of a window holding both +inf and -inf;
+  statistics computed from samples allocated the whole window, which
+  the legacy 64-bit summary fallback made as large as the signal, and
+  ran up to 40% slower than 0.18; pyjls Reader.time_map_length() raised
+  for VSR signals instead of returning 0.
+* Fixed `pyjls csv` on files with signals of different time extents, such
+  as several Joulescopes recorded together.  It used the latest end time
+  instead of the earliest, so the shorter signals were read past their
+  end and the export failed with PARAMETER_INVALID.
+* `pyjls extract` clamps each signal to its own length when converting the
+  common time window to sample ids, and `pyjls plot` handles signals
+  shorter than the requested point count.
+* jls_wr_flush() treats an fsync() that the file system does not support
+  (EINVAL, ENOTSUP) as success instead of latching JLS_ERROR_IO, so an
+  export to such a mount no longer reports an incomplete file.
+* Statistics skip NaN samples, and windows with no finite samples return
+  NaN.  UTC time maps ignore entries whose timestamps do not increase,
+  so after a backward clock step, entries are skipped until UTC passes
+  the last accepted entry.
+* pyjls accepts os.PathLike paths, raises ValueError for out-of-range
+  integer arguments, returns int64 sample_ids from time maps, and
+  releases the GIL while opening, copying, and repairing files.  Library
+  log messages, including those from the writer thread, reach the pyjls
+  logger on the next pyjls call rather than immediately, and are counted
+  and dropped beyond 256 pending messages.  This prevents a deadlock.
+* On Windows, closing a threaded writer waits for its thread to finish,
+  as on other platforms, instead of freeing it after 1 second.
+
+* Errors that the JLS library returns for invalid arguments
+  (PARAMETER_INVALID, NOT_FOUND, NOT_SUPPORTED, TOO_BIG, ALREADY_EXISTS)
+  now raise ValueError instead of RuntimeError.  The library validates
+  signal_id and annotation_type, and the threaded writer now reports
+  these errors synchronously, rather than only logging them from its
+  thread.
+* All C API functions now validate their arguments: NULL instances,
+  output pointers, and data with a nonzero length return
+  PARAMETER_INVALID instead of crashing, as do negative lengths for
+  jls_rd_fsr(), jls_rd_fsr_f32(), and jls_rd_fsr_statistics(), which
+  previously succeeded without reading.  jls_rd_tmap_get() returns
+  PARAMETER_INVALID, not UNAVAILABLE, for an index out of range.
+  jls_twr_fsr_f32() rejects non-f32 signals, which read past the caller's
+  buffer.  STRING and JSON user_data and annotations require data.  The
+  statistics functions, jls_crc32c(), and jls_log_printf() ignore NULL.
+* Fixed memory leaks when jls_wr_open() or jls_copy() fail to open a file.
+* Empty data now works: Writer.annotation() with data None or b'',
+  Writer.fsr() with an empty array, and Reader.fsr() or
+  Reader.fsr_statistics() with length 0.
+* An exception in a Reader.annotations(), user_data(), or utc() callback
+  now stops the iteration and is logged.  Previously, user_data() and
+  utc() continued.
+* Writer.annotation() now stores a non-finite y as NAN, as intended.
+* Added example/recovery_fuzz.py, which damages pyjls-written files and
+  reads them back through the pyjls Reader, for use with an
+  AddressSanitizer build.
+* Added the JLS_COVERAGE CMake option and a Linux CI job that publishes
+  a gcovr C unit test coverage report.  See doc/coverage.md.
+* Fixed a double free in jls_rd_open() when crash recovery failed to
+  close the file.
+* Fixed the reader after a transient read or seek error.  A failed seek
+  could permanently drop a signal's summary levels, so later
+  jls_rd_fsr_length() calls returned 0.  A failed read at the end of the
+  UTC track could cache an incomplete time map for
+  jls_rd_sample_id_to_timestamp() and jls_rd_timestamp_to_sample_id().
+  A failed chunk header read inside the file now returns JLS_ERROR_IO,
+  not JLS_ERROR_EMPTY.
+* Added test-only read and seek fault injection,
+  jls_bk_read_limit_set(), and test/read_fault_test.c, which sweeps an
+  I/O failure through the reader, crash recovery, jls_repair(), and
+  jls_copy().  ctest runs a sampled sweep; run
+  `read_fault_test --full` for every fault point (about a minute).
+  writer_test also runs fewer cases by default, with the same coverage,
+  and every case with `--full`.
+* Fixed crash recovery and jls_repair() after an I/O error.  A failed
+  read was treated as damage or as the end of the data, so recovery could
+  truncate or drop valid data, or leave a file that no longer opened.
+  Recovery and repair now stop with JLS_ERROR_IO and leave the file as
+  after a crash at that point.  jls_raw_chunk_seek() now returns
+  JLS_ERROR_MESSAGE_INTEGRITY, not JLS_ERROR_IO, for a corrupt offset.
+* Fixed jls_copy() after a read error.  It skipped the chunk as damaged
+  and reported success with an incomplete copy.  It now fails with
+  JLS_ERROR_IO.  Opening a file now also fails if a seek fails while
+  finding the file end.
+  See doc/plans/completed/recovery_io_faults.md.
+
+
 ## 0.18.0
 
 2026 Aug 9

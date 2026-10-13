@@ -18,6 +18,7 @@
 #include "jls/cdef.h"
 #include "jls/ec.h"
 #include "jls/log.h"
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -29,12 +30,20 @@ static inline int32_t wr_end(struct jls_buf_s * self) {
     return 0;
 }
 
-static int32_t strings_alloc(struct jls_buf_s * self) {
-    struct jls_buf_strings_s * s = calloc(1, sizeof(struct jls_buf_strings_s));
+static int32_t strings_alloc(struct jls_buf_s * self, size_t size) {
+    if (size < JLS_BUF_STRING_SIZE) {
+        size = JLS_BUF_STRING_SIZE;
+    }
+    if (size > (SIZE_MAX - sizeof(struct jls_buf_strings_s))) {
+        return JLS_ERROR_NOT_ENOUGH_MEMORY;
+    }
+    struct jls_buf_strings_s * s = calloc(1, sizeof(struct jls_buf_strings_s) + size);
     if (NULL == s) {
         return JLS_ERROR_NOT_ENOUGH_MEMORY;
     }
+    s->buffer = (char *) (s + 1);
     s->cur = s->buffer;
+    s->end = s->buffer + size;
     s->next = NULL;
     if (NULL == self->strings_head) {
         self->strings_head = s;
@@ -43,6 +52,20 @@ static int32_t strings_alloc(struct jls_buf_s * self) {
     }
     self->strings_tail = s;
     return 0;
+}
+
+/// Reserve sz bytes of string storage, which remain valid until jls_buf_free().
+static char * strings_reserve(struct jls_buf_s * self, size_t sz) {
+    struct jls_buf_strings_s * s = self->strings_tail;
+    if ((NULL == s) || ((size_t) (s->end - s->cur) < sz)) {
+        if (strings_alloc(self, sz)) {
+            return NULL;
+        }
+        s = self->strings_tail;
+    }
+    char * p = s->cur;
+    s->cur += sz;
+    return p;
 }
 
 struct jls_buf_s * jls_buf_alloc(void) {
@@ -87,17 +110,26 @@ int32_t jls_buf_realloc(struct jls_buf_s * self, size_t size) {
         return 0;
     }
 
-    size_t alloc_size = self->alloc_size;
+    size_t alloc_size = self->alloc_size ? self->alloc_size : JLS_BUF_DEFAULT_SIZE;
     while (alloc_size < size) {
-        alloc_size *= alloc_size;
+        if (alloc_size > (SIZE_MAX / 2)) {
+            alloc_size = size;  // doubling would overflow
+            break;
+        }
+        alloc_size *= 2;
     }
 
+    // realloc may move the block: preserve cur and end as offsets
+    size_t cur_offset = self->cur - self->start;
+    size_t end_offset = self->end - self->start;
     uint8_t * ptr = realloc(self->start, alloc_size);
     if (NULL == ptr) {
         JLS_LOGE("jls_buf_realloc out of memory");
         return JLS_ERROR_NOT_ENOUGH_MEMORY;
     }
     self->start = ptr;
+    self->cur = ptr + cur_offset;
+    self->end = ptr + end_offset;
     self->alloc_size = alloc_size;
     return 0;
 }
@@ -115,28 +147,22 @@ size_t jls_buf_length(struct jls_buf_s * self) {
 int32_t jls_buf_copy(struct jls_buf_s * self, const struct jls_buf_s * src) {
     ROE(jls_buf_realloc(self, src->length));
     memcpy(self->start, src->start, src->length);
-    self->cur = 0;
+    self->cur = self->start;
     self->length = src->length;
-    self->end = self->cur + self->length;
+    self->end = self->start + self->length;
     return 0;
 }
 
 int32_t jls_buf_string_save(struct jls_buf_s * self, const char * cstr_in, char ** cstr_save) {
-    if (NULL == self->strings_tail) {
-        ROE(strings_alloc(self));
-    }
     size_t sz = strlen(cstr_in) + 1;
-    struct jls_buf_strings_s * s = self->strings_tail;
-    char * buf_end = s->buffer + sizeof(s->buffer) - 1;
-    if ((size_t) (buf_end - s->cur) < sz) {
-        ROE(strings_alloc(self));
-        s = self->strings_tail;
+    char * p = strings_reserve(self, sz);
+    if (NULL == p) {
+        return JLS_ERROR_NOT_ENOUGH_MEMORY;
     }
-    memcpy(s->cur, cstr_in, sz);
+    memcpy(p, cstr_in, sz);
     if (NULL != cstr_save) {
-        *cstr_save = s->cur;
+        *cstr_save = p;
     }
-    s->cur += sz;
     return 0;
 }
 
@@ -266,37 +292,25 @@ int32_t jls_buf_rd_u32(struct jls_buf_s * self, uint32_t * value) {
 }
 
 int32_t jls_buf_rd_str(struct jls_buf_s * self, const char ** value) {
-    struct jls_buf_strings_s * s;
-    if (NULL == self->strings_tail) {
-        ROE(strings_alloc(self));
-    }
-    s = self->strings_tail;
-    char * str = s->cur;
-    char * buf_end = s->buffer + sizeof(s->buffer) - 1;
-    char ch;
-    while (self->cur != self->end) {
-        if (s->cur >= buf_end) {
-            ROE(strings_alloc(self));
-            // copy over partial.
-            while (str <= buf_end) {
-                *self->strings_tail->cur++ = *str++;
-            }
-            s = self->strings_tail;
-            str = self->strings_tail->buffer;
-        }
-
-        ch = (char) *self->cur++;
-        *s->cur++ = ch;
-        // Strings end with {0, 0x1f} = {null, unit separator}
-        if (ch == 0) {
-            if (*self->cur == 0x1f) {
-                self->cur++;
-            }
-            *value = str;
-            return 0;
-        }
-    }
-
     *value = NULL;
-    return JLS_ERROR_EMPTY;
+    if (self->cur >= self->end) {
+        return JLS_ERROR_EMPTY;
+    }
+    const uint8_t * nul = memchr(self->cur, 0, self->end - self->cur);
+    if (NULL == nul) {
+        return JLS_ERROR_EMPTY;  // unterminated
+    }
+    size_t sz = (size_t) (nul - self->cur) + 1;
+    char * str = strings_reserve(self, sz);
+    if (NULL == str) {
+        return JLS_ERROR_NOT_ENOUGH_MEMORY;
+    }
+    memcpy(str, self->cur, sz);
+    self->cur += sz;
+    // Strings end with {0, 0x1f} = {null, unit separator}
+    if ((self->cur < self->end) && (*self->cur == 0x1f)) {
+        self->cur++;
+    }
+    *value = str;
+    return 0;
 }

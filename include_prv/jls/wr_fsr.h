@@ -43,6 +43,34 @@ extern "C" {
 
 
 /**
+ * @brief Validate a write without modifying any state.
+ *
+ * @param self The instance, which may be NULL.
+ * @param sample_id The starting sample id for this data.
+ * @param data_length The length of data in samples.
+ * @return 0 or JLS_ERROR_NOT_FOUND if self is NULL.
+ *
+ * The writer fills skipped samples (NaN for float types, 0 otherwise)
+ * regardless of size: jls_copy() replays omitted constant chunks as skips.
+ */
+int32_t jls_wr_fsr_validate(struct jls_core_fsr_s * self, int64_t sample_id, uint32_t data_length);
+
+/**
+ * @brief Write the pending data and summaries, then free the instance.
+ *
+ * @param self The instance, which is always freed.
+ * @return 0 or the first error.  Writing stops at the first error.
+ */
+int32_t jls_wr_fsr_close(struct jls_core_fsr_s * self);
+
+/**
+ * @brief Free the instance without writing pending data or summaries.
+ *
+ * @param self The instance.
+ */
+void jls_wr_fsr_free(struct jls_core_fsr_s * self);
+
+/**
  * @brief Write fixed sample rate data.
  *
  * @param self The instance.

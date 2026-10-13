@@ -36,7 +36,7 @@
 #define SKIP_REALWORLD 1
 
 #define ARRAY_SIZE(x) ( sizeof(x) / sizeof((x)[0]) )
-const char * filename = "jls_test_tmp.jls";
+const char * filename = "repair_test_tmp.jls";
 const uint8_t USER_DATA_1[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
 const uint16_t CHUNK_META_1 = 0x0123;
 const uint16_t CHUNK_META_2 = 0x0BEE;
@@ -44,6 +44,14 @@ const uint16_t CHUNK_META_3 = 0x0ABC;
 const char STRING_1[] = "hello world";
 const char JSON_1[] = "{\"hello\": \"world\"}";
 
+
+// Release a crashed writer without touching its file: with no write budget,
+// every close-time write fails, so jls_wr_close only frees memory.
+static void wr_abandon(struct jls_wr_s * wr) {
+    jls_bk_write_limit_set(0);
+    (void) jls_wr_close(wr);
+    jls_bk_write_limit_set(-1);
+}
 
 enum gen_close_e {
     GEN_CLOSE,
@@ -160,8 +168,7 @@ static float * gen_truncate(int64_t sample_count, size_t truncate, enum gen_clos
     if (gen_close == GEN_CLOSE) {
         assert_int_equal(0, jls_wr_close(wr));
     } else {
-        struct jls_core_s * core = (struct jls_core_s *) wr;
-        jls_bk_fclose(jls_raw_backend(core->raw));
+        wr_abandon(wr);  // simulated crash
     }
 
     if (truncate > 0) {
@@ -181,12 +188,13 @@ static float * gen_truncate(int64_t sample_count, size_t truncate, enum gen_clos
 static void test_truncate_end_only(void **state) {
     (void) state;
     int64_t sample_count = WINDOW_SIZE * 1000;
-    gen_truncate(sample_count, sizeof(struct jls_chunk_header_s), GEN_CLOSE);
+    free(gen_truncate(sample_count, sizeof(struct jls_chunk_header_s), GEN_CLOSE));
     struct jls_rd_s * rd = NULL;
     assert_int_equal(0, jls_rd_open(&rd, filename));  // automatically repaired
     int64_t samples = 0;
     assert_int_equal(0, jls_rd_fsr_length(rd, 5, &samples));
     assert_int_equal(sample_count, samples);
+    jls_rd_close(rd);
     remove(filename);
 }
 
@@ -210,6 +218,7 @@ static void test_truncate_summary(void **state) {
     assert_int_equal(0, jls_rd_fsr_statistics(rd, 5, 0, sample_count, data, 1));
     assert_float_equal(signal_mean, data[0], 1e-9);
     jls_rd_close(rd);
+    free(signal);
     remove(filename);
 }
 
@@ -234,6 +243,7 @@ static void test_truncate_samples(void **state) {
     assert_int_equal(0, jls_rd_fsr_statistics(rd, 5, 0, sample_count_truncated, data, 1));
     jls_rd_close(rd);
     assert_float_equal(signal_mean, data[0], 1e-9);
+    free(signal);
     remove(filename);
 }
 
@@ -258,6 +268,7 @@ static void test_truncate_samples_unclosed(void **state) {
     assert_int_equal(0, jls_rd_fsr_statistics(rd, 5, 0, sample_count_truncated, data, 1));
     assert_float_equal(signal_mean, data[0], 1e-9);
     jls_rd_close(rd);
+    free(signal);
     remove(filename);
 }
 

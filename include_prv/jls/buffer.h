@@ -49,7 +49,8 @@ JLS_CPP_GUARD_START
 struct jls_buf_strings_s {
     struct jls_buf_strings_s * next;     ///< NULL or next string buffer
     char * cur;                          ///< Pointer to place start of next string
-    char buffer[JLS_BUF_STRING_SIZE];    ///< Buffer for 0-terminated strings.
+    char * end;                          ///< One past the last buffer byte.
+    char * buffer;                       ///< Buffer for 0-terminated strings, allocated with this block.
 };
 
 struct jls_buf_s {
@@ -66,6 +67,16 @@ struct jls_buf_s * jls_buf_alloc(void);
 
 void jls_buf_free(struct jls_buf_s * self);
 
+/**
+ * @brief Ensure that the buffer can hold at least size bytes.
+ *
+ * @param self The buffer instance.
+ * @param size The required size in bytes.
+ * @return 0 or JLS_ERROR_NOT_ENOUGH_MEMORY.
+ *
+ * Preserves the contents, cur, and end offsets on success, and leaves the
+ * buffer unchanged on failure.
+ */
 int32_t jls_buf_realloc(struct jls_buf_s * self, size_t size);
 
 void jls_buf_reset(struct jls_buf_s * self);
@@ -91,6 +102,8 @@ int32_t jls_buf_copy(struct jls_buf_s * self, const struct jls_buf_s * src);
  * @param cstr_in The string to save.
  * @param cstr_save The saved string, which remains valid until jls_buf_free(self).
  * @return 0 or error code.
+ *
+ * Strings longer than JLS_BUF_STRING_SIZE receive a dedicated block.
  */
 int32_t jls_buf_string_save(struct jls_buf_s * self, const char * cstr_in, char ** cstr_save);
 

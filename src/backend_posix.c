@@ -14,13 +14,17 @@
  * limitations under the License.
  */
 
+// 64-bit off_t for lseek on 32-bit platforms.  Must precede all includes.
+#ifndef _FILE_OFFSET_BITS
+#define _FILE_OFFSET_BITS 64
+#endif
+
 #include "jls/backend.h"
 #include "jls/wr_prv.h"
 #include "jls/ec.h"
 #include "jls/log.h"
 #include "jls/time.h"
 
-#define _FILE_OFFSET_BITS
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -53,8 +57,18 @@ struct jls_twr_s {
 static struct event_flag* eventflag_create(void) {
     struct event_flag* ev;
     ev = (struct event_flag*) malloc(sizeof(struct event_flag));
-    pthread_mutex_init(&ev->mutex, NULL);
-    pthread_cond_init(&ev->condition, NULL);
+    if (NULL == ev) {
+        return NULL;
+    }
+    if (pthread_mutex_init(&ev->mutex, NULL)) {
+        free(ev);
+        return NULL;
+    }
+    if (pthread_cond_init(&ev->condition, NULL)) {
+        pthread_mutex_destroy(&ev->mutex);
+        free(ev);
+        return NULL;
+    }
     ev->flag = 0;
     return ev;
 }
@@ -111,11 +125,15 @@ int32_t jls_bk_fopen(struct jls_bkf_s * self, const char * filename, const char 
 }
 
 int32_t jls_bk_fclose(struct jls_bkf_s * self) {
+    int32_t rc = 0;
     if (self->fd != -1) {
-        close(self->fd);
-        self->fd = -1;
+        if (close(self->fd)) {
+            JLS_LOGE("close failed %d", errno);
+            rc = JLS_ERROR_IO;
+        }
+        self->fd = -1;  // the descriptor is released even on error
     }
-    return 0;
+    return rc;
 }
 
 int32_t jls_bk_fwrite(struct jls_bkf_s * self, const void * buffer, unsigned int count) {
@@ -139,6 +157,9 @@ int32_t jls_bk_fwrite(struct jls_bkf_s * self, const void * buffer, unsigned int
 }
 
 int32_t jls_bk_fread(struct jls_bkf_s * self, void * const buffer, unsigned const buffer_size) {
+    if (jls_bk_read_limit_consume()) {
+        return JLS_ERROR_IO;  // test-only fault injection
+    }
     int sz = read(self->fd, buffer, buffer_size);
     if (sz < 0) {
         JLS_LOGE("read failed %d", errno);
@@ -153,6 +174,9 @@ int32_t jls_bk_fread(struct jls_bkf_s * self, void * const buffer, unsigned cons
 }
 
 int32_t jls_bk_fseek(struct jls_bkf_s * self, int64_t offset, int origin) {
+    if (jls_bk_read_limit_consume()) {
+        return JLS_ERROR_IO;  // test-only fault injection
+    }
     int64_t pos = lseek(self->fd, offset, origin);
     if (pos < 0) {
         JLS_LOGE("seek fail %d", errno);
@@ -171,7 +195,18 @@ int64_t jls_bk_ftell(struct jls_bkf_s * self) {
 }
 
 int32_t jls_bk_fflush(struct jls_bkf_s * self) {
-    return fsync(self->fd);
+    if (fsync(self->fd)) {
+        int err = errno;
+        if ((EINVAL == err) || (ENOTSUP == err) || (EOPNOTSUPP == err)) {
+            // Special files and some FUSE and network mounts cannot fsync.  The
+            // writes succeeded, so only durability is unknown: do not latch.
+            JLS_LOGW("fsync not supported %d", err);
+            return 0;
+        }
+        JLS_LOGE("fsync failed %d", err);
+        return JLS_ERROR_IO;
+    }
+    return 0;
 }
 
 int32_t jls_bk_truncate(struct jls_bkf_s * self) {

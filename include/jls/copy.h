@@ -58,6 +58,10 @@ typedef jls_progress_fn jls_copy_progress_fn;
  * @param progress_user_data The arbitrary data for progress_fn.
  * @return 0 or error code.
  *
+ * Damaged source chunks are reported through msg_fn and skipped.  The copy
+ * fails when the destination fails or a readable signal cannot be defined,
+ * since continuing would silently drop that signal.  Data is re-chunked, so
+ * signal definitions beyond the writer caps use the writer defaults.
  */
 JLS_API int32_t jls_copy(const char * src, const char * dst,
                          jls_copy_msg_fn msg_fn, void * msg_user_data,

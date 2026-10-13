@@ -46,6 +46,9 @@ uint32_t jls_crc32c_hdr(const struct jls_chunk_header_s * hdr) {
 
 uint32_t jls_crc32c(uint8_t const *data, uint32_t length) {
     uint32_t crc = 0xFFFFFFFF;
+    if (!data) {
+        length = 0;
+    }
     for (; ((length > 0) && (0x7 & (intptr_t) data)); ++data, --length) {
         crc = _mm_crc32_u8(crc, *data);
     }

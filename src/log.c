@@ -24,10 +24,10 @@ char const * const jls_log_level_str[JLS_LOG_LEVEL_ALL + 1] = {
         "CRITICAL",
         "ERROR",
         "WARN",
-        "NOTICE"
+        "NOTICE",
         "INFO",
         "DEBUG",
-        "DEBUG2"
+        "DEBUG2",
         "DEBUG3",
         "ALL"
 };
@@ -45,6 +45,9 @@ static jls_log_cbk cbk_ = cbk_default;
 void jls_log_printf(const char * fmt, ...) {
     char buffer[1024];
     va_list arg;
+    if (!fmt) {
+        return;
+    }
     va_start(arg, fmt);
     vsnprintf(buffer, sizeof(buffer), fmt, arg);
     va_end(arg);

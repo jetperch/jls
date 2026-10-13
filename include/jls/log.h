@@ -207,7 +207,7 @@ extern char const jls_log_level_char[JLS_LOG_LEVEL_ALL + 1];
  * @param level The log level.
  * @return The string description.
  */
-JLS_API const char * jsdrv_log_level_to_str(int8_t level);
+JLS_API const char * jls_log_level_to_str(int8_t level);
 
 /**
  * @brief Convert a log level to a user-meaningful character.
@@ -215,7 +215,7 @@ JLS_API const char * jsdrv_log_level_to_str(int8_t level);
  * @param level The log level.
  * @return The character representing the log level.
  */
-JLS_API char jsdrv_log_level_to_char(int8_t level);
+JLS_API char jls_log_level_to_char(int8_t level);
 
 /**
  * @brief Check the current level against the static logging configuration.

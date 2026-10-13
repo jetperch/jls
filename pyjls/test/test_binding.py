@@ -12,15 +12,32 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from pyjls.binding import Writer, Reader, SummaryFSR, DataType, jls_inject_log, copy, repair, TimeMap
+from pyjls.binding import Writer, Reader, SummaryFSR, DataType, jls_inject_log, copy, repair, TimeMap, \
+    AnnotationType, SignalType
 from pyjls.time64 import SECOND, YEAR
+import pyjls
+import gc
 import io
 import logging
 from logging import StreamHandler
 import os
+import subprocess
+import sys
 import tempfile
+import textwrap
 import unittest
 import numpy as np
+
+
+_PYJLS_PARENT = os.path.dirname(os.path.dirname(os.path.abspath(pyjls.__file__)))
+
+
+def _run_script(code, *args, timeout=30):
+    """Run code in a new interpreter that imports this pyjls build."""
+    env = dict(os.environ)
+    env['PYTHONPATH'] = os.pathsep.join([_PYJLS_PARENT, env.get('PYTHONPATH', '')])
+    return subprocess.run([sys.executable, '-c', textwrap.dedent(code), *args],
+                          env=env, capture_output=True, text=True, timeout=timeout)
 
 
 class TestBinding(unittest.TestCase):
@@ -64,6 +81,45 @@ class TestBinding(unittest.TestCase):
             self.assertEqual('name', s.name)
             self.assertEqual('', s.model)
             self.assertEqual('', s.version)
+
+    def _write_fsr_100(self, w):
+        w.source_def(source_id=1, name='n', vendor='v', model='m', version='1', serial_number='s')
+        w.signal_def(3, source_id=1, sample_rate=1000, name='current', units='A')
+        w.fsr(3, 0, np.zeros(100, dtype=np.float32))
+
+    def test_close_twice_and_use_after_close(self):
+        # Previously crashed the interpreter: close() freed the handle and kept it.
+        w = Writer(self._path)
+        self._write_fsr_100(w)
+        w.close()
+        w.close()
+        with self.assertRaisesRegex(ValueError, 'I/O operation on closed Writer'):
+            w.fsr(3, 100, np.zeros(100, dtype=np.float32))
+        with Reader(self._path) as r:
+            self.assertEqual(100, r.signals[3].length)
+            r.close()  # inside the with block, which closes again
+        with self.assertRaisesRegex(ValueError, 'I/O operation on closed Reader'):
+            r.fsr(3, 0, 10)
+        del w, r  # __dealloc__ after close must not close again
+
+    def test_writer_dealloc_closes(self):
+        w = Writer(self._path)
+        self._write_fsr_100(w)
+        del w
+        gc.collect()
+        with Reader(self._path) as r:
+            self.assertEqual(100, r.signals[3].length)
+
+    @unittest.skipUnless(os.path.isdir('/proc/self/fd'), 'requires /proc/self/fd')
+    def test_reader_dealloc_closes(self):
+        with Writer(self._path) as w:
+            self._write_fsr_100(w)
+        fd_count = len(os.listdir('/proc/self/fd'))
+        r = Reader(self._path)
+        self.assertGreater(len(os.listdir('/proc/self/fd')), fd_count)
+        del r
+        gc.collect()
+        self.assertEqual(fd_count, len(os.listdir('/proc/self/fd')))
 
     def test_fsr_f32(self):
         data = np.arange(110000, dtype=np.float32)
@@ -137,6 +193,282 @@ class TestBinding(unittest.TestCase):
             np.testing.assert_allclose(np.min(data), stats[0, SummaryFSR.MIN])
             np.testing.assert_allclose(np.max(data), stats[0, SummaryFSR.MAX])
             np.testing.assert_allclose(np.std(data, ddof=1), stats[0, SummaryFSR.STD], rtol=1e-6)
+
+    def _fsr_gap(self, data_type, a, b):
+        # Write a at sample_id 1000, then b after a 12800 sample gap, then a
+        # late write into the gap.  Edges align to the level 1 and 2 summary
+        # entries, so full-range statistics are exact.
+        with Writer(self._path) as w:
+            w.source_def(source_id=1, name='n')
+            w.signal_def(3, source_id=1, sample_rate=100000, data_type=data_type)
+            w.fsr(3, 1000, a)
+            w.fsr(3, 1000 + 1280 + 12800, b)
+            w.fsr(3, 1000 + 1280, b[:100])  # late: the gap is already filled
+
+    def test_fsr_gap_f32_nan(self):
+        a = np.arange(1280, dtype=np.float32) + 1
+        b = -np.arange(5920, dtype=np.float32) - 1
+        self._fsr_gap(DataType.F32, a, b)
+        n = 1280 + 12800 + 5920
+        x = np.concatenate([a, b]).astype(np.float64)
+        with Reader(self._path) as r:
+            self.assertEqual(n, r.signals[3].length)  # no fill before the first write
+            d = r.fsr(3, 0, n)
+            stats = r.fsr_statistics(3, 0, n, 1)  # NaN fill is skipped
+            gap_stats = r.fsr_statistics(3, 2560, 2560, 4)  # inside the gap
+        np.testing.assert_equal(a, d[:1280])
+        self.assertTrue(np.all(np.isnan(d[1280:14080])))  # filled, not interpolated
+        np.testing.assert_equal(b, d[14080:])
+        np.testing.assert_allclose(np.mean(x), stats[0, SummaryFSR.MEAN], rtol=1e-6)
+        np.testing.assert_allclose(np.min(x), stats[0, SummaryFSR.MIN])
+        np.testing.assert_allclose(np.max(x), stats[0, SummaryFSR.MAX])
+        np.testing.assert_allclose(np.std(x, ddof=1), stats[0, SummaryFSR.STD], rtol=1e-6)
+        self.assertTrue(np.all(np.isnan(gap_stats)))
+
+    def test_fsr_gap_u8_zero(self):
+        a = (np.arange(1280) % 200 + 50).astype(np.uint8)
+        b = (np.arange(5920) % 100 + 100).astype(np.uint8)
+        self._fsr_gap(DataType.U8, a, b)
+        n = 1280 + 12800 + 5920
+        with Reader(self._path) as r:
+            d = r.fsr(3, 0, n)
+            stats = r.fsr_statistics(3, 0, n, 1)  # zero fill is data
+        x = np.concatenate([a, np.zeros(12800, dtype=np.uint8), b])
+        np.testing.assert_equal(x, d)
+        np.testing.assert_allclose(np.mean(x, dtype=np.float64), stats[0, SummaryFSR.MEAN], rtol=1e-6)
+        self.assertEqual(0, stats[0, SummaryFSR.MIN])
+
+    def test_fsr_gap_u1_zero(self):
+        ones = np.packbits(np.ones(16, dtype=np.uint8), bitorder='little')
+        with Writer(self._path) as w:
+            w.source_def(source_id=1, name='n')
+            w.signal_def(3, source_id=1, sample_rate=100000, data_type=DataType.U1)
+            w.fsr(3, 0, ones)
+            w.fsr(3, 40, ones)  # 24 sample gap
+        with Reader(self._path) as r:
+            self.assertEqual(56, r.signals[3].length)
+            d = np.unpackbits(r.fsr(3, 0, 56), count=56, bitorder='little')
+        np.testing.assert_equal(np.repeat([1, 0, 1], [16, 24, 16]), d)
+
+    @staticmethod
+    def _stats_ref(x, start, incr, count):
+        w = x[start:start + incr * count].reshape(count, incr)
+        return np.stack([w.mean(axis=1), w.std(axis=1, ddof=1), w.min(axis=1), w.max(axis=1)], axis=1)
+
+    def test_fsr_statistics_std_from_summaries(self):
+        # Summaries store the population std; the reader reports the sample std
+        # (ddof=1) from summaries and samples alike.  The jls C tests cover the
+        # same paths with NaN gaps (test_fsr_gap).
+        n = 100000
+        rng = np.random.default_rng(1)
+        cases = [  # data_type, values as float64, data to write, std rtol
+            (DataType.F32, rng.normal(10, 1, n).astype(np.float32), 1e-5),
+            (DataType.F64, rng.normal(10, 1, n), 1e-9),
+            (DataType.U8, rng.integers(0, 256, n).astype(np.uint8), 1e-5),
+            (DataType.U1, rng.integers(0, 2, n).astype(np.uint8), 1e-5),
+        ]
+        windows = [  # start, increment, count
+            (0, 256, n // 256),          # one level 1 summary entry each
+            (0, 2560, n // 2560),        # one level 2 summary entry each
+            (0, 256 * 7, 50),            # several level 1 entries
+            (100, 256 * 30 + 156, 2),    # head and final tail use nested sample reads
+        ]
+        for data_type, x, rtol in cases:
+            with self.subTest(data_type=data_type):
+                data = np.packbits(x, bitorder='little') if data_type == DataType.U1 else x
+                with Writer(self._path) as w:
+                    w.source_def(source_id=1, name='n')
+                    w.signal_def(3, source_id=1, sample_rate=100000, data_type=data_type,
+                                 samples_per_data=1024, sample_decimate_factor=256,
+                                 entries_per_summary=20, summary_decimate_factor=10)
+                    w.fsr(3, 0, data)
+                xf = x.astype(np.float64)
+                atol = rtol * np.max(np.abs(xf))
+                with Reader(self._path) as r:
+                    s = r.signals[3]
+                    self.assertEqual((256, 10), (s.sample_decimate_factor, s.summary_decimate_factor))
+                    for start, incr, count in windows:
+                        stats = r.fsr_statistics(3, start, incr, count)
+                        ref = self._stats_ref(xf, start, incr, count)
+                        msg = f'window {start}, {incr}, {count}'
+                        np.testing.assert_allclose(ref[:, SummaryFSR.MEAN], stats[:, SummaryFSR.MEAN],
+                                                   atol=atol, err_msg=msg)
+                        np.testing.assert_allclose(ref[:, SummaryFSR.MIN], stats[:, SummaryFSR.MIN], err_msg=msg)
+                        np.testing.assert_allclose(ref[:, SummaryFSR.MAX], stats[:, SummaryFSR.MAX], err_msg=msg)
+                        np.testing.assert_allclose(ref[:, SummaryFSR.STD], stats[:, SummaryFSR.STD],
+                                                   rtol=rtol, err_msg=msg)
+                    # the same window from summaries (many windows) and from samples (one)
+                    many = r.fsr_statistics(3, 0, 256, n // 256)[5]
+                    one = r.fsr_statistics(3, 256 * 5, 256, 1)[0]
+                    np.testing.assert_allclose(one, many, rtol=rtol, atol=atol)
+
+    def test_fsr_statistics_length_one(self):
+        # length 1: windows shorter than 25 * sample_decimate_factor come from the
+        # samples and are exact.  Longer windows combine summaries: min and max
+        # stay exact, and mean and std are accurate to the summary precision
+        # (float32 except for f64, u32, u64, i32, and i64).  See test_fsr_statistics_length_one
+        # in jls_test.c for the same checks in C.
+        n, sdf, gap = 200000, 256, (50000, 50200)  # NaN gap splits two summary entries
+        threshold = 25 * sdf
+        rng = np.random.default_rng(7)
+        cases = [  # data_type, data, summary rtol (measured worst: 1.6e-9 f32, 5e-15 f64)
+            (DataType.F32, (15 + rng.uniform(-0.002, 0.002, n)).astype(np.float32), 1e-8),
+            (DataType.F64, 15 + rng.uniform(-0.002, 0.002, n), 1e-12),
+            (DataType.U8, rng.integers(0, 256, n).astype(np.uint8), 1e-8),
+            (DataType.U32, rng.integers(0, 2**32, n).astype(np.uint32), 1e-12),
+        ]
+        below = [(0, 1), (7, 2), (49990, 300), (gap[0] - 1, 202), (100, threshold - 1),
+                 (gap[0] - 3000, threshold - 1), (123457, 4321), (n - threshold + 1, threshold - 1)]
+        above = [(0, threshold), (1, 40000), (60000, 100000), (51200, threshold), (50433, n - 50433)]
+        for data_type, data, rtol_summary in cases:
+            with self.subTest(data_type=data_type):
+                is_float = data.dtype.kind == 'f'
+                with Writer(self._path) as w:
+                    w.source_def(source_id=1, name='n')
+                    w.signal_def(3, source_id=1, sample_rate=100000, data_type=data_type,
+                                 samples_per_data=4 * sdf, sample_decimate_factor=sdf)
+                    if is_float:  # integer gaps fill with 0, which is data
+                        w.fsr(3, 0, data[:gap[0]])
+                        w.fsr(3, gap[1], data[gap[1]:])
+                    else:
+                        w.fsr(3, 0, data)
+                x = data.astype(np.float64)
+                if is_float:
+                    x[gap[0]:gap[1]] = np.nan
+                with Reader(self._path) as r:
+                    self.assertEqual(sdf, r.signals[3].sample_decimate_factor)
+                    for windows, rtol in [(below, 1e-12), (above, rtol_summary)]:
+                        for start, length in windows:
+                            v = x[start:start + length]
+                            v = v[np.isfinite(v)]
+                            exact = np.array([np.mean(v), np.std(v, ddof=1) if len(v) > 1 else 0.0,
+                                              np.min(v), np.max(v)])
+                            stats = r.fsr_statistics(3, start, length, 1)[0]
+                            tol = rtol * (abs(exact[0]) + exact[1])
+                            msg = f'window {start} + {length}: {stats} != {exact}'
+                            np.testing.assert_allclose(stats[:2], exact[:2], rtol=0, atol=tol, err_msg=msg)
+                            np.testing.assert_equal(stats[2:], exact[2:], err_msg=msg)
+
+    def _stats_signal(self, data_type, data, sdf=256):
+        # summary_decimate_factor 10: level 2 entries are 10 * sdf samples
+        with Writer(self._path) as w:
+            w.source_def(source_id=1, name='n')
+            w.signal_def(3, source_id=1, sample_rate=100000, data_type=data_type,
+                         samples_per_data=4 * sdf, sample_decimate_factor=sdf,
+                         entries_per_summary=20, summary_decimate_factor=10)
+            w.fsr(3, 0, data)
+
+    def test_fsr_statistics_mean_min_max(self):
+        # Integer extremes and non-finite float samples through every path: samples,
+        # length 1 over the whole signal, and aligned level 1 and level 2 windows.
+        # min and max are exact; mean is exact to the summary precision.
+        # See test_fsr_statistics_extremes and _nonfinite in jls_test.c.
+        n, sdf = 70000, 256
+        rng = np.random.default_rng(11)
+        cases = []
+        for dtype, data_type in [(np.int8, DataType.I8), (np.int16, DataType.I16),
+                                 (np.int32, DataType.I32), (np.int64, DataType.I64),
+                                 (np.uint64, DataType.U64)]:
+            info = np.iinfo(dtype)
+            mid = (int(info.min) + int(info.max)) // 2
+            span = (int(info.max) - int(info.min)) // 4
+            d = np.array([mid + int(v) for v in rng.integers(-span // 2, span // 2, n, dtype=np.int64)],
+                         dtype=dtype)
+            d[[0, 33333, 50001]] = info.max
+            d[[n - 1, 20001, 33334]] = info.min
+            cases.append((data_type, d, d.astype(np.float64)))
+        for dtype, data_type in [(np.float32, DataType.F32), (np.float64, DataType.F64)]:
+            d = rng.normal(0, 100, n).astype(dtype)
+            d[[0, 1000, 33333, n - 1]] = [np.inf, -np.inf, np.nan, -np.inf]
+            cases.append((data_type, d, d.astype(np.float64)))
+        windows = [(0, 100, 3), (33300, 100, 3), (n - 300, 100, 3),  # samples
+                   (0, n, 1),                                         # length 1
+                   (0, sdf, n // sdf),                                # level 1
+                   (0, 10 * sdf, n // (10 * sdf))]                    # level 2
+        for data_type, data, x in cases:
+            with self.subTest(data_type=data_type):
+                # summary entries with some, but not all, non-finite samples
+                finite = np.isfinite(np.pad(x, (0, -n % sdf), constant_values=0)).reshape(-1, sdf)
+                partial = finite.any(axis=1) & ~finite.all(axis=1)
+                self._stats_signal(data_type, data, sdf)
+                with Reader(self._path) as r:
+                    self.assertEqual(sdf, r.signals[3].sample_decimate_factor)
+                    results = [r.fsr_statistics(3, *window) for window in windows]
+                rtol = 1e-12 if data.dtype.itemsize >= 4 and data_type != DataType.F32 else 1e-6
+                for (start, incr, count), stats in zip(windows, results):
+                    w = x[start:start + incr * count].reshape(count, incr)
+                    with np.errstate(invalid='ignore'):
+                        w = np.where(np.isfinite(w), w, np.nan)
+                    msg = f'window {start}, {incr}, {count}'
+                    np.testing.assert_equal(np.nanmin(w, axis=1), stats[:, SummaryFSR.MIN], err_msg=msg)
+                    np.testing.assert_equal(np.nanmax(w, axis=1), stats[:, SummaryFSR.MAX], err_msg=msg)
+                    # summary entries with some non-finite samples weight fully (documented
+                    # approximation): check mean only for windows computed from samples or
+                    # combining no such entry
+                    clean = np.array([(incr <= sdf) or not partial[(start + i * incr) // sdf:
+                                                                   -(-(start + (i + 1) * incr) // sdf)].any()
+                                      for i in range(count)])
+                    scale = np.nanmax(np.abs(w), axis=1)
+                    err = np.abs(stats[:, SummaryFSR.MEAN] - np.nanmean(w, axis=1))
+                    self.assertTrue(np.all((err <= rtol * scale)[clean]), msg)
+
+    def test_fsr_statistics_fixed_point(self):
+        # u8 q=4: reads return raw bytes, statistics scale by 2^-4 on every path,
+        # and omitted constant chunks rebuild the raw byte.  See core_test.c M2.
+        n, sdf = 40960, 256
+        data = np.random.default_rng(3).integers(0, 256, n, dtype=np.uint8)
+        data[4 * sdf:84 * sdf] = 0x57
+        with Writer(self._path) as w:
+            w.source_def(source_id=1, name='n')
+            w.signal_def(3, source_id=1, sample_rate=100000, data_type=DataType.U8 | (4 << 16),
+                         samples_per_data=4 * sdf, sample_decimate_factor=sdf,
+                         entries_per_summary=20, summary_decimate_factor=10)
+            w.fsr_omit_data(3, True)
+            w.fsr(3, 0, data)
+        x = data.astype(np.float64) / 16
+        with Reader(self._path) as r:
+            np.testing.assert_equal(data, r.fsr(3, 0, n))
+            for start, incr, count in [(7, 100, 3), (0, sdf, n // sdf), (0, 10 * sdf, n // (10 * sdf)),
+                                       (0, n, 1), (5, n - 10, 1), (4 * sdf + 3, 100, 1)]:
+                stats = r.fsr_statistics(3, start, incr, count)
+                win = x[start:start + incr * count].reshape(count, incr)
+                msg = f'window {start}, {incr}, {count}'
+                np.testing.assert_equal(np.min(win, axis=1), stats[:, SummaryFSR.MIN], err_msg=msg)
+                np.testing.assert_equal(np.max(win, axis=1), stats[:, SummaryFSR.MAX], err_msg=msg)
+                np.testing.assert_allclose(np.mean(win, axis=1), stats[:, SummaryFSR.MEAN],
+                                           rtol=1e-6, err_msg=msg)
+                np.testing.assert_allclose(np.std(win, axis=1, ddof=1), stats[:, SummaryFSR.STD],
+                                           rtol=1e-5, err_msg=msg)
+
+    def test_fsr_statistics_multi_window_bounds(self):
+        # Multiple windows approximate their internal boundaries with whole summary
+        # entries.  Every result still lies within the window widened to the entries
+        # of the summary level the reader selects (see jls_core_fsr_statistics).
+        n, sdf, sumdf = 400000, 256, 10
+        rng = np.random.default_rng(13)
+        for data_type, data in [(DataType.F32, np.cumsum(rng.normal(0, 1, n)).astype(np.float32)),
+                                (DataType.I16, rng.integers(-30000, 30000, n).astype(np.int16))]:
+            with self.subTest(data_type=data_type):
+                self._stats_signal(data_type, data, sdf)
+                x = data.astype(np.float64)
+                windows = [(100, 1000, 300), (37, 10007, 30), (0, 3333, 100),
+                           (5, 2600, 150), (999, 30011, 13)]
+                with Reader(self._path) as r:
+                    self.assertEqual(sdf, r.signals[3].sample_decimate_factor)
+                    results = [r.fsr_statistics(3, *window) for window in windows]
+                for (start, incr, count), stats in zip(windows, results):
+                    step, level_step = 1, sdf
+                    while incr >= level_step and (incr * count) // 25 >= level_step:
+                        step, level_step = level_step, level_step * sumdf
+                    for i in range(count):
+                        a, b = start + i * incr, start + (i + 1) * incr
+                        ea, eb = (a // step) * step, min(-(-b // step) * step, n)
+                        t, e = x[a:b], x[ea:eb]
+                        mean, mn, mx = stats[i, [SummaryFSR.MEAN, SummaryFSR.MIN, SummaryFSR.MAX]]
+                        msg = f'window {start}, {incr}, {count} [{i}] step {step}'
+                        self.assertTrue(e.min() <= mn <= t.min(), msg)
+                        self.assertTrue(t.max() <= mx <= e.max(), msg)
+                        self.assertTrue(e.min() <= mean <= e.max(), msg)
 
     def test_user_data(self):
         data = [
@@ -268,6 +600,390 @@ class TestBinding(unittest.TestCase):
             d = tmap.time_map_get((3, 2))
             self.assertEqual(0, len(d))
 
+    def _fsr_vsr_gen(self):
+        # FSR signal 3 with 100 samples, VSR signal 4
+        with Writer(self._path) as w:
+            self._write_fsr_100(w)
+            w.signal_def(4, source_id=1, signal_type=SignalType.VSR, name='vsr', units='A')
+
+    def _fsr_omit_size(self, enable):
+        # Constant u8 data, so every chunk can be omitted when enabled.
+        with Writer(self._path) as w:
+            w.source_def(source_id=1, name='n')
+            w.signal_def(3, source_id=1, sample_rate=100000, data_type='u8', samples_per_data=1000)
+            if enable is not None:
+                w.fsr_omit_data(3, enable)
+            for sample_id in range(0, 200000, 1000):
+                w.fsr(3, sample_id, np.full(1000, 7, dtype=np.uint8))
+        with Reader(self._path) as r:
+            d = r.fsr(3, 0, r.signals[3].length)
+        self.assertEqual(200000, len(d))
+        np.testing.assert_equal(7, d)
+        return os.path.getsize(self._path)
+
+    def test_fsr_omit_data(self):
+        size_default = self._fsr_omit_size(None)
+        self.assertEqual(size_default, self._fsr_omit_size(False))
+        self.assertLess(self._fsr_omit_size(True), size_default // 10)
+
+    def test_writer_signal_id_invalid(self):
+        # signal_id values that fit uint16 are validated by the JLS library
+        x = np.zeros(10, dtype=np.float32)
+        with Writer(self._path) as w:
+            w.source_def(source_id=1, name='n')
+            for signal_id in [-1, 65536]:
+                with self.assertRaisesRegex(ValueError, 'signal_id out of range'):
+                    w.signal_def(signal_id, source_id=1)
+                with self.assertRaises(OverflowError):  # compatible with earlier versions
+                    w.signal_def(signal_id, source_id=1)
+            with self.assertRaisesRegex(ValueError, 'PARAMETER_INVALID'):
+                w.signal_def(256, source_id=1)
+            with self.assertRaisesRegex(ValueError, 'invalid data_type'):
+                w.signal_def(3, source_id=1, data_type='f16')
+            w.signal_def(3, source_id=1, sample_rate=1000)
+            with self.assertRaisesRegex(ValueError, 'ALREADY_EXISTS'):
+                w.signal_def(3, source_id=1, sample_rate=1000)
+            for signal_id, error in [(7, 'NOT_FOUND'), (300, 'PARAMETER_INVALID')]:
+                with self.assertRaisesRegex(ValueError, error):
+                    w.fsr(signal_id, 0, x)
+                with self.assertRaisesRegex(ValueError, error):
+                    w.fsr_omit_data(signal_id, True)
+                with self.assertRaisesRegex(ValueError, error):
+                    w.annotation(signal_id, 0, None, 'text', 0, 'x')
+                with self.assertRaisesRegex(ValueError, error):
+                    w.utc(signal_id, 0, 0)
+            with self.assertRaisesRegex(ValueError, 'signal_id out of range'):
+                w.fsr(70000, 0, x)
+            # signal 0 is the predefined VSR signal
+            with self.assertRaisesRegex(ValueError, 'NOT_SUPPORTED'):
+                w.fsr(0, 0, x)
+            with self.assertRaisesRegex(ValueError, 'NOT_SUPPORTED'):
+                w.fsr_omit_data(0, True)
+            with self.assertRaisesRegex(ValueError, 'NOT_SUPPORTED'):
+                w.utc(0, 0, 0)
+            w.annotation(0, 0, None, 'text', 0, 'vsr ok')
+            w.fsr(3, 0, x)
+
+    def test_writer_annotation_type_invalid(self):
+        with Writer(self._path) as w:
+            self._write_fsr_100(w)
+            with self.assertRaisesRegex(ValueError, 'PARAMETER_INVALID'):
+                w.annotation(3, 0, None, 99, 0, 'x')
+            with self.assertRaisesRegex(ValueError, 'invalid annotation_type'):
+                w.annotation(3, 0, None, 'bogus', 0, 'x')
+
+    def test_writer_empty_data(self):
+        with Writer(self._path) as w:
+            self._write_fsr_100(w)
+            w.fsr(3, 100, np.zeros(0, dtype=np.float32))
+            w.annotation(3, 0, None, 'text', 0, None)
+            w.annotation(3, 1, float('inf'), AnnotationType.USER, 0, b'')
+        with Reader(self._path) as r:
+            self.assertEqual(100, r.signals[3].length)
+            r.annotations(3, 0, self._on_annotations)
+        expected = [
+            (0, None, AnnotationType.TEXT, 0, b''),
+            (1, None, AnnotationType.USER, 0, b''),
+        ]
+        self.assertEqual(expected, self.annotations)
+
+    def test_reader_signal_id_invalid(self):
+        self._fsr_vsr_gen()
+        with Reader(self._path) as r:
+            fns = [
+                lambda s: r.fsr(s, 0, 10),
+                lambda s: r.fsr(s, 0, 0),
+                lambda s: r.fsr_statistics(s, 0, 10, 1),
+                lambda s: r.fsr_statistics(s, 0, 10, 0),
+                lambda s: r.utc(s, 0, self._on_utc),
+                lambda s: r.time_map_length(s),
+                lambda s: r.time_map_get(s),
+                lambda s: r.sample_id_to_timestamp(s, 0),
+                lambda s: r.timestamp_to_sample_id(s, 0),
+            ]
+            for signal_id, error in [(7, 'NOT_FOUND'), (300, 'PARAMETER_INVALID')]:
+                for fn in fns:
+                    with self.assertRaisesRegex(ValueError, error):
+                        fn(signal_id)
+                with self.assertRaisesRegex(ValueError, error):
+                    r.annotations(signal_id, 0, self._on_annotations)
+            for fn in fns[:4] + fns[7:]:  # utc and time map: see below and test_time_map_length_vsr
+                with self.assertRaisesRegex(ValueError, 'NOT_SUPPORTED'):
+                    fn(4)
+            r.utc(4, 0, self._on_utc)  # VSR: no entries, no error, as before 0.19
+            self.assertEqual([], self._utc)
+            r.annotations(4, 0, self._on_annotations)
+        self.assertEqual([], self.annotations)
+
+    def test_time_map_length_vsr(self):
+        # VSR signals have no time map: length 0, as before 0.19.0, not an error.
+        self._fsr_vsr_gen()
+        with Reader(self._path) as r:
+            for signal_id in [0, 4]:
+                self.assertEqual(SignalType.VSR, r.signals[signal_id].signal_type)
+                self.assertEqual(0, r.time_map_length(signal_id))
+                self.assertEqual(0, len(TimeMap(r, signal_id)))
+                self.assertEqual(0, len(r.time_map_get(signal_id)))
+            self.assertEqual(1, r.time_map_length(3))
+
+    def test_reader_length_zero_and_negative(self):
+        self._fsr_vsr_gen()
+        with Reader(self._path) as r:
+            d = r.fsr(3, 0, 0)
+            self.assertEqual((0, ), d.shape)
+            self.assertEqual(np.float32, d.dtype)
+            self.assertEqual((0, SummaryFSR.COUNT), r.fsr_statistics(3, 0, 10, 0).shape)
+            with self.assertRaisesRegex(ValueError, 'PARAMETER_INVALID'):
+                r.fsr(3, 0, -1)
+            with self.assertRaisesRegex(ValueError, 'PARAMETER_INVALID'):
+                r.fsr_statistics(3, 0, 10, -1)
+
+    def test_time_map_get_index_out_of_range(self):
+        signal_id = 3
+        self._utc_gen(signal_id)
+        with Reader(self._path) as r:
+            for index in [-101, (-200, 1)]:
+                with self.assertRaisesRegex(ValueError, 'index out of range'):
+                    r.time_map_get(signal_id, index)
+            for index in [100, (0, 101), (0, 1 << 40)]:  # rejected by the JLS library
+                with self.assertRaisesRegex(ValueError, 'PARAMETER_INVALID'):
+                    r.time_map_get(signal_id, index)
+
+    def _callback_cases(self):
+        """Write a file with user data, annotations, and utc for signal 3.
+
+        :return: The list of (name, fn(reader, cbk)) for each callback method.
+        """
+        with Writer(self._path) as w:
+            w.source_def(source_id=1, name='n')
+            w.signal_def(3, source_id=1, sample_rate=1000, utc_decimate_factor=10)
+            w.fsr(3, 0, np.zeros(10, dtype=np.float32))
+            for chunk_meta in range(3):
+                w.user_data(chunk_meta, b'data')
+            for idx in range(3):
+                w.annotation(3, idx, None, 'text', 0, 'a')
+            for entry in range(100):  # 10 callbacks of 10 entries
+                w.utc(3, entry * 1000, YEAR + entry * SECOND)
+        return [
+            ('user_data', lambda r, cbk: r.user_data(cbk)),
+            ('annotations', lambda r, cbk: r.annotations(3, 0, cbk)),
+            ('utc', lambda r, cbk: r.utc(3, 0, cbk)),
+        ]
+
+    def test_callback_exception_propagates(self):
+        class CbkError(Exception):
+            pass
+
+        for exc_type in [CbkError, KeyboardInterrupt]:
+            for name, fn in self._callback_cases():
+                with self.subTest(exc=exc_type.__name__, method=name):
+                    calls = []
+
+                    def cbk(*args):
+                        calls.append(args)
+                        raise exc_type('cbk')
+
+                    with Reader(self._path) as r:
+                        with self.assertRaises(exc_type):
+                            fn(r, cbk)
+                        self.assertEqual(1, len(calls))  # stopped the iteration
+                        calls.clear()
+                        fn(r, lambda *args: calls.append(args))  # still usable
+                        self.assertGreater(len(calls), 1)
+
+    def test_callback_close_raises(self):
+        for name, fn in self._callback_cases():
+            with self.subTest(method=name), Reader(self._path) as r:
+                calls = []
+
+                def cbk(*args):
+                    calls.append(args)
+                    r.close()  # freed the reader under the iteration
+
+                with self.assertRaisesRegex(RuntimeError, 'in progress'):
+                    fn(r, cbk)
+                self.assertEqual(1, len(calls))
+                self.assertEqual(10, len(r.fsr(3, 0, 10)))  # still open
+            with self.assertRaisesRegex(ValueError, 'closed Reader'):
+                r.fsr(3, 0, 10)
+
+    def test_callback_nested_read(self):
+        for name, fn in self._callback_cases():
+            with self.subTest(method=name), Reader(self._path) as r:
+                lengths = []
+                fn(r, lambda *args: lengths.append(len(r.fsr(3, 0, 10))))
+                self.assertGreater(len(lengths), 0)
+                self.assertEqual({10}, set(lengths))
+
+    def test_close_from_other_thread_while_busy(self):
+        import threading
+        self._callback_cases()
+        entered = threading.Event()
+        release = threading.Event()
+        errors = []
+
+        def cbk(*args):
+            entered.set()
+            release.wait(10)
+            return True
+
+        with Reader(self._path) as r:
+            t = threading.Thread(target=r.user_data, args=(cbk, ))
+            t.start()
+            self.assertTrue(entered.wait(10))
+            try:
+                r.close()
+            except RuntimeError as ex:
+                errors.append(ex)
+            release.set()
+            t.join()
+            self.assertEqual(1, len(errors))
+            self.assertEqual(10, len(r.fsr(3, 0, 10)))  # still open
+
+    def test_writer_close_from_other_thread(self):
+        import threading
+        x = np.zeros(1000, dtype=np.float32)
+        with Writer(self._path) as w:
+            self._write_fsr_100(w)
+
+            def run():
+                try:
+                    for i in range(300):
+                        w.fsr(3, 100 + i * 1000, x)
+                except ValueError:
+                    pass  # closed
+
+            t = threading.Thread(target=run)
+            t.start()
+            while True:
+                try:
+                    w.close()
+                    break
+                except RuntimeError:
+                    pass  # busy
+            t.join()
+        with Reader(self._path) as r:
+            self.assertEqual(0, (r.signals[3].length - 100) % 1000)
+
+    def test_user_data_chunk_meta_reserved_bits(self):
+        # bits 15:12 are reserved: C rejects them instead of silently masking
+        with Writer(self._path) as w:
+            with self.assertRaises(ValueError):
+                w.user_data(0x1000, b'ab')
+            w.user_data(0x0fff, b'ab')
+        with Reader(self._path) as r:
+            metas = []
+            r.user_data(lambda meta, data: metas.append(meta))
+            self.assertEqual([0x0fff], metas)
+
+    def test_writer_arg_out_of_range(self):
+        x = np.zeros(10, dtype=np.float32)
+        with Writer(self._path) as w:
+            w.source_def(source_id=1, name='n')
+            w.signal_def(3, source_id=1, sample_rate=1000)
+            cases = [
+                ('source_id', lambda: w.source_def(-1, name='x')),
+                ('sample_rate', lambda: w.signal_def(4, 1, sample_rate=-1)),
+                ('sample_rate', lambda: w.signal_def(4, 1, sample_rate=1 << 32)),
+                ('data_type', lambda: w.signal_def(4, 1, data_type=-1)),
+                ('signal_type', lambda: w.signal_def(4, 1, signal_type=256)),
+                ('chunk_meta', lambda: w.user_data(-1, b'x')),
+                ('sample_id', lambda: w.fsr(3, 1 << 63, x)),
+                ('signal_id', lambda: w.fsr_omit_data(-1, True)),
+                ('timestamp', lambda: w.annotation(3, 1 << 64, None, 'text', 0, 'x')),
+                ('annotation_type', lambda: w.annotation(3, 0, None, -1, 0, 'x')),
+                ('group_id', lambda: w.annotation(3, 0, None, 'text', 256, 'x')),
+                ('utc', lambda: w.utc(3, 0, 1 << 63)),
+            ]
+            for name, fn in cases:
+                with self.subTest(name=name):
+                    with self.assertRaisesRegex(ValueError, f'{name} out of range'):
+                        fn()
+            with self.assertRaisesRegex(ValueError, 'flags out of range'):
+                w.flags = -1
+            w.fsr(3, 0, x)
+
+    def test_reader_arg_out_of_range(self):
+        self._utc_gen(3)
+        with Reader(self._path) as r:
+            cases = [
+                ('signal_id', lambda: r.fsr(-1, 0, 10)),
+                ('start_sample_id', lambda: r.fsr(3, 1 << 63, 10)),
+                ('length', lambda: r.fsr_statistics(3, 0, 1, 1 << 63)),
+                ('increment', lambda: r.fsr_statistics(3, 0, -1 << 64, 1)),
+                ('signal_id', lambda: r.annotations(-1, 0, self._on_annotations)),
+                ('timestamp', lambda: r.annotations(3, 1 << 63, self._on_annotations)),
+                ('sample_id', lambda: r.utc(3, -(1 << 63) - 1, self._on_utc)),
+                ('signal_id', lambda: r.time_map_length(65536)),
+                ('sample_id', lambda: r.sample_id_to_timestamp(3, [1 << 63])),
+                ('utc_timestamp', lambda: r.timestamp_to_sample_id(3, 1 << 63)),
+            ]
+            for name, fn in cases:
+                with self.subTest(name=name):
+                    with self.assertRaisesRegex(ValueError, f'{name} out of range'):
+                        fn()
+
+    def test_tmap_int64(self):
+        self._utc_gen(3)
+        with Reader(self._path) as r:
+            t0 = r.sample_id_to_timestamp(3, 0)
+            t_neg = t0 - SECOND  # before the first sample
+            sample_id = r.timestamp_to_sample_id(3, t_neg)
+            self.assertLess(sample_id, 0)
+            result = r.timestamp_to_sample_id(3, [t_neg, t0])
+            self.assertEqual(np.int64, result.dtype)
+            self.assertEqual([sample_id, 0], result.tolist())
+            result = r.sample_id_to_timestamp(3, [sample_id, 0])
+            self.assertEqual(np.int64, result.dtype)
+            self.assertEqual(t0, result[1])
+            self.assertEqual(np.int64, r.time_map_get(3).dtype['sample_id'])
+            # numpy scalars and 0-d arrays convert like scalars
+            self.assertEqual(sample_id, r.timestamp_to_sample_id(3, np.array(t_neg)))
+            self.assertEqual(t0, r.sample_id_to_timestamp(3, np.array(0)))
+            self.assertEqual(t0, r.sample_id_to_timestamp(3, np.int64(0)))
+
+    def test_fsr_statistics_dtype(self):
+        with Writer(self._path) as w:
+            self._write_fsr_100(w)
+        with Reader(self._path) as r:
+            self.assertEqual(np.float64, r.fsr_statistics(3, 0, 10, 2).dtype)
+
+    def test_path_like(self):
+        import pathlib
+        path = pathlib.Path(self._path)
+        with Writer(path) as w:
+            self._write_fsr_100(w)
+        with Reader(path) as r:
+            self.assertEqual(100, r.signals[3].length)
+        with Reader(os.fsencode(self._path)) as r:
+            self.assertEqual(100, r.signals[3].length)
+        dst = pathlib.Path(self._path + '.copy.jls')
+        try:
+            copy(path, dst)
+            repair(dst)
+            with Reader(dst) as r:
+                self.assertEqual(100, r.signals[3].length)
+        finally:
+            if dst.is_file():
+                dst.unlink()
+
+    def test_init_twice_closes(self):
+        path2 = self._path + '.2.jls'
+        try:
+            w = Writer(self._path)
+            self._write_fsr_100(w)
+            w.__init__(path2)
+            with Reader(self._path) as r:  # finalized by __init__
+                self.assertEqual(100, r.signals[3].length)
+            self._write_fsr_100(w)
+            w.close()
+            r = Reader(self._path)
+            r.__init__(path2)
+            self.assertEqual(100, r.signals[3].length)
+            r.close()
+        finally:
+            os.remove(path2)
+
     def test_log(self):
         log = logging.getLogger('pyjls.c')
         formatter = logging.Formatter("%(levelname)s:%(filename)s:%(lineno)d:%(name)s:%(message)s")
@@ -281,6 +997,60 @@ class TestBinding(unittest.TestCase):
         jls_inject_log('D', 'debug', 12, 'debug2')
         expect = ['INFO:hello:10:pyjls.c:world', 'DEBUG:debug:11:pyjls.c:debug1', '']
         self.assertEqual('\n'.join(expect), stream.getvalue())
+
+    # Writes with sample_id gaps make the writer thread log a warning
+    # while it holds the lock that signal_def() waits on.
+    _SKIP_WARNINGS_WRITE = """
+        import sys, numpy as np
+        from pyjls import Writer, Reader
+        w = Writer(sys.argv[1])
+        w.source_def(1, name='s')
+        w.signal_def(1, 1, sample_rate=1000, name='a')
+        for i in range(200):
+            w.fsr(1, i * 2000, np.zeros(1000, dtype=np.float32))
+        w.signal_def(2, 1, sample_rate=1000, name='b')
+    """
+
+    def test_writer_log_from_writer_thread_does_not_deadlock(self):
+        code = self._SKIP_WARNINGS_WRITE + """
+        w.close()
+        with Reader(sys.argv[1]) as r:
+            print(r.signals[1].length, len(r.signals))
+        """
+        for _ in range(3):  # hung in 2 of 3 runs before the log queue
+            p = _run_script(code, self._path)
+            self.assertEqual(0, p.returncode, p.stderr)
+            self.assertIn('399000 3', p.stdout)
+            self.assertIn('skip: in=2000', p.stderr)  # writer thread log forwarded
+
+    def test_writer_open_at_exit_closes(self):
+        # Hung at interpreter exit before the log queue.
+        p = _run_script(self._SKIP_WARNINGS_WRITE, self._path)
+        self.assertEqual(0, p.returncode, p.stderr)
+        with Reader(self._path) as r:
+            self.assertEqual(399000, r.signals[1].length)
+            self.assertEqual(3, len(r.signals))
+
+    def test_writer_referenced_at_exit_closes(self):
+        # A daemon thread keeps the Writer alive past finalization,
+        # so only the atexit handler closes it.
+        code = self._SKIP_WARNINGS_WRITE + """
+        import threading, time
+        threading.Thread(target=lambda x: time.sleep(100), args=(w, ), daemon=True).start()
+        del w
+        """
+        p = _run_script(code, self._path)
+        self.assertEqual(0, p.returncode, p.stderr)
+        with Reader(self._path) as r:
+            self.assertEqual(399000, r.signals[1].length)
+
+    def test_writer_flush(self):
+        with Writer(self._path) as w:
+            self._write_fsr_100(w)
+            w.flush()
+            w.flags = Writer.FLAG_DROP_ON_OVERFLOW
+            self.assertEqual(Writer.FLAG_DROP_ON_OVERFLOW, w.flags)
+            w.flags = 0
 
     def test_copy(self):
         msgs = []
@@ -351,9 +1121,61 @@ class TestBinding(unittest.TestCase):
         with Reader(self._path) as r:
             self.assertEqual(3, r.signals[3].signal_id)
 
+    def test_repair_callback_exception_propagates(self):
+        class CbkError(Exception):
+            pass
+
+        for exc_type in [CbkError, KeyboardInterrupt]:
+            with self.subTest(exc=exc_type.__name__):
+                self._repair_case_create()
+
+                def raise_exc(*args):
+                    raise exc_type('cbk')
+
+                with self.assertRaises(exc_type):
+                    repair(self._path, None, raise_exc)
+                with self.assertRaises(exc_type):
+                    repair(self._path, raise_exc)
+                dst = self._path + '.copy.jls'
+                with self.assertRaises(exc_type):
+                    copy(self._path, dst, None, raise_exc)
+                if os.path.isfile(dst):
+                    os.remove(dst)
+                repair(self._path)
+
     def test_repair_missing_file(self):
         with self.assertRaises(RuntimeError):
             repair(self._path + '.does_not_exist.jls')
+
+    @unittest.skipUnless(sys.platform.startswith('linux'), 'uses RLIMIT_FSIZE')
+    def test_writer_close_reports_write_error(self):
+        # Writes past RLIMIT_FSIZE fail with EFBIG: close must report it.
+        code = """
+            import resource, signal, sys
+            import numpy as np
+            from pyjls import Writer
+            signal.signal(signal.SIGXFSZ, signal.SIG_IGN)
+            resource.setrlimit(resource.RLIMIT_FSIZE, (1 << 20, 1 << 20))
+            w = Writer(sys.argv[1])
+            w.source_def(1, name='s')
+            w.signal_def(1, 1, data_type='f32', sample_rate=1000000)
+            x = np.zeros(100000, dtype=np.float32)
+            try:
+                for i in range(100):
+                    w.fsr(1, i * len(x), x)
+            except RuntimeError:
+                pass  # the latched error may surface on a later fsr()
+            try:
+                w.close()
+            except RuntimeError as ex:
+                print('close raised', ex)
+                sys.exit(0)
+            sys.exit(3)
+        """
+        with tempfile.TemporaryDirectory() as d:
+            p = _run_script(code, os.path.join(d, 'full.jls'))
+        self.assertEqual(0, p.returncode, p.stdout + p.stderr)
+        self.assertIn('close raised', p.stdout)
 
     def test_signal_lookup(self):
         with Writer(self._path) as w:

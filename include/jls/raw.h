@@ -56,7 +56,12 @@ struct jls_raw_s;
  * @param[out] instance The new instance on success or NULL.
  * @param path The path to open.
  * @param mode The file open mode, which is one of "w", "r", "a".
- * @return 0 or error code.
+ * @return 0 or error code.  JLS_ERROR_UNSUPPORTED_FILE when the file
+ *      header is invalid.  JLS_ERROR_TRUNCATED, with a valid instance,
+ *      when the file was not closed gracefully.
+ *
+ * In append mode ("a"), read or rewrite the final chunk before appending
+ * so that the first appended chunk's payload_prev_length links to it.
  */
 int32_t jls_raw_open(struct jls_raw_s ** instance, const char * path, const char * mode);
 
@@ -64,7 +69,8 @@ int32_t jls_raw_open(struct jls_raw_s ** instance, const char * path, const char
  * @brief Close a file and free resources.
  *
  * @param self The JLS raw instance.
- * @return 0 or error code.
+ * @return 0 or error code.  In write mode, the file header update or
+ *      close may fail.  The instance is freed regardless.
  */
 int32_t jls_raw_close(struct jls_raw_s * self);
 
@@ -114,7 +120,11 @@ int32_t jls_raw_wr_header(struct jls_raw_s * self, struct jls_chunk_header_s * h
  * @param self The JLS raw instance.
  * @param payload_length The length of payload, in bytes, which must match the chunk header.
  * @param payload The payload of size hdr->payload_length bytes.
- * @return 0 or error code.
+ * @return 0 or error code.  JLS_ERROR_PARAMETER_INVALID when payload_length
+ *      differs from the current chunk header's payload_length.
+ *
+ * The payload is written immediately after the current chunk header,
+ * which allows rewriting an existing chunk's payload in place.
  */
 int32_t jls_raw_wr_payload(struct jls_raw_s * self, uint32_t payload_length, const uint8_t * payload);
 
@@ -125,7 +135,7 @@ int32_t jls_raw_wr_payload(struct jls_raw_s * self, uint32_t payload_length, con
  * @param[out] hdr The chunk header.
  * @param payload_length_max The maximum length in bytes for payload.
  * @param payload The payload data.
- * @return 0 or error code.
+ * @return 0 or error code.  See jls_raw_rd_header() and jls_raw_rd_payload().
  */
 int32_t jls_raw_rd(struct jls_raw_s * self, struct jls_chunk_header_s * hdr, uint32_t payload_length_max, uint8_t * payload);
 
@@ -134,7 +144,9 @@ int32_t jls_raw_rd(struct jls_raw_s * self, struct jls_chunk_header_s * hdr, uin
  *
  * @param self The JLS raw instance.
  * @param[out] h The chunk header.
- * @return 0 or error code.
+ * @return 0 or error code.  JLS_ERROR_MESSAGE_INTEGRITY on a header CRC
+ *      mismatch.  JLS_ERROR_TRUNCATED when the header is valid but its
+ *      payload extends past the end of the file.
  */
 int32_t jls_raw_rd_header(struct jls_raw_s * self, struct jls_chunk_header_s * h);
 
@@ -142,11 +154,24 @@ int32_t jls_raw_rd_header(struct jls_raw_s * self, struct jls_chunk_header_s * h
  * @brief Read the current chunk payload and advance on success.
  *
  * @param self The JLS raw instance.
- * @param payload_length_max The maximum length in bytes for payload.
+ * @param payload_length_max The size of payload in bytes, which must be at
+ *      least jls_raw_payload_size_on_disk(hdr.payload_length) to hold the
+ *      payload, padding, and CRC.
  * @param payload The payload data.
- * @return 0 or error code.
+ * @return 0 or error code.  JLS_ERROR_TOO_BIG when payload_length_max is
+ *      too small: the current chunk header remains valid, so the caller
+ *      may grow its buffer to jls_raw_payload_size_on_disk() and retry.
  */
 int32_t jls_raw_rd_payload(struct jls_raw_s * self, uint32_t payload_length_max, uint8_t * payload);
+
+/**
+ * @brief The buffer size required to read a chunk payload.
+ *
+ * @param payload_length The chunk header payload_length.
+ * @return The payload size on disk, including padding and CRC, which is
+ *      the minimum payload_length_max for jls_raw_rd_payload().
+ */
+JLS_API int64_t jls_raw_payload_size_on_disk(uint32_t payload_length);
 
 /**
  * @brief The total chunk headers read from the backend in this process.

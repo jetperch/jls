@@ -22,6 +22,7 @@
 #include "jls/backend.h"
 #include "jls/format.h"
 #include "jls/ec.h"
+#include "jls/version.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -157,6 +158,7 @@ static void test_chunks_nav(void **state) {
     assert_memory_equal(PAYLOAD1, data, sizeof(PAYLOAD1));
     assert_int_equal(0, jls_raw_chunk_prev(j));
     assert_int_equal(JLS_ERROR_EMPTY, jls_raw_chunk_prev(j));
+    assert_int_equal(0, jls_raw_close(j));
 
     assert_int_equal(0, jls_raw_open(&j, filename, "r"));
     for (size_t i = 0; i < sizeof(PAYLOAD1) - 1; ++i) {
@@ -246,6 +248,41 @@ static void test_tag_to_name(void **state) {
     (void) state;
     assert_string_equal("end", jls_tag_to_name(JLS_TAG_END));
     assert_string_equal("invalid", jls_tag_to_name(JLS_TAG_INVALID));
+    assert_string_equal("track_fsr_summary", jls_tag_to_name(JLS_TAG_TRACK_FSR_SUMMARY));
+    assert_string_equal("unknown", jls_tag_to_name(0x03));
+
+    // Every defined tag has its own name: guards the format.h CAUTION.
+    const uint8_t tags[] = {
+        JLS_TAG_SOURCE_DEF, JLS_TAG_SIGNAL_DEF,
+        JLS_TAG_TRACK_FSR_DEF, JLS_TAG_TRACK_FSR_HEAD, JLS_TAG_TRACK_FSR_DATA,
+        JLS_TAG_TRACK_FSR_INDEX, JLS_TAG_TRACK_FSR_SUMMARY,
+        JLS_TAG_TRACK_VSR_DEF, JLS_TAG_TRACK_VSR_HEAD, JLS_TAG_TRACK_VSR_DATA,
+        JLS_TAG_TRACK_VSR_INDEX, JLS_TAG_TRACK_VSR_SUMMARY,
+        JLS_TAG_TRACK_ANNOTATION_DEF, JLS_TAG_TRACK_ANNOTATION_HEAD, JLS_TAG_TRACK_ANNOTATION_DATA,
+        JLS_TAG_TRACK_ANNOTATION_INDEX, JLS_TAG_TRACK_ANNOTATION_SUMMARY,
+        JLS_TAG_TRACK_UTC_DEF, JLS_TAG_TRACK_UTC_HEAD, JLS_TAG_TRACK_UTC_DATA,
+        JLS_TAG_TRACK_UTC_INDEX, JLS_TAG_TRACK_UTC_SUMMARY,
+        JLS_TAG_USER_DATA,
+    };
+    for (size_t i = 0; i < sizeof(tags); ++i) {
+        const char * name = jls_tag_to_name(tags[i]);
+        assert_string_not_equal("unknown", name);
+        assert_string_not_equal("invalid", name);
+        assert_string_not_equal("end", name);
+        for (size_t k = 0; k < i; ++k) {
+            assert_string_not_equal(jls_tag_to_name(tags[k]), name);
+        }
+    }
+}
+
+static void test_version(void **state) {
+    (void) state;
+    char expect[32];
+    snprintf(expect, sizeof(expect), "%d.%d.%d", JLS_VERSION_MAJOR, JLS_VERSION_MINOR, JLS_VERSION_PATCH);
+    assert_string_equal(expect, jls_version_str());
+    assert_int_equal(JLS_VERSION_U32, jls_version_u32());
+    assert_int_equal(((uint32_t) JLS_VERSION_MAJOR << 24) | ((uint32_t) JLS_VERSION_MINOR << 16) | JLS_VERSION_PATCH,
+                     jls_version_u32());
 }
 
 static void test_chunks_scan(void **state) {
@@ -267,6 +304,235 @@ static void test_chunks_scan(void **state) {
     remove(filename);
 }
 
+// Write a lone chunk header (valid CRC) followed by pad_bytes of zeros.
+static void construct_hdr_only(uint32_t payload_length, uint32_t pad_bytes) {
+    struct jls_raw_s * j = NULL;
+    struct jls_chunk_header_s hdr;
+    uint8_t zeros[256];
+    memset(zeros, 0, sizeof(zeros));
+    assert_true(pad_bytes <= sizeof(zeros));
+    assert_int_equal(0, jls_raw_open(&j, filename, "w"));
+    assert_int_equal(0, jls_raw_wr_header(j, hdr_set(&hdr, JLS_TAG_USER_DATA, 0, payload_length)));
+    if (pad_bytes) {
+        assert_int_equal(0, jls_bk_fwrite(jls_raw_backend(j), zeros, pad_bytes));
+    }
+    assert_int_equal(0, jls_raw_close(j));
+}
+
+static void test_payload_size_on_disk(void **state) {
+    (void) state;
+    assert_int_equal(0, jls_raw_payload_size_on_disk(0));
+    assert_int_equal(8, jls_raw_payload_size_on_disk(1));
+    assert_int_equal(8, jls_raw_payload_size_on_disk(4));
+    assert_int_equal(16, jls_raw_payload_size_on_disk(5));
+    assert_int_equal(0x100000000LL, jls_raw_payload_size_on_disk(0xFFFFFFF5U));
+    assert_int_equal(0x100000000LL, jls_raw_payload_size_on_disk(0xFFFFFFFCU));
+    assert_int_equal(0x100000008LL, jls_raw_payload_size_on_disk(0xFFFFFFFDU));
+    assert_int_equal(0x100000008LL, jls_raw_payload_size_on_disk(0xFFFFFFFFU));
+}
+
+static void test_payload_length_wrap(void **state) {
+    (void) state;
+    struct jls_raw_s * j = NULL;
+    struct jls_chunk_header_s hdr;
+    static uint8_t data[1 << 20];
+    for (uint32_t length = 0xFFFFFFF5U; length != 0; ++length) {
+        construct_hdr_only(length, 64);
+        assert_int_equal(0, jls_raw_open(&j, filename, "r"));
+        assert_int_equal(JLS_ERROR_TRUNCATED, jls_raw_rd(j, &hdr, sizeof(data), data));
+        assert_int_equal(0, jls_raw_close(j));
+    }
+    remove(filename);
+}
+
+static void test_payload_past_file_end(void **state) {
+    (void) state;
+    struct jls_raw_s * j = NULL;
+    struct jls_chunk_header_s hdr;
+    uint8_t data[64];
+    construct_hdr_only(4096, 64);  // torn: header valid, payload missing
+    assert_int_equal(0, jls_raw_open(&j, filename, "r"));
+    assert_int_equal(JLS_ERROR_TRUNCATED, jls_raw_rd_header(j, &hdr));
+    assert_int_equal(JLS_ERROR_TRUNCATED, jls_raw_rd(j, &hdr, sizeof(data), data));
+    assert_int_equal(0, jls_raw_close(j));
+    remove(filename);
+}
+
+static void test_rd_too_big_retry(void **state) {
+    (void) state;
+    struct jls_raw_s * j = NULL;
+    struct jls_chunk_header_s hdr;
+    uint8_t data[sizeof(PAYLOAD1) + 8];
+    assert_int_equal(0, jls_raw_open(&j, filename, "w"));
+    assert_int_equal(0, jls_raw_wr(j, hdr_set(&hdr, JLS_TAG_USER_DATA, 0, sizeof(PAYLOAD1)), PAYLOAD1));
+    assert_int_equal(0, jls_raw_close(j));
+
+    assert_int_equal(0, jls_raw_open(&j, filename, "r"));
+    // the payload fits, but the CRC and padding do not
+    assert_int_equal(JLS_ERROR_TOO_BIG, jls_raw_rd(j, &hdr, sizeof(PAYLOAD1), data));
+    assert_int_equal(sizeof(PAYLOAD1), hdr.payload_length);
+    uint32_t sz = (uint32_t) jls_raw_payload_size_on_disk(hdr.payload_length);
+    assert_true(sz <= sizeof(data));
+    assert_int_equal(0, jls_raw_rd_payload(j, sz, data));
+    assert_memory_equal(PAYLOAD1, data, sizeof(PAYLOAD1));
+    assert_int_equal(0, jls_raw_close(j));
+    remove(filename);
+}
+
+static void test_chunks_scan_window(void **state) {
+    (void) state;
+    struct jls_raw_s * j = NULL;
+    struct jls_chunk_header_s hdr;
+    uint8_t garbage[8192];
+    memset(garbage, 0xA5, sizeof(garbage));
+    assert_int_equal(0, jls_raw_open(&j, filename, "w"));
+    // the valid chunk starts 4104 bytes in: past the first 4096-byte scan window
+    assert_int_equal(0, jls_bk_fwrite(jls_raw_backend(j), garbage, 4096 + 8));
+    assert_int_equal(0, jls_raw_seek_end(j));
+    int64_t target = jls_raw_chunk_tell(j);
+    assert_int_equal(0, jls_raw_wr(j, hdr_set(&hdr, JLS_TAG_USER_DATA, 0, sizeof(PAYLOAD1)), PAYLOAD1));
+    assert_int_equal(0, jls_bk_fwrite(jls_raw_backend(j), garbage, sizeof(garbage)));
+    assert_int_equal(0, jls_raw_close(j));
+
+    assert_int_equal(0, jls_raw_open(&j, filename, "r"));
+    assert_int_equal(0, jls_raw_chunk_seek(j, sizeof(struct jls_file_header_s) + 1));
+    assert_int_equal(0, jls_raw_chunk_scan(j));
+    assert_int_equal(target, jls_raw_chunk_tell(j));
+    assert_int_equal(0, jls_raw_close(j));
+    remove(filename);
+}
+
+static void test_chunks_scan_short_tail(void **state) {
+    (void) state;
+    struct jls_raw_s * j = NULL;
+    construct_hdr_only(8, 16);  // chunk header + 16-byte torn payload
+    assert_int_equal(0, jls_raw_open(&j, filename, "r"));
+    // 24 bytes remain: shorter than a chunk header
+    assert_int_equal(0, jls_raw_chunk_seek(j, sizeof(struct jls_file_header_s) + 24));
+    assert_int_equal(JLS_ERROR_NOT_FOUND, jls_raw_chunk_scan(j));
+    // 40 bytes remain, no valid header
+    assert_int_equal(0, jls_raw_chunk_seek(j, sizeof(struct jls_file_header_s) + 8));
+    assert_int_equal(JLS_ERROR_NOT_FOUND, jls_raw_chunk_scan(j));
+    assert_int_equal(0, jls_raw_close(j));
+    remove(filename);
+}
+
+static void test_wr_payload_length_mismatch(void **state) {
+    (void) state;
+    struct jls_raw_s * j = NULL;
+    struct jls_chunk_header_s hdr;
+    uint8_t data[sizeof(PAYLOAD1) + 16];
+    uint8_t payload2[sizeof(PAYLOAD1) + 8];
+    memset(payload2, 0x77, sizeof(payload2));
+    construct_n_chunks();
+
+    assert_int_equal(0, jls_raw_open(&j, filename, "a"));
+    int64_t pos1 = jls_raw_chunk_tell(j);
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_raw_wr_payload(j, sizeof(payload2), payload2));
+    assert_int_equal(JLS_ERROR_PARAMETER_INVALID, jls_raw_wr_payload(j, 4, payload2));
+    assert_int_equal(0, jls_raw_chunk_seek(j, pos1));
+    assert_int_equal(0, jls_raw_wr_payload(j, sizeof(PAYLOAD1), payload2));  // in place
+    assert_int_equal(0, jls_raw_close(j));
+
+    assert_int_equal(0, jls_raw_open(&j, filename, "r"));
+    assert_int_equal(0, jls_raw_rd(j, &hdr, sizeof(data), data));
+    assert_memory_equal(payload2, data, sizeof(PAYLOAD1));
+    for (size_t i = 1; i < sizeof(PAYLOAD1); ++i) {
+        assert_int_equal(0, jls_raw_rd(j, &hdr, sizeof(data), data));  // successors intact
+        assert_memory_equal(PAYLOAD1 + i, data, sizeof(PAYLOAD1) - i);
+    }
+    assert_int_equal(0, jls_raw_close(j));
+    remove(filename);
+}
+
+static void test_open_not_jls(void **state) {
+    (void) state;
+    struct jls_raw_s * j = NULL;
+    uint8_t zeros[4096];
+    memset(zeros, 0, sizeof(zeros));
+    FILE * f = fopen(filename, "wb");
+    assert_non_null(f);
+    assert_int_equal(sizeof(zeros), fwrite(zeros, 1, sizeof(zeros), f));
+    fclose(f);
+    assert_int_equal(JLS_ERROR_UNSUPPORTED_FILE, jls_raw_open(&j, filename, "r"));
+    assert_null(j);
+    assert_int_equal(JLS_ERROR_UNSUPPORTED_FILE, jls_raw_open(&j, filename, "a"));
+    assert_null(j);
+
+    f = fopen(filename, "wb");  // shorter than the file header
+    assert_non_null(f);
+    assert_int_equal(10, fwrite(zeros, 1, 10, f));
+    fclose(f);
+    assert_int_equal(JLS_ERROR_UNSUPPORTED_FILE, jls_raw_open(&j, filename, "r"));
+    assert_null(j);
+    remove(filename);
+}
+
+static void test_append_links_prev_length(void **state) {
+    (void) state;
+    struct jls_raw_s * j = NULL;
+    struct jls_chunk_header_s hdr;
+    uint8_t data[sizeof(PAYLOAD1) + 16];
+    construct_n_chunks();
+
+    // read the last chunk, as tail truncation recovery does, then append
+    assert_int_equal(0, jls_raw_open(&j, filename, "a"));
+    for (size_t i = 0; i < sizeof(PAYLOAD1) - 1; ++i) {
+        assert_int_equal(0, jls_raw_chunk_next(j));
+    }
+    int64_t last = jls_raw_chunk_tell(j);
+    assert_int_equal(0, jls_raw_rd(j, &hdr, sizeof(data), data));
+    assert_int_equal(1, hdr.payload_length);
+    assert_int_equal(0, jls_raw_seek_end(j));
+    int64_t appended = jls_raw_chunk_tell(j);
+    assert_int_equal(0, jls_raw_wr(j, hdr_set(&hdr, JLS_TAG_USER_DATA, 0, 0), NULL));
+    assert_int_equal(0, jls_raw_close(j));
+
+    assert_int_equal(0, jls_raw_open(&j, filename, "r"));
+    assert_int_equal(0, jls_raw_chunk_seek(j, appended));
+    assert_int_equal(0, jls_raw_rd_header(j, &hdr));
+    assert_int_equal(1, hdr.payload_prev_length);
+    assert_int_equal(0, jls_raw_chunk_seek(j, appended));
+    assert_int_equal(0, jls_raw_chunk_prev(j));
+    assert_int_equal(last, jls_raw_chunk_tell(j));
+    assert_int_equal(0, jls_raw_close(j));
+
+    // rewrite the (empty payload) last chunk header in place
+    assert_int_equal(0, jls_raw_open(&j, filename, "a"));
+    assert_int_equal(0, jls_raw_chunk_seek(j, appended));
+    assert_int_equal(0, jls_raw_rd_header(j, &hdr));  // now at the file end
+    hdr.item_next = 1234;
+    assert_int_equal(0, jls_raw_wr_header(j, &hdr));
+    assert_int_equal(0, jls_raw_close(j));
+
+    assert_int_equal(0, jls_raw_open(&j, filename, "r"));
+    assert_int_equal(0, jls_raw_chunk_seek(j, appended));
+    assert_int_equal(0, jls_raw_rd_header(j, &hdr));
+    assert_int_equal(1234, hdr.item_next);
+    assert_int_equal(1, hdr.payload_prev_length);  // unchanged
+    assert_int_equal(0, jls_raw_close(j));
+    remove(filename);
+}
+
+static void test_close_and_flush_errors(void **state) {
+    (void) state;
+    struct jls_raw_s * j = NULL;
+    assert_int_equal(0, jls_raw_open(&j, filename, "w"));
+    jls_bk_write_limit_set(0);  // the file header update on close fails
+    assert_int_equal(JLS_ERROR_IO, jls_raw_close(j));
+    jls_bk_write_limit_set(-1);
+
+    assert_int_equal(0, jls_raw_open(&j, filename, "w"));
+    struct jls_bkf_s * bk = jls_raw_backend(j);
+    int fd = bk->fd;
+    bk->fd = -2;  // invalid descriptor: fsync fails
+    assert_int_equal(JLS_ERROR_IO, jls_raw_flush(j));
+    bk->fd = fd;
+    assert_int_equal(0, jls_raw_flush(j));
+    assert_int_equal(0, jls_raw_close(j));
+    remove(filename);
+}
+
 int main(void) {
     const struct CMUnitTest tests[] = {
             cmocka_unit_test(test_invalid_open),
@@ -278,7 +544,18 @@ int main(void) {
             cmocka_unit_test(test_seek),
             cmocka_unit_test(test_items_nav),
             cmocka_unit_test(test_tag_to_name),
+            cmocka_unit_test(test_version),
             cmocka_unit_test(test_chunks_scan),
+            cmocka_unit_test(test_payload_size_on_disk),
+            cmocka_unit_test(test_payload_length_wrap),
+            cmocka_unit_test(test_payload_past_file_end),
+            cmocka_unit_test(test_rd_too_big_retry),
+            cmocka_unit_test(test_chunks_scan_window),
+            cmocka_unit_test(test_chunks_scan_short_tail),
+            cmocka_unit_test(test_wr_payload_length_mismatch),
+            cmocka_unit_test(test_open_not_jls),
+            cmocka_unit_test(test_append_links_prev_length),
+            cmocka_unit_test(test_close_and_flush_errors),
     };
 
     return cmocka_run_group_tests(tests, NULL, NULL);

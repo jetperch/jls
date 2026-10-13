@@ -26,6 +26,7 @@
 #include <fcntl.h>
 #include <sys\stat.h>
 #include <share.h>
+#include <errno.h>
 
 
 struct jls_bkt_s {
@@ -76,11 +77,15 @@ int32_t jls_bk_fopen(struct jls_bkf_s * self, const char * filename, const char 
 }
 
 int32_t jls_bk_fclose(struct jls_bkf_s * self) {
+    int32_t rc = 0;
     if (self->fd != -1) {
-        _close(self->fd);
-        self->fd = -1;
+        if (_close(self->fd)) {
+            JLS_LOGE("close failed %d", errno);
+            rc = JLS_ERROR_IO;
+        }
+        self->fd = -1;  // the descriptor is released even on error
     }
-    return 0;
+    return rc;
 }
 
 int32_t jls_bk_fwrite(struct jls_bkf_s * self, const void * buffer, unsigned int count) {
@@ -104,6 +109,9 @@ int32_t jls_bk_fwrite(struct jls_bkf_s * self, const void * buffer, unsigned int
 }
 
 int32_t jls_bk_fread(struct jls_bkf_s * self, void * const buffer, unsigned const buffer_size) {
+    if (jls_bk_read_limit_consume()) {
+        return JLS_ERROR_IO;  // test-only fault injection
+    }
     int sz = _read(self->fd, buffer, buffer_size);
     if (sz < 0) {
         JLS_LOGE("read failed %d", errno);
@@ -118,6 +126,9 @@ int32_t jls_bk_fread(struct jls_bkf_s * self, void * const buffer, unsigned cons
 }
 
 int32_t jls_bk_fseek(struct jls_bkf_s * self, int64_t offset, int origin) {
+    if (jls_bk_read_limit_consume()) {
+        return JLS_ERROR_IO;  // test-only fault injection
+    }
     int64_t pos = _lseeki64(self->fd, offset, origin);
     if (pos < 0) {
         JLS_LOGE("seek fail %d", errno);
@@ -136,12 +147,24 @@ int64_t jls_bk_ftell(struct jls_bkf_s * self) {
 }
 
 int32_t jls_bk_fflush(struct jls_bkf_s * self) {
-    return _commit(self->fd);
+    if (_commit(self->fd)) {
+        int err = errno;
+        if ((EINVAL == err) || (ENOTSUP == err)) {
+            // Devices and some network mounts cannot flush.  The writes
+            // succeeded, so only durability is unknown: do not latch.
+            JLS_LOGW("commit not supported %d", err);
+            return 0;
+        }
+        JLS_LOGE("commit failed %d", err);
+        return JLS_ERROR_IO;
+    }
+    return 0;
 }
 
 int32_t jls_bk_truncate(struct jls_bkf_s * self) {
-    if (_chsize_s(self->fd, self->fpos) < 0) {
-        JLS_LOGE("V failed %d", errno);
+    errno_t err = _chsize_s(self->fd, self->fpos);  // 0 or a positive errno
+    if (err != 0) {
+        JLS_LOGE("truncate failed %d", (int) err);
         return JLS_ERROR_IO;
     }
     if (self->fend > self->fpos) {
@@ -207,7 +230,8 @@ struct jls_bkt_s * jls_bkt_initialize(struct jls_twr_s * wr) {
 void jls_bkt_finalize(struct jls_bkt_s * self) {
     if (self) {
         if (self->thread) {
-            DWORD rc = WaitForSingleObject(self->thread, JLS_BK_CLOSE_TIMEOUT_MS);
+            // wait forever, like pthread_join: the thread uses self until it exits
+            DWORD rc = WaitForSingleObject(self->thread, INFINITE);
             if (WAIT_OBJECT_0 != rc) {
                 JLS_LOGE("thread close wait failed %d", (int) rc);
             }
@@ -232,7 +256,8 @@ void jls_bkt_finalize(struct jls_bkt_s * self) {
 
 int jls_bkt_msg_lock(struct jls_bkt_s * self) {
     DWORD rc = WaitForSingleObject(self->msg_mutex, JLS_BK_MSG_LOCK_TIMEOUT_MS);
-    if (WAIT_OBJECT_0 != rc) {
+    // WAIT_ABANDONED grants ownership: the caller must still unlock.
+    if ((WAIT_OBJECT_0 != rc) && (WAIT_ABANDONED != rc)) {
         JLS_LOGE("jls_bkt_msg_lock failed %d", (int) rc);
         return rc;
     }
@@ -249,8 +274,9 @@ int jls_bkt_msg_unlock(struct jls_bkt_s * self) {
 
 int jls_bkt_process_lock(struct jls_bkt_s * self) {
     DWORD rc = WaitForSingleObject(self->process_mutex, JLS_BK_PROCESS_LOCK_TIMEOUT_MS);
-    if (WAIT_OBJECT_0 != rc) {
-        JLS_LOGE("jls_bkt_msg_lock failed %d", (int) rc);
+    // WAIT_ABANDONED grants ownership: the caller must still unlock.
+    if ((WAIT_OBJECT_0 != rc) && (WAIT_ABANDONED != rc)) {
+        JLS_LOGE("jls_bkt_process_lock failed %d", (int) rc);
         return rc;
     }
     return 0;
@@ -258,7 +284,7 @@ int jls_bkt_process_lock(struct jls_bkt_s * self) {
 
 int jls_bkt_process_unlock(struct jls_bkt_s * self) {
     if (!ReleaseMutex(self->process_mutex)) {
-        JLS_LOGE("jls_bkt_msg_unlock failed");
+        JLS_LOGE("jls_bkt_process_unlock failed");
         return 1;
     }
     return 0;

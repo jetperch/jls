@@ -23,12 +23,18 @@ Python binding for the native JLS implementation.
 from libc.stdint cimport uint8_t, uint16_t, uint32_t, uint64_t, int32_t, int64_t
 from libc.float cimport DBL_MAX
 from libc.math cimport isfinite, NAN
+from libc.string cimport memcpy, strlen
+from cpython.pythread cimport PyThread_type_lock, PyThread_allocate_lock, \
+    PyThread_acquire_lock, PyThread_release_lock, WAIT_LOCK
 
+import atexit
 from collections.abc import Iterable, Mapping
 import json
 import logging
 import numpy as np
+import os
 import time
+import weakref
 cimport numpy as np
 from . cimport c_jls
 from .structs import SourceDef, SignalDef
@@ -46,7 +52,6 @@ _log_c = logging.getLogger(_log_c_name)
 # _UTC_OFFSET = dateutil.parser.parse('2018-01-01T00:00:00Z').timestamp()
 _UTC_OFFSET = 1514764800  # seconds
 SECOND = 1 << 30
-DEF _JLS_SIGNAL_COUNT = 256  # From jls/format.h
 
 
 def _data_type_def(basetype, size, q):
@@ -194,14 +199,82 @@ class SummaryFSR:
     COUNT = c_jls.JLS_SUMMARY_FSR_COUNT
 
 
+# The JLS library logs from any thread, including the threaded writer
+# thread while it holds locks that Python threads wait on with the GIL
+# released.  Acquiring the GIL in the log callback can deadlock, so the
+# callback only copies each message into this bounded queue.  Python
+# drains the queue into the logging module on each binding call that
+# checks a return code, on close, and at exit.
+cdef enum:
+    _LOG_QUEUE_COUNT = 256      # entries, one slot always empty
+    _LOG_MSG_SIZE = 512         # bytes, longer messages are truncated
+
+cdef char _log_queue[_LOG_QUEUE_COUNT][_LOG_MSG_SIZE]
+cdef uint32_t _log_head = 0     # next write index, owned by _log_cbk
+cdef uint32_t _log_tail = 0     # next read index, owned by _log_drain
+cdef uint64_t _log_dropped = 0  # messages dropped because the queue was full
+cdef PyThread_type_lock _log_lock = PyThread_allocate_lock()
+
+
 cdef void _log_cbk(const char * msg) noexcept nogil:
-    with gil:
-        m = msg.decode('utf-8').strip()
+    global _log_head, _log_dropped
+    cdef size_t sz
+    cdef uint32_t head_next
+    if msg == NULL:
+        return
+    sz = strlen(msg)
+    if sz >= _LOG_MSG_SIZE:
+        sz = _LOG_MSG_SIZE - 1
+    PyThread_acquire_lock(_log_lock, WAIT_LOCK)
+    head_next = (_log_head + 1) % _LOG_QUEUE_COUNT
+    if head_next == _log_tail:
+        _log_dropped += 1
+    else:
+        memcpy(_log_queue[_log_head], msg, sz)
+        _log_queue[_log_head][sz] = 0
+        _log_head = head_next
+    PyThread_release_lock(_log_lock)
+
+
+cdef void _log_emit(bytes msg):
+    m = msg.decode('utf-8', 'replace').strip()
+    try:
         level, location, s = m.split(' ', 2)
-        lvl = _log_level_map.get(level, logging.DEBUG)
         filename, line, _ = location.split(':')
-        record = logging.LogRecord(_log_c_name, lvl, filename, int(line), s, None, None)
-        _log_c.handle(record)
+        lineno = int(line)
+    except ValueError:  # not in the JLS_LOG_PRINTF format
+        level, filename, lineno, s = 'W', '', 0, m
+    lvl = _log_level_map.get(level, logging.DEBUG)
+    record = logging.LogRecord(_log_c_name, lvl, filename, lineno, s, None, None)
+    _log_c.handle(record)
+
+
+cdef void _log_drain() noexcept:
+    """Forward the queued JLS library messages to the logging module."""
+    global _log_tail, _log_dropped
+    cdef char buf[_LOG_MSG_SIZE]
+    cdef uint64_t dropped
+    cdef bint has_msg
+    cdef uint32_t count
+    for count in range(_LOG_QUEUE_COUNT + 1):  # bounded, the C side keeps producing
+        # Copy out under the lock, then call Python without it: a garbage
+        # collection finalizer may drain recursively.
+        PyThread_acquire_lock(_log_lock, WAIT_LOCK)
+        dropped = _log_dropped
+        _log_dropped = 0
+        has_msg = _log_tail != _log_head
+        if has_msg:
+            memcpy(buf, _log_queue[_log_tail], _LOG_MSG_SIZE)
+            _log_tail = (_log_tail + 1) % _LOG_QUEUE_COUNT
+        PyThread_release_lock(_log_lock)
+        try:
+            if dropped:
+                _log_c.warning('log queue full: dropped %d messages', dropped)
+            if not has_msg:
+                return
+            _log_emit(<bytes> buf)
+        except Exception:
+            pass  # logging must never break the binding call, or exit
 
 
 c_jls.jls_log_register(_log_cbk)
@@ -213,6 +286,7 @@ def jls_inject_log(level, filename, line, msg):
     msg = ' '.join([level, location, msg]).encode('utf-8')
     c_msg = msg
     c_jls.jls_log_printf('%s\n'.encode('utf-8'), c_msg)
+    _log_drain()
 
 
 def _encode_str(s):
@@ -236,12 +310,18 @@ def _storage_pack(data):
 
 cdef _storage_unpack(uint8_t storage_type, const uint8_t * data, uint32_t data_size):
     cdef const char * str = <const char *> data
-    if storage_type == c_jls.JLS_STORAGE_TYPE_STRING:
-        return str[:data_size - 1].decode('utf-8')
-    elif storage_type == c_jls.JLS_STORAGE_TYPE_BINARY:
+    if data == NULL:
+        data_size = 0
+    if storage_type == c_jls.JLS_STORAGE_TYPE_BINARY:
         return data[:data_size]
+    if data_size and str[data_size - 1] == 0:
+        data_size -= 1  # strip the NUL terminator
+    if storage_type == c_jls.JLS_STORAGE_TYPE_STRING:
+        return str[:data_size].decode('utf-8')
+    elif data_size == 0:
+        return None
     else:
-        return json.loads(str[:data_size - 1].decode('utf-8'))
+        return json.loads(str[:data_size].decode('utf-8'))
 
 
 def utc_to_jls(utc):
@@ -262,34 +342,114 @@ def jls_to_utc(timestamp):
     return (timestamp / SECOND) + _UTC_OFFSET
 
 
+# Error codes that the JLS library returns for invalid arguments.
+_VALUE_ERROR_CODES = frozenset([
+    c_jls.JLS_ERROR_PARAMETER_INVALID,
+    c_jls.JLS_ERROR_NOT_FOUND,
+    c_jls.JLS_ERROR_NOT_SUPPORTED,
+    c_jls.JLS_ERROR_TOO_BIG,
+    c_jls.JLS_ERROR_ALREADY_EXISTS,
+])
+
+
 def _handle_rc(name, rc):
+    _log_drain()
     if rc == 0:
         return
     rc_name = c_jls.jls_error_code_name(rc).decode('utf-8')
     rc_descr = c_jls.jls_error_code_description(rc).decode('utf-8')
-    raise RuntimeError(f'{name} {rc_name}[{rc}]: {rc_descr}')
+    error_type = ValueError if rc in _VALUE_ERROR_CODES else RuntimeError
+    raise error_type(f'{name} {rc_name}[{rc}]: {rc_descr}')
+
+
+# Live writers, closed at interpreter exit to finalize their files.
+_writers = weakref.WeakSet()
+
+
+@atexit.register
+def _atexit_close():
+    for w in list(_writers):
+        try:
+            w.close()
+        except Exception:
+            _log_c.exception('Writer close at exit failed')
+    _log_drain()
+
+
+class _ArgRangeError(ValueError, OverflowError):
+    """An integer argument does not fit its C type.
+
+    Also an OverflowError, which earlier versions raised.
+    """
+    pass
+
+
+# Convert integer arguments to C types.  The JLS library validates the
+# values, but only Python can detect values that do not fit the C type.
+cdef uint8_t _u8(name, value) except? 0xff:
+    try:
+        return value
+    except OverflowError:
+        raise _ArgRangeError(f'{name} out of range: {value}') from None
+
+
+cdef uint16_t _u16(name, value) except? 0xffff:
+    try:
+        return value
+    except OverflowError:
+        raise _ArgRangeError(f'{name} out of range: {value}') from None
+
+
+cdef uint32_t _u32(name, value) except? 0xffffffff:
+    try:
+        return value
+    except OverflowError:
+        raise _ArgRangeError(f'{name} out of range: {value}') from None
+
+
+cdef int64_t _i64(name, value) except? -1:
+    try:
+        return value
+    except OverflowError:
+        raise _ArgRangeError(f'{name} out of range: {value}') from None
 
 
 cdef class Writer:
     """Create a new JLS writer.
 
-    :param path: The output JLS file path.
+    :param path: The output JLS file path as str, bytes, or os.PathLike.
+
+    Methods raise ValueError for invalid arguments, such as an undefined
+    signal_id, and RuntimeError for errors reported by the JLS library.
+
+    Thread-safe: multiple threads may call the methods concurrently,
+    such as fsr() for different signals.  close() raises RuntimeError
+    while another thread is inside a method, so call close() after the
+    other threads have finished calling this Writer.  Garbage collection
+    and interpreter exit close a Writer left open, but call close() or
+    use a `with` block to finalize the file at a known time.
     """
     cdef c_jls.jls_twr_s * _wr
-    cdef c_jls.jls_signal_def_s _signals[_JLS_SIGNAL_COUNT]
+    cdef int _busy  # methods using _wr, protected by the GIL, see _wr_acquire()
+    cdef object _signals  # signal_id -> data_type, for packing fsr data
+    cdef object __weakref__
 
     FLAG_DROP_ON_OVERFLOW = c_jls.JLS_TWR_FLAG_DROP_ON_OVERFLOW
 
-    def __init__(self, path: str):
-        cdef c_jls.jls_twr_s ** wr_ptr = &self._wr
+    def __init__(self, path):
+        cdef c_jls.jls_twr_s * wr = NULL
         cdef int32_t rc
-        cdef const uint8_t[:] path_u8
-        path_bytes = path.encode('utf-8')
-        path_u8 = path_bytes
-        self._signals[0].signal_type = c_jls.JLS_SIGNAL_TYPE_VSR
+        cdef const char * c_path
+        self._close()  # __init__ called again
+        path_bytes = os.fsencode(path)
+        c_path = path_bytes
+        # jls_twr_open() defines signal 0 for VSR annotations
+        self._signals = {0: DataType.F32}
         with nogil:
-            rc = c_jls.jls_twr_open(wr_ptr, <char *> &path_u8[0])
+            rc = c_jls.jls_twr_open(&wr, c_path)
         _handle_rc('open', rc)
+        self._wr = wr
+        _writers.add(self)
 
     def __enter__(self):
         return self
@@ -299,42 +459,111 @@ cdef class Writer:
 
     @property
     def flags(self):
-        cdef c_jls.jls_twr_s * wr = self._wr
-        return c_jls.jls_twr_flags_get(wr)
+        cdef c_jls.jls_twr_s * wr
+        cdef uint32_t flags
+        wr = self._wr_acquire()
+        try:
+            with nogil:
+                flags = c_jls.jls_twr_flags_get(wr)
+        finally:
+            self._busy -= 1
+        return flags
 
     @flags.setter
     def flags(self, value):
+        cdef c_jls.jls_twr_s * wr
+        cdef uint32_t flags = _u32('flags', value)
+        cdef int32_t rc
+        wr = self._wr_acquire()
+        try:
+            with nogil:
+                rc = c_jls.jls_twr_flags_set(wr, flags)
+        finally:
+            self._busy -= 1
+        _handle_rc('flags', rc)
+
+    cdef c_jls.jls_twr_s * _wr_acquire(self) except NULL:
+        """Get the open instance and mark it busy.
+
+        The caller must decrement _busy when done with the instance,
+        so that _close() cannot free it while in use.
+        """
+        if self._wr == NULL:
+            raise ValueError('I/O operation on closed Writer')
+        self._busy += 1
+        return self._wr
+
+    cdef int _close(self) except -1:
         cdef c_jls.jls_twr_s * wr = self._wr
-        c_jls.jls_twr_flags_set(wr, value)
+        if wr == NULL:
+            return 0
+        if self._busy:
+            raise RuntimeError('Writer.close() while another thread is inside a Writer method')
+        cdef int32_t rc
+        self._wr = NULL
+        with nogil:
+            rc = c_jls.jls_twr_close(wr)
+        # The writer is freed even on error.  Report the first write error,
+        # which means the file may be incomplete.
+        _handle_rc('close', rc)
+        return 0
+
+    def __dealloc__(self):
+        # Methods hold a reference, so this Writer cannot be busy.
+        cdef c_jls.jls_twr_s * wr = self._wr
+        self._wr = NULL
+        if wr != NULL:
+            with nogil:
+                c_jls.jls_twr_close(wr)
+            _log_drain()
 
     def close(self):
-        """Close the JLS file and release all resources."""
-        cdef c_jls.jls_twr_s * wr = self._wr
-        with nogil:
-            c_jls.jls_twr_close(wr)
+        """Close the JLS file and release all resources.
+
+        Safe to call repeatedly.  Afterwards, the other methods raise
+        ValueError.
+
+        :raise RuntimeError: If another thread is inside a method.
+            The Writer remains open.
+        :raise RuntimeError: If any write failed, such as on a full disk.
+            The Writer is closed, but the file may be incomplete.
+        """
+        self._close()
 
     def flush(self):
         """Flush any pending data to the JLS file."""
-        cdef c_jls.jls_twr_s * wr = self._wr
-        with nogil:
-            c_jls.jls_twr_flush(wr)
+        cdef c_jls.jls_twr_s * wr
+        cdef int32_t rc
+        wr = self._wr_acquire()
+        try:
+            with nogil:
+                rc = c_jls.jls_twr_flush(wr)
+        finally:
+            self._busy -= 1
+        _handle_rc('flush', rc)
 
     def source_def(self, source_id, name=None, vendor=None, model=None, version=None, serial_number=None):
         """Define a source."""
         cdef int32_t rc
         cdef c_jls.jls_source_def_s s
+        cdef c_jls.jls_twr_s * wr
         name_b = _encode_str(name)
         vendor_b = _encode_str(vendor)
         model_b = _encode_str(model)
         version_b = _encode_str(version)
         serial_number_b = _encode_str(serial_number)
-        s.source_id = source_id
+        s.source_id = _u16('source_id', source_id)
         s.name = name_b
         s.vendor = vendor_b
         s.model = model_b
         s.version = version_b
         s.serial_number = serial_number_b
-        rc = c_jls.jls_twr_source_def(self._wr, &s)
+        wr = self._wr_acquire()
+        try:
+            with nogil:
+                rc = c_jls.jls_twr_source_def(wr, &s)
+        finally:
+            self._busy -= 1
         _handle_rc('source_def', rc)
 
     def source_def_from_struct(self, s: SourceDef):
@@ -352,29 +581,38 @@ cdef class Writer:
                    name=None, units=None):
         """Define a signal."""
         cdef int32_t rc
-        cdef c_jls.jls_signal_def_s * s
-        s = &self._signals[signal_id]
+        cdef c_jls.jls_signal_def_s signal
+        cdef c_jls.jls_signal_def_s * s = &signal
+        cdef c_jls.jls_twr_s * wr
         if data_type is None:
             data_type = DataType.F32
         elif isinstance(data_type, str):
+            if data_type not in _data_type_as_enum:
+                raise ValueError(f'invalid data_type {data_type}')
             data_type = _data_type_as_enum[data_type]
-        s.signal_id = signal_id
-        s.source_id = source_id
-        s.signal_type = 0 if signal_type is None else int(signal_type)
-        s.data_type = data_type
-        s.sample_rate = 0 if sample_rate is None else int(sample_rate)
-        s.samples_per_data = 0 if samples_per_data is None else int(samples_per_data)
-        s.sample_decimate_factor = 0 if sample_decimate_factor is None else int(sample_decimate_factor)
-        s.entries_per_summary = 0 if entries_per_summary is None else int(entries_per_summary)
-        s.summary_decimate_factor = 0 if summary_decimate_factor is None else int(summary_decimate_factor)
-        s.annotation_decimate_factor = 0 if annotation_decimate_factor is None else int(annotation_decimate_factor)
-        s.utc_decimate_factor = 0 if utc_decimate_factor is None else int(utc_decimate_factor)
+        s.signal_id = _u16('signal_id', signal_id)
+        s.source_id = _u16('source_id', source_id)
+        s.signal_type = 0 if signal_type is None else _u8('signal_type', int(signal_type))
+        s.data_type = _u32('data_type', data_type)
+        s.sample_rate = 0 if sample_rate is None else _u32('sample_rate', int(sample_rate))
+        s.samples_per_data = 0 if samples_per_data is None else _u32('samples_per_data', int(samples_per_data))
+        s.sample_decimate_factor = 0 if sample_decimate_factor is None else _u32('sample_decimate_factor', int(sample_decimate_factor))
+        s.entries_per_summary = 0 if entries_per_summary is None else _u32('entries_per_summary', int(entries_per_summary))
+        s.summary_decimate_factor = 0 if summary_decimate_factor is None else _u32('summary_decimate_factor', int(summary_decimate_factor))
+        s.annotation_decimate_factor = 0 if annotation_decimate_factor is None else _u32('annotation_decimate_factor', int(annotation_decimate_factor))
+        s.utc_decimate_factor = 0 if utc_decimate_factor is None else _u32('utc_decimate_factor', int(utc_decimate_factor))
         name_b = _encode_str(name)
         units_b = _encode_str(units)
         s.name = name_b
         s.units = units_b
-        rc = c_jls.jls_twr_signal_def(self._wr, s)
+        wr = self._wr_acquire()
+        try:
+            with nogil:
+                rc = c_jls.jls_twr_signal_def(wr, s)
+        finally:
+            self._busy -= 1
         _handle_rc('signal_def', rc)
+        self._signals[signal_id] = s.data_type
 
     def signal_def_from_struct(self, s: SignalDef):
         """Define a signal."""
@@ -400,18 +638,22 @@ cdef class Writer:
         :raise: On error.
         """
         cdef int32_t rc
-        cdef uint16_t chunk_meta_u16 = chunk_meta
+        cdef uint16_t chunk_meta_u16 = _u16('chunk_meta', chunk_meta)
         cdef c_jls.jls_storage_type_e storage_type
         cdef const uint8_t[:] payload_u8
         cdef const uint8_t * payload_u8_ptr = NULL
         cdef uint32_t payload_length
-        cdef c_jls.jls_twr_s * wr = self._wr
+        cdef c_jls.jls_twr_s * wr
         storage_type, payload_bytes, payload_length = _storage_pack(data)
         payload_u8 = payload_bytes
         if 0 != payload_length:
             payload_u8_ptr = &payload_u8[0]
-        with nogil:
-            rc = c_jls.jls_twr_user_data(wr, chunk_meta_u16, storage_type, payload_u8_ptr, payload_length)
+        wr = self._wr_acquire()
+        try:
+            with nogil:
+                rc = c_jls.jls_twr_user_data(wr, chunk_meta_u16, storage_type, payload_u8_ptr, payload_length)
+        finally:
+            self._busy -= 1
 
         _handle_rc('user_data', rc)
 
@@ -429,40 +671,74 @@ cdef class Writer:
 
         :param signal_id: The signal id for the data.
         :param sample_id: The sample id for the first sample in data.
-        :param data: The data to add.
+        :param data: The data to add as a numpy array with the dtype for
+            the signal data_type.  u1 and u4 data is packed in little
+            endian order into np.uint8, so each call writes a multiple of
+            8 (u1) or 2 (u4) samples.  This is a known limitation: to
+            store a total sample count that is not such a multiple, pad
+            the final byte, and readers will see the padding samples.
+            The C API, jls_twr_fsr(), accepts any sample count.
         :raise: On error.
+
+        A forward skip in sample_id fills the missing samples with NaN
+        for float types and 0 otherwise.  Samples that duplicate already
+        written sample ids are dropped, so a late write cannot fill a gap.
         """
-        cdef c_jls.jls_twr_s * wr = self._wr
-        cdef uint16_t signal_id_u16 = signal_id
-        cdef int64_t sample_id_i64 = sample_id
+        cdef c_jls.jls_twr_s * wr
+        cdef uint16_t signal_id_u16
+        cdef int64_t sample_id_i64 = _i64('sample_id', sample_id)
         cdef int32_t rc
         cdef np.uint8_t [::1] u8
-        cdef uint32_t data_type
-        cdef uint32_t entry_size_bits
-        cdef uint32_t length
+        cdef const uint8_t * data_ptr = NULL
+        cdef uint32_t length_u32 = 0
 
-        data_type = self._signals[signal_id].data_type
-        entry_size_bits = (data_type >> 8) & 0xff
-        np_type = _data_type_map[data_type & 0xffff]
-        if np_type != data.dtype:
-            raise ValueError(f'Data type mismatch {data.dtype} != {np_type}')
-        data_u8 = data.view(dtype=np.uint8)
-        u8 = data_u8
-        length = len(data)
-        if entry_size_bits == 4:
-            length *= 2
-        elif entry_size_bits == 1:
-            length *= 8
-        with nogil:
-            rc = c_jls.jls_twr_fsr(wr, signal_id_u16, sample_id_i64, &u8[0], length)
+        signal_id_u16 = _u16('signal_id', signal_id)
+        data_type = self._signals.get(signal_id)
+        if data_type is not None:  # otherwise, jls_twr_fsr() rejects signal_id
+            entry_size_bits = (data_type >> 8) & 0xff
+            np_type = _data_type_map[data_type & 0xffff]
+            if np_type != data.dtype:
+                raise ValueError(f'Data type mismatch {data.dtype} != {np_type}')
+            length = len(data)
+            if entry_size_bits == 4:
+                length *= 2
+            elif entry_size_bits == 1:
+                length *= 8
+            length_u32 = length
+            if length:
+                data_u8 = data.view(dtype=np.uint8)
+                u8 = data_u8
+                data_ptr = &u8[0]
+        wr = self._wr_acquire()
+        try:
+            with nogil:
+                rc = c_jls.jls_twr_fsr(wr, signal_id_u16, sample_id_i64, data_ptr, length_u32)
+        finally:
+            self._busy -= 1
         _handle_rc('fsr', rc)
 
     def fsr_omit_data(self, signal_id, enable):
-        cdef c_jls.jls_twr_s * wr = self._wr
-        cdef uint16_t signal_id_u16 = signal_id
-        cdef uint32_t enable_u32 = 0 if bool(enable) else 1
+        """Omit constant level 0 data chunks from an FSR signal.
+
+        :param signal_id: The FSR signal id.
+        :param enable: True to omit constant data chunks, False to
+            write all data chunks (default).
+        :raise: On error.
+
+        See jls_twr_fsr_omit_data() for the data types this affects.
+        On read, omitted data is reconstructed from the summaries.
+        """
+        cdef c_jls.jls_twr_s * wr
+        cdef uint16_t signal_id_u16
+        cdef uint32_t enable_u32 = 1 if bool(enable) else 0
         cdef int32_t rc
-        rc = c_jls.jls_twr_fsr_omit_data(wr, signal_id_u16, enable_u32)
+        signal_id_u16 = _u16('signal_id', signal_id)
+        wr = self._wr_acquire()
+        try:
+            with nogil:
+                rc = c_jls.jls_twr_fsr_omit_data(wr, signal_id_u16, enable_u32)
+        finally:
+            self._busy -= 1
         _handle_rc('fsr_omit_data', rc)
 
     def annotation(self, signal_id, timestamp, y, annotation_type, group_id, data):
@@ -476,32 +752,41 @@ cdef class Writer:
         :param data: The data for the annotation.
         :raise: On error.
         """
-        cdef c_jls.jls_twr_s * wr = self._wr
-        cdef uint16_t signal_id_u16 = signal_id
-        cdef int64_t timestamp_i64 = timestamp
-        cdef uint8_t group_id_u8 = group_id
+        cdef c_jls.jls_twr_s * wr
+        cdef uint16_t signal_id_u16
+        cdef int64_t timestamp_i64 = _i64('timestamp', timestamp)
+        cdef uint8_t group_id_u8 = _u8('group_id', group_id)
         cdef float y_f32
         cdef c_jls.jls_annotation_type_e annotation_type_e
         cdef c_jls.jls_storage_type_e storage_type
         cdef const uint8_t[:] payload_u8
+        cdef const uint8_t * payload_u8_ptr = NULL
         cdef uint32_t payload_length
         cdef int32_t rc
 
-        if y is None:
+        signal_id_u16 = _u16('signal_id', signal_id)
+        if y is None or not np.isfinite(y):
             y_f32 = NAN
         else:
             y_f32 = y
         if isinstance(annotation_type, str):
-            annotation_type = _annotation_map[annotation_type.lower()]
-        annotation_type_e = annotation_type
+            annotation_type_str = annotation_type.lower()
+            if annotation_type_str not in _annotation_map:
+                raise ValueError(f'invalid annotation_type {annotation_type}')
+            annotation_type = _annotation_map[annotation_type_str]
+        annotation_type_e = <c_jls.jls_annotation_type_e> _u8('annotation_type', annotation_type)
         storage_type, payload, payload_length = _storage_pack(data)
         payload_u8 = payload
-        if y is None or not np.isfinite(y):
-            y = NAN
-        with nogil:
-            rc = c_jls.jls_twr_annotation(wr, signal_id_u16, timestamp_i64, y_f32,
-                annotation_type_e,
-                group_id_u8, storage_type, &payload_u8[0], payload_length)
+        if 0 != payload_length:
+            payload_u8_ptr = &payload_u8[0]
+        wr = self._wr_acquire()
+        try:
+            with nogil:
+                rc = c_jls.jls_twr_annotation(wr, signal_id_u16, timestamp_i64, y_f32,
+                    annotation_type_e,
+                    group_id_u8, storage_type, payload_u8_ptr, payload_length)
+        finally:
+            self._busy -= 1
         _handle_rc('annotation', rc)
 
     def utc(self, signal_id, sample_id, utc_i64):
@@ -511,52 +796,71 @@ cdef class Writer:
         :param utc: The UTC timestamp.
         :raise: On error.
         """
-        cdef c_jls.jls_twr_s * wr = self._wr
-        cdef uint16_t signal_id_u16 = signal_id
-        cdef int64_t sample_id_i64 = sample_id
-        cdef int64_t utc_i64c = utc_i64
+        cdef c_jls.jls_twr_s * wr
+        cdef uint16_t signal_id_u16
+        cdef int64_t sample_id_i64 = _i64('sample_id', sample_id)
+        cdef int64_t utc_i64c = _i64('utc', utc_i64)
         cdef int32_t rc
-        with nogil:
-            rc = c_jls.jls_twr_utc(wr, signal_id_u16, sample_id_i64, utc_i64c)
+        signal_id_u16 = _u16('signal_id', signal_id)
+        wr = self._wr_acquire()
+        try:
+            with nogil:
+                rc = c_jls.jls_twr_utc(wr, signal_id_u16, sample_id_i64, utc_i64c)
+        finally:
+            self._busy -= 1
         _handle_rc('utc', rc)
-
-
-cdef class AnnotationCallback:
-    cdef uint8_t is_fsr
-    cdef object cbk_fn
-
-    def __init__(self, is_fsr, cbk_fn):
-        self.is_fsr = is_fsr
-        self.cbk_fn = cbk_fn
 
 
 _TIME_MAP_GET_DTYPE = np.dtype({
     'names': ['sample_id', 'timestamp'],
-    'formats': ['u8', 'i8']
+    'formats': ['i8', 'i8']
 })
 
 
 cdef class Reader:
     """Open a JLS v2 file for reading.
 
-    :param path: The path to the JLS file.
+    :param path: The path to the JLS file as str, bytes, or os.PathLike.
+
+    Methods raise ValueError for invalid arguments, such as an undefined
+    signal_id, and RuntimeError for errors reported by the JLS library.
+
+    Not thread-safe: call each Reader's methods from one thread at a
+    time, because all reads share one buffer and file position.
+    Calling methods concurrently may return wrong data or crash the
+    interpreter.  To read from multiple threads, open a separate Reader
+    in each thread.
+
+    close() raises RuntimeError while a method is in progress, either
+    in another thread or from a callback passed to annotations(),
+    user_data(), or utc().  An exception raised by a callback stops the
+    iteration and propagates from the method.  Garbage collection closes
+    a Reader left open.
     """
     cdef c_jls.jls_rd_s * _rd
+    cdef int _busy  # methods using _rd, protected by the GIL, see _rd_acquire()
     cdef object _sources
     cdef object _signals
 
-    def __init__(self, path: str):
+    def __init__(self, path):
         cdef int32_t rc
         cdef c_jls.jls_source_def_s * sources
         cdef c_jls.jls_signal_def_s * signals
         cdef uint16_t count
         cdef int64_t samples
+        cdef c_jls.jls_rd_s * rd = NULL
+        cdef const char * c_path
+        self._close()  # __init__ called again
         self._sources: Mapping[int, SourceDef] = {}
         self._signals: Mapping[int, SignalDef] = {}
-        rc = c_jls.jls_rd_open(&self._rd, path.encode('utf-8'))
+        path_bytes = os.fsencode(path)
+        c_path = path_bytes
+        with nogil:  # may recover a truncated file
+            rc = c_jls.jls_rd_open(&rd, c_path)
         _handle_rc('open', rc)
+        self._rd = rd
 
-        rc = c_jls.jls_rd_sources(self._rd, &sources, &count)
+        rc = c_jls.jls_rd_sources(self._rd_get(), &sources, &count)
         _handle_rc('rd_sources', rc)
         for i in range(count):
             source_def = SourceDef(
@@ -568,7 +872,7 @@ cdef class Reader:
                 serial_number=sources[i].serial_number.decode('utf-8'))
             self._sources[sources[i].source_id] = source_def
 
-        rc = c_jls.jls_rd_signals(self._rd, &signals, &count)
+        rc = c_jls.jls_rd_signals(self._rd_get(), &signals, &count)
         _handle_rc('rd_signals', rc)
         for i in range(count):
             signal_id = signals[i].signal_id
@@ -588,7 +892,7 @@ cdef class Reader:
                 name=signals[i].name.decode('utf-8'),
                 units=signals[i].units.decode('utf-8'))
             if signal_def.signal_type == c_jls.JLS_SIGNAL_TYPE_FSR:
-                rc = c_jls.jls_rd_fsr_length(self._rd, signal_id, &samples)
+                rc = c_jls.jls_rd_fsr_length(self._rd_get(), signal_id, &samples)
                 _handle_rc('rd_fsr_length', rc)
                 signal_def.length = samples
             self._signals[signal_id] = signal_def
@@ -599,9 +903,51 @@ cdef class Reader:
     def __exit__(self, type, value, traceback):
         self.close()
 
+    cdef c_jls.jls_rd_s * _rd_get(self) except NULL:
+        """Get the open instance for immediate use with the GIL held."""
+        if self._rd == NULL:
+            raise ValueError('I/O operation on closed Reader')
+        return self._rd
+
+    cdef c_jls.jls_rd_s * _rd_acquire(self) except NULL:
+        """Get the open instance and mark it busy.
+
+        Use for calls that release the GIL or invoke Python callbacks.
+        The caller must decrement _busy when done with the instance,
+        so that _close() cannot free it while in use.
+        """
+        cdef c_jls.jls_rd_s * rd = self._rd_get()
+        self._busy += 1
+        return rd
+
+    cdef int _close(self) except -1:
+        cdef c_jls.jls_rd_s * rd = self._rd
+        if rd == NULL:
+            return 0
+        if self._busy:
+            raise RuntimeError('Reader.close() while a Reader method is in progress')
+        self._rd = NULL
+        c_jls.jls_rd_close(rd)
+        _log_drain()
+        return 0
+
+    def __dealloc__(self):
+        # Methods hold a reference, so this Reader cannot be busy.
+        cdef c_jls.jls_rd_s * rd = self._rd
+        self._rd = NULL
+        if rd != NULL:
+            c_jls.jls_rd_close(rd)
+
     def close(self):
-        """Close the JLS file and free all resources."""
-        c_jls.jls_rd_close(self._rd)
+        """Close the JLS file and release all resources.
+
+        Safe to call repeatedly.  Afterwards, the other methods raise
+        ValueError.
+
+        :raise RuntimeError: If called from a callback or while another
+            thread is inside a method.  The Reader remains open.
+        """
+        self._close()
 
     @property
     def sources(self) -> Mapping[int, SourceDef]:
@@ -700,29 +1046,31 @@ cdef class Reader:
 
         cdef int32_t rc
         cdef np.uint8_t [::1] u8
-        cdef uint32_t data_type
-        cdef uint32_t entry_size_bits
-        cdef uint32_t u8_length
-        cdef uint16_t signal_id_u16 = signal_id
-        cdef int64_t start_sample_id_i64 = start_sample_id
-        cdef int64_t length_i64 = length
+        cdef uint8_t * data_ptr = NULL
+        cdef uint16_t signal_id_u16 = _u16('signal_id', signal_id)
+        cdef int64_t start_sample_id_i64 = _i64('start_sample_id', start_sample_id)
+        cdef int64_t length_i64 = _i64('length', length)
+        cdef c_jls.jls_signal_def_s signal_def
+        cdef c_jls.jls_rd_s * rd
 
-        data_type = self._signals[signal_id].data_type
+        rc = c_jls.jls_rd_signal(self._rd_get(), signal_id_u16, &signal_def)
+        _handle_rc('rd_fsr', rc)
+        data_type = signal_def.data_type
         entry_size_bits = (data_type >> 8) & 0xff
         np_type = _data_type_map[data_type & 0xffff]
-        u8_length = length
-        if entry_size_bits == 4:
-            u8_length = (length + 1) // 2
-        elif entry_size_bits == 1:
-            u8_length = (length + 7) // 8
-        else:
-            u8_length *= entry_size_bits // 8
-
+        # Python int: the C buffer size must not wrap.  jls_rd_fsr() rejects length < 0.
+        u8_length = (max(length, 0) * entry_size_bits + 7) // 8
         data_u8 = np.empty(u8_length, dtype=np.uint8)
         data = data_u8.view(dtype=np_type)
-        u8 = data_u8
-        with nogil:
-            rc = c_jls.jls_rd_fsr(self._rd, signal_id_u16, start_sample_id_i64, &u8[0], length_i64)
+        if length > 0:
+            u8 = data_u8
+            data_ptr = &u8[0]
+        rd = self._rd_acquire()
+        try:
+            with nogil:
+                rc = c_jls.jls_rd_fsr(rd, signal_id_u16, start_sample_id_i64, data_ptr, length_i64)
+        finally:
+            self._busy -= 1
         _handle_rc('rd_fsr', rc)
         return data
 
@@ -734,7 +1082,7 @@ cdef class Reader:
             The sample_id of the first recorded sample in a signal is 0.
         :param increment: The number of samples represented per return value.
         :param length: The number of return values to generate.
-        :return: The 2-D array[summary][stat] of np.float32.
+        :return: The 2-D array[summary][stat] of np.float64.
             * Each summary entry represents the statistics computed
               approximately over increment samples starting
               from start_sample_id + <index> * increment.
@@ -743,26 +1091,49 @@ cdef class Reader:
               which are mean (average), standard deviation,
               minimum, and maximum.
 
-        For length 1, the return statistics are sample-accurate.
+        The standard deviation is the sample standard deviation (ddof=1).
+        Non-finite samples (NaN, inf) are skipped.
+
+        For length 1, a window shorter than 25 * sample_decimate_factor
+        samples is computed from the samples, so its statistics are
+        sample-accurate.  A longer window computes its partial first and
+        last summary entries from the samples and combines the stored
+        summary entries between them.  Its min and max are exact.  Its
+        mean and std are accurate to the summary precision: float64 for
+        f64, u32, u64, i32, and i64 data and float32 for all other types,
+        which limits the std of a signal whose mean is large relative to
+        its std (about 2e-5 relative for 15 V with a 4 mV std).  A summary
+        entry with some NaN samples counts with its full sample count.
+
         For larger lengths, the external boundaries for index 0 (first)
-        and index -1 (last) are computed exactly.  The internal boundaries
-        are approximated, perfect for waveform display, but perhaps not
-        suitable for other use cases.  If you need sample accurate statistics
-        over multiple increments, call this function repeatedly with length 1.
+        and index -1 (last) are computed as for length 1.  The internal
+        boundaries are approximated, perfect for waveform display, but
+        perhaps not suitable for other use cases.  For sample-accurate
+        statistics over a long window, read the samples with fsr() and
+        compute them.
         """
 
         cdef int32_t rc
         cdef np.float64_t [:, :] c_data
-        cdef uint16_t signal_id_u16 = signal_id
-        cdef int64_t start_sample_id_i64 = start_sample_id
-        cdef int64_t increment_i64 = increment
-        cdef int64_t length_i64 = length
+        cdef double * data_ptr = NULL
+        cdef uint16_t signal_id_u16 = _u16('signal_id', signal_id)
+        cdef int64_t start_sample_id_i64 = _i64('start_sample_id', start_sample_id)
+        cdef int64_t increment_i64 = _i64('increment', increment)
+        cdef int64_t length_i64 = _i64('length', length)
+        cdef c_jls.jls_rd_s * rd
 
-        data = np.empty((length, c_jls.JLS_SUMMARY_FSR_COUNT), dtype=np.float64)
-        c_data = data
-        with nogil:
-            rc = c_jls.jls_rd_fsr_statistics(self._rd, signal_id_u16, start_sample_id_i64,
-                                             increment_i64, &c_data[0, 0], length_i64)
+        # jls_rd_fsr_statistics() rejects length < 0
+        data = np.empty((max(length, 0), c_jls.JLS_SUMMARY_FSR_COUNT), dtype=np.float64)
+        if length > 0:
+            c_data = data
+            data_ptr = &c_data[0, 0]
+        rd = self._rd_acquire()
+        try:
+            with nogil:
+                rc = c_jls.jls_rd_fsr_statistics(rd, signal_id_u16, start_sample_id_i64,
+                                                 increment_i64, data_ptr, length_i64)
+        finally:
+            self._busy -= 1
         _handle_rc('rd_fsr_statistics', rc)
         return data
 
@@ -776,9 +1147,15 @@ cdef class Reader:
             the annotations or False to continue iterating.
         """
         cdef int32_t rc
-        is_fsr = self._signals[signal_id].signal_type == c_jls.JLS_SIGNAL_TYPE_FSR
-        user_data = AnnotationCallback(is_fsr, cbk_fn)
-        rc = c_jls.jls_rd_annotations(self._rd, signal_id, timestamp, _annotation_cbk_fn, <void *> user_data)
+        cdef uint16_t signal_id_u16 = _u16('signal_id', signal_id)
+        cdef int64_t timestamp_i64 = _i64('timestamp', timestamp)
+        cdef _Callback cbk = _Callback(cbk_fn)
+        cdef c_jls.jls_rd_s * rd = self._rd_acquire()
+        try:
+            rc = c_jls.jls_rd_annotations(rd, signal_id_u16, timestamp_i64, _annotation_cbk_fn, <void *> cbk)
+        finally:
+            self._busy -= 1
+        cbk.reraise()
         _handle_rc('rd_annotations', rc)
 
     def user_data(self, cbk_fn):
@@ -789,7 +1166,13 @@ cdef class Reader:
             user data entries or False to continue iterating.
         """
         cdef int32_t rc
-        rc = c_jls.jls_rd_user_data(self._rd, _user_data_cbk_fn, <void *> cbk_fn)
+        cdef _Callback cbk = _Callback(cbk_fn)
+        cdef c_jls.jls_rd_s * rd = self._rd_acquire()
+        try:
+            rc = c_jls.jls_rd_user_data(rd, _user_data_cbk_fn, <void *> cbk)
+        finally:
+            self._busy -= 1
+        cbk.reraise()
         _handle_rc('rd_user_data', rc)
 
     def utc(self, signal_id, sample_id, cbk_fn):
@@ -804,31 +1187,57 @@ cdef class Reader:
             or False to continue iterating.
         """
         cdef int32_t rc
-        rc = c_jls.jls_rd_utc(self._rd, signal_id, sample_id, _utc_cbk_fn, <void *> cbk_fn)
+        cdef uint16_t signal_id_u16 = _u16('signal_id', signal_id)
+        cdef int64_t sample_id_i64 = _i64('sample_id', sample_id)
+        cdef _Callback cbk = _Callback(cbk_fn)
+        cdef c_jls.jls_rd_s * rd = self._rd_acquire()
+        try:
+            rc = c_jls.jls_rd_utc(rd, signal_id_u16, sample_id_i64, _utc_cbk_fn, <void *> cbk)
+        finally:
+            self._busy -= 1
+        cbk.reraise()
         _handle_rc(f'rd_utc({signal_id}, {sample_id})', rc)
 
     def time_map_length(self, signal_id):
-        return c_jls.jls_rd_tmap_length(self._rd, signal_id)
+        cdef c_jls.jls_utc_summary_entry_s entry
+        cdef uint16_t signal_id_u16 = _u16('signal_id', signal_id)
+        cdef c_jls.jls_rd_s * rd = self._rd_get()
+        signal_def = self._signals.get(signal_id_u16)
+        if signal_def is not None and signal_def.signal_type != c_jls.JLS_SIGNAL_TYPE_FSR:
+            return 0  # only FSR signals have a time map; 0.18 and earlier returned 0
+        # jls_rd_tmap_length() returns 0 on error, so get the error here.
+        # A valid FSR signal always has at least one entry.
+        rc = c_jls.jls_rd_tmap_get(rd, signal_id_u16, 0, &entry)
+        _handle_rc('time_map_length', rc)
+        return c_jls.jls_rd_tmap_length(rd, signal_id_u16)
 
     def sample_id_to_timestamp(self, signal_id, sample_id):
         """Convert sample_id to UTC timestamp for FSR signals.
 
         :param signal_id: The signal id.
         :param sample_id: The sample_id or iterable of sample_ids to convert.
-        :return: The JLS timestamp corresponding to sample_id.
+        :return: The JLS timestamp corresponding to sample_id, as an int
+            for a scalar sample_id or an np.int64 array otherwise.
+        :raise ValueError: on invalid arguments.
         :raise RuntimeError: on error.
         """
+        cdef uint16_t signal_id_u16 = _u16('signal_id', signal_id)
         cdef int64_t utc_timestamp
+        cdef int32_t rc
+        if isinstance(sample_id, np.ndarray) and sample_id.ndim == 0:
+            sample_id = sample_id.item()
         if isinstance(sample_id, Iterable):
             sz = len(sample_id)
             result = np.empty(sz, dtype=np.int64)
             for idx, s in enumerate(sample_id):
-                rc = c_jls.jls_rd_sample_id_to_timestamp(self._rd, signal_id, s, &utc_timestamp)
+                rc = c_jls.jls_rd_sample_id_to_timestamp(self._rd_get(), signal_id_u16,
+                                                         _i64('sample_id', s), &utc_timestamp)
                 _handle_rc('sample_id_to_timestamp', rc)
                 result[idx] = utc_timestamp
             return result
         else:
-            rc = c_jls.jls_rd_sample_id_to_timestamp(self._rd, signal_id, sample_id, &utc_timestamp)
+            rc = c_jls.jls_rd_sample_id_to_timestamp(self._rd_get(), signal_id_u16,
+                                                     _i64('sample_id', sample_id), &utc_timestamp)
             _handle_rc('sample_id_to_timestamp', rc)
             return utc_timestamp
 
@@ -836,21 +1245,29 @@ cdef class Reader:
         """Convert UTC timestamp to sample_id for FSR signals.
 
         :param signal_id: The signal id.
-        :param utc_timestamp: The UTC timestamp to convert.
-        :return: The sample_id corresponding to utc_timestamp.
+        :param utc_timestamp: The UTC timestamp or iterable of timestamps to convert.
+        :return: The sample_id corresponding to utc_timestamp, as an int
+            for a scalar utc_timestamp or an np.int64 array otherwise.
+        :raise ValueError: on invalid arguments.
         :raise RuntimeError: on error.
         """
+        cdef uint16_t signal_id_u16 = _u16('signal_id', signal_id)
         cdef int64_t sample_id
+        cdef int32_t rc
+        if isinstance(utc_timestamp, np.ndarray) and utc_timestamp.ndim == 0:
+            utc_timestamp = utc_timestamp.item()
         if isinstance(utc_timestamp, Iterable):
             sz = len(utc_timestamp)
-            result = np.empty(sz, dtype=np.uint64)
+            result = np.empty(sz, dtype=np.int64)
             for idx, t in enumerate(utc_timestamp):
-                rc = c_jls.jls_rd_timestamp_to_sample_id(self._rd, signal_id, t, &sample_id)
-                _handle_rc('jls_rd_timestamp_to_sample_id', rc)
+                rc = c_jls.jls_rd_timestamp_to_sample_id(self._rd_get(), signal_id_u16,
+                                                         _i64('utc_timestamp', t), &sample_id)
+                _handle_rc('timestamp_to_sample_id', rc)
                 result[idx] = sample_id
             return result
         else:
-            rc = c_jls.jls_rd_timestamp_to_sample_id(self._rd, signal_id, utc_timestamp, &sample_id)
+            rc = c_jls.jls_rd_timestamp_to_sample_id(self._rd_get(), signal_id_u16,
+                                                     _i64('utc_timestamp', utc_timestamp), &sample_id)
             _handle_rc('timestamp_to_sample_id', rc)
             return sample_id
 
@@ -869,29 +1286,34 @@ cdef class Reader:
             Access as either a[0]['timestamp'] or a[0][1].
         """
         cdef c_jls.jls_utc_summary_entry_s time_map
+        cdef int32_t rc
+        cdef uint16_t signal_id_u16 = _u16('signal_id', signal_id)
         n = self.time_map_length(signal_id)
         if index is None:
-            index = 0, n
+            i0, i1 = 0, n
         elif isinstance(index, Iterable):
-            index = int(index[0]), int(index[1])
+            i0, i1 = int(index[0]), int(index[1])
+            if i0 < 0:
+                i0 = n + i0
+            if i1 < 0:
+                i1 = n + i1
         else:
-            index = int(index)
-            if index < 0:
-                index = n + index
-            index = index, index + 1
-        i0, i1 = index
-        if i0 < 0:
-            i0 = n + i0
-        if i1 < 0:
-            i1 = n + i1
+            i0 = int(index)
+            if i0 < 0:
+                i0 = n + i0
+            i1 = i0 + 1
         if i0 > i1:
             i0, i1 = 0, 0
-        elif i1 > n:
+        elif i0 < 0:  # size_t index cannot represent it
             raise ValueError(f'index out of range: {index}')
         k = i1 - i0
+        if k:  # jls_rd_tmap_get() validates the last index before allocation
+            rc = c_jls.jls_rd_tmap_get(self._rd_get(), signal_id_u16, i1 - 1, &time_map)
+            _handle_rc('time_map_get', rc)
         out = np.empty(k, dtype=_TIME_MAP_GET_DTYPE)
         for i in range(k):
-            c_jls.jls_rd_tmap_get(self._rd, signal_id, i + i0, &time_map)
+            rc = c_jls.jls_rd_tmap_get(self._rd_get(), signal_id_u16, i + i0, &time_map)
+            _handle_rc('time_map_get', rc)
             out[i][0] = time_map.sample_id
             out[i][1] = time_map.timestamp
         return out
@@ -923,60 +1345,87 @@ class TimeMap:
         return self._reader.time_map_get(self._signal_id, index)
 
 
+cdef class _Callback:
+    """Hold a Python callback and the exception that it raised.
+
+    C cannot propagate Python exceptions.  The C callback adapter
+    stores the exception and stops the iteration, then the caller
+    raises it after the C function returns.
+    """
+    cdef object fn
+    cdef object exc
+
+    def __cinit__(self, fn):
+        self.fn = fn
+        self.exc = None
+
+    cdef int32_t call(self, args) noexcept:
+        """Call fn(*args) and return the C stop flag: 1 to stop, 0 to continue."""
+        if self.fn is None:
+            return 0
+        try:
+            return 1 if bool(self.fn(*args)) else 0
+        except BaseException as ex:  # including KeyboardInterrupt
+            self.exc = ex
+            return 1
+
+    cdef reraise(self):
+        exc, self.exc = self.exc, None
+        if exc is not None:
+            raise exc
+
+
 cdef int32_t _annotation_cbk_fn(void * user_data, const c_jls.jls_annotation_s * annotation) noexcept:
-    obj: AnnotationCallback = <object> user_data
-    data = _storage_unpack(annotation[0].storage_type, annotation[0].data, annotation[0].data_size)
+    cdef _Callback cbk = <_Callback> user_data
     y = annotation[0].y
-    timestamp = annotation[0].timestamp
-    if not obj.is_fsr:
-        timestamp = annotation[0].timestamp
     if not isfinite(y):
         y = None
     try:
-        rc = obj.cbk_fn(timestamp, y, annotation[0].annotation_type, annotation[0].group_id, data)
-    except Exception:
-        logging.getLogger(__name__).exception('in annotation callback')
+        data = _storage_unpack(annotation[0].storage_type, annotation[0].data, annotation[0].data_size)
+    except BaseException as ex:
+        cbk.exc = ex
         return 1
-    return 1 if bool(rc) else 0
+    return cbk.call((annotation[0].timestamp, y, annotation[0].annotation_type, annotation[0].group_id, data))
 
 
 cdef int32_t _user_data_cbk_fn(void * user_data, uint16_t chunk_meta, c_jls.jls_storage_type_e storage_type,
         uint8_t * data, uint32_t data_size) noexcept:
-    cbk_fn = <object> user_data
-    d = _storage_unpack(storage_type, data, data_size)
-    rc = cbk_fn(chunk_meta, d)
-    return 1 if bool(rc) else 0
+    cdef _Callback cbk = <_Callback> user_data
+    try:
+        d = _storage_unpack(storage_type, data, data_size)
+    except BaseException as ex:
+        cbk.exc = ex
+        return 1
+    return cbk.call((chunk_meta, d))
 
 
 cdef int32_t _utc_cbk_fn(void * user_data, const c_jls.jls_utc_summary_entry_s * utc, uint32_t size) noexcept:
+    cdef _Callback cbk = <_Callback> user_data
     cdef uint32_t idx
-    cbk_fn = <object> user_data
-    entries = np.empty((size, 2), dtype=np.int64)
-    for idx in range(size):
-        entries[idx, 0] = utc[idx].sample_id
-        entries[idx, 1] = utc[idx].timestamp
-    rc = cbk_fn(entries)
-    return 1 if bool(rc) else 0
-
-
-cdef int32_t _msg_fn(void * user_data, const char * msg) noexcept:
     try:
-        cbk_fn = <object> user_data
-        if callable(cbk_fn):
-            return 1 if bool(cbk_fn((<bytes> msg).decode('utf-8', 'replace'))) else 0
-        return 0
-    except:
+        entries = np.empty((size, 2), dtype=np.int64)
+        for idx in range(size):
+            entries[idx, 0] = utc[idx].sample_id
+            entries[idx, 1] = utc[idx].timestamp
+    except BaseException as ex:
+        cbk.exc = ex
         return 1
+    return cbk.call((entries, ))
 
 
-cdef int32_t _progress_fn(void * user_data, double progress) noexcept:
-    try:
-        cbk_fn = <object> user_data
-        if callable(cbk_fn):
-            return 1 if bool(cbk_fn(progress)) else 0
+# copy() and repair() release the GIL, so these callbacks acquire it.
+cdef int32_t _msg_fn(void * user_data, const char * msg) noexcept with gil:
+    cdef _Callback cbk = <_Callback> user_data
+    _log_drain()
+    if cbk.fn is None:
         return 0
-    except:
-        return 1
+    return cbk.call(((<bytes> msg).decode('utf-8', 'replace'), ))
+
+
+cdef int32_t _progress_fn(void * user_data, double progress) noexcept with gil:
+    cdef _Callback cbk = <_Callback> user_data
+    _log_drain()
+    return cbk.call((progress, ))
 
 
 def copy(src, dst, msg_fn=None, progress_fn=None):
@@ -985,18 +1434,26 @@ def copy(src, dst, msg_fn=None, progress_fn=None):
     :param src: The source path.
     :param dst: The destination path.
     :param msg_fn: The optional function to call with each status message str.
-        Return True (or raise) to cancel; the copy then raises ABORTED.
+        Return True to cancel; the copy then raises RuntimeError ABORTED.
+        An exception raised by msg_fn cancels the copy and propagates.
     :param progress_fn: The optional function to call with progress from 0.0 to 1.0.
-        Return True (or raise) to cancel; the copy then raises ABORTED.
+        Return True to cancel; the copy then raises RuntimeError ABORTED.
+        An exception raised by progress_fn cancels the copy and propagates.
     :raise RuntimeError: on error.
     """
     cdef const char * c_src
     cdef const char * c_dst
-    src_encode = src.encode('utf-8')
-    dst_encode = dst.encode('utf-8')
+    cdef int32_t rc
+    cdef _Callback msg_cbk = _Callback(msg_fn)
+    cdef _Callback progress_cbk = _Callback(progress_fn)
+    src_encode = os.fsencode(src)
+    dst_encode = os.fsencode(dst)
     c_src = src_encode
     c_dst = dst_encode
-    rc = c_jls.jls_copy(c_src, c_dst, _msg_fn, <void *> msg_fn, _progress_fn, <void *> progress_fn)
+    with nogil:
+        rc = c_jls.jls_copy(c_src, c_dst, _msg_fn, <void *> msg_cbk, _progress_fn, <void *> progress_cbk)
+    msg_cbk.reraise()
+    progress_cbk.reraise()
     _handle_rc('copy', rc)
 
 
@@ -1005,9 +1462,11 @@ def repair(path, msg_fn=None, progress_fn=None):
 
     :param path: The target path, which must be writable.
     :param msg_fn: The optional function to call with each status message str.
-        Return True (or raise) to cancel; the repair then raises ABORTED.
+        Return True to cancel; the repair then raises RuntimeError ABORTED.
+        An exception raised by msg_fn cancels the repair and propagates.
     :param progress_fn: The optional function to call with progress from 0.0 to 1.0.
-        Return True (or raise) to cancel; the repair then raises ABORTED.
+        Return True to cancel; the repair then raises RuntimeError ABORTED.
+        An exception raised by progress_fn cancels the repair and propagates.
     :raise RuntimeError: on error.
 
     Opening a file with :class:`Reader` automatically recovers tail
@@ -1022,7 +1481,13 @@ def repair(path, msg_fn=None, progress_fn=None):
     salvage the readable prefix of such tracks into a new file.
     """
     cdef const char * c_path
-    path_encode = path.encode('utf-8')
+    cdef int32_t rc
+    cdef _Callback msg_cbk = _Callback(msg_fn)
+    cdef _Callback progress_cbk = _Callback(progress_fn)
+    path_encode = os.fsencode(path)
     c_path = path_encode
-    rc = c_jls.jls_repair(c_path, _msg_fn, <void *> msg_fn, _progress_fn, <void *> progress_fn)
+    with nogil:
+        rc = c_jls.jls_repair(c_path, _msg_fn, <void *> msg_cbk, _progress_fn, <void *> progress_cbk)
+    msg_cbk.reraise()
+    progress_cbk.reraise()
     _handle_rc('repair', rc)

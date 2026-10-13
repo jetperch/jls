@@ -68,7 +68,7 @@ def on_cmd(args):
                 ax1 = ax
             ax.grid(True)
             ax.set_ylabel(f'{signal.name} ({signal.units})')
-            incr = signal.length // args.sample_count
+            incr = max(1, signal.length // args.sample_count)  # short signals: every sample
             length = signal.length // incr
             data = r.fsr_statistics(signal.signal_id, 0, incr, length)
 
