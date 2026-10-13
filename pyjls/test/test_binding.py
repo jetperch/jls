@@ -707,9 +707,11 @@ class TestBinding(unittest.TestCase):
                         fn(signal_id)
                 with self.assertRaisesRegex(ValueError, error):
                     r.annotations(signal_id, 0, self._on_annotations)
-            for fn in fns[:5] + fns[7:]:  # time map: see test_time_map_length_vsr
+            for fn in fns[:4] + fns[7:]:  # utc and time map: see below and test_time_map_length_vsr
                 with self.assertRaisesRegex(ValueError, 'NOT_SUPPORTED'):
                     fn(4)
+            r.utc(4, 0, self._on_utc)  # VSR: no entries, no error, as before 0.19
+            self.assertEqual([], self._utc)
             r.annotations(4, 0, self._on_annotations)
         self.assertEqual([], self.annotations)
 

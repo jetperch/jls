@@ -790,8 +790,11 @@ int32_t jls_core_utc(struct jls_core_s * self, uint16_t signal_id, int64_t sampl
     if (!cbk_fn) {
         return JLS_ERROR_PARAMETER_INVALID;
     }
-    ROE(jls_core_signal_validate_typed(self, signal_id, JLS_SIGNAL_TYPE_FSR));
+    ROE(jls_core_signal_validate(self, signal_id));
     struct jls_signal_def_s * signal_def = &self->signal_info[signal_id].signal_def;
+    if (signal_def->signal_type != JLS_SIGNAL_TYPE_FSR) {
+        return 0;  // only FSR signals have UTC entries; callers iterate all signals (pyjls info)
+    }
     const int64_t sample_id_offset = signal_def->sample_id_offset;
     sample_id = i64_add_wrap(sample_id, sample_id_offset);
     int32_t rv = jls_core_ts_seek(self, signal_id, 1, JLS_TRACK_TYPE_UTC, sample_id);

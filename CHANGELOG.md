@@ -183,7 +183,7 @@ This file contains the list of changes made to the JLS project.
   now raise ValueError instead of RuntimeError.  The library validates
   signal_id and annotation_type, and the threaded writer now reports
   these errors synchronously, rather than only logging them from its
-  thread.  Reader.utc() now rejects VSR signals.
+  thread.
 * All C API functions now validate their arguments: NULL instances,
   output pointers, and data with a nonzero length return
   PARAMETER_INVALID instead of crashing, as do negative lengths for
