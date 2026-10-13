@@ -101,12 +101,12 @@ static int32_t copy_chunk(struct jls_wr_s * wr, const struct jls_chunk_header_s 
         case JLS_TAG_SOURCE_DEF: {
             struct jls_source_def_s source;
             source.source_id = hdr->chunk_meta;
-            ROD(jls_buf_rd_skip(buf, 64), "source_def parse");
-            ROD(jls_buf_rd_str(buf, (const char **) &source.name), "source_def parse");
-            ROD(jls_buf_rd_str(buf, (const char **) &source.vendor), "source_def parse");
-            ROD(jls_buf_rd_str(buf, (const char **) &source.model), "source_def parse");
-            ROD(jls_buf_rd_str(buf, (const char **) &source.version), "source_def parse");
-            ROD(jls_buf_rd_str(buf, (const char **) &source.serial_number), "source_def parse");
+            ROD(jls_buf_rd_skip(buf, 64), "source_def parse reserved");
+            ROD(jls_buf_rd_str(buf, (const char **) &source.name), "source_def parse name");
+            ROD(jls_buf_rd_str(buf, (const char **) &source.vendor), "source_def parse vendor");
+            ROD(jls_buf_rd_str(buf, (const char **) &source.model), "source_def parse model");
+            ROD(jls_buf_rd_str(buf, (const char **) &source.version), "source_def parse version");
+            ROD(jls_buf_rd_str(buf, (const char **) &source.serial_number), "source_def parse serial_number");
             if (source.source_id != 0) {
                 ROD(jls_wr_source_def(wr, &source), "jls_wr_source_def");
             }
@@ -116,20 +116,20 @@ static int32_t copy_chunk(struct jls_wr_s * wr, const struct jls_chunk_header_s 
             struct jls_signal_def_s signal;
             memset(&signal, 0, sizeof(signal));
             signal.signal_id = hdr->chunk_meta;
-            ROD(jls_buf_rd_u16(buf, &signal.source_id), "signal_def parse");
-            ROD(jls_buf_rd_u8(buf, &signal.signal_type), "signal_def parse");
-            ROD(jls_buf_rd_skip(buf, 1), "signal_def parse");
-            ROD(jls_buf_rd_u32(buf, &signal.data_type), "signal_def parse");
-            ROD(jls_buf_rd_u32(buf, &signal.sample_rate), "signal_def parse");
-            ROD(jls_buf_rd_u32(buf, &signal.samples_per_data), "signal_def parse");
-            ROD(jls_buf_rd_u32(buf, &signal.sample_decimate_factor), "signal_def parse");
-            ROD(jls_buf_rd_u32(buf, &signal.entries_per_summary), "signal_def parse");
-            ROD(jls_buf_rd_u32(buf, &signal.summary_decimate_factor), "signal_def parse");
-            ROD(jls_buf_rd_u32(buf, &signal.annotation_decimate_factor), "signal_def parse");
-            ROD(jls_buf_rd_u32(buf, &signal.utc_decimate_factor), "signal_def parse");
-            ROD(jls_buf_rd_skip(buf, 92), "signal_def parse");
-            ROD(jls_buf_rd_str(buf, (const char **) &signal.name), "signal_def parse");
-            ROD(jls_buf_rd_str(buf, (const char **) &signal.units), "signal_def parse");
+            ROD(jls_buf_rd_u16(buf, &signal.source_id), "signal_def parse source_id");
+            ROD(jls_buf_rd_u8(buf, &signal.signal_type), "signal_def parse signal_type");
+            ROD(jls_buf_rd_skip(buf, 1), "signal_def parse reserved");
+            ROD(jls_buf_rd_u32(buf, &signal.data_type), "signal_def parse data_type");
+            ROD(jls_buf_rd_u32(buf, &signal.sample_rate), "signal_def parse sample_rate");
+            ROD(jls_buf_rd_u32(buf, &signal.samples_per_data), "signal_def parse samples_per_data");
+            ROD(jls_buf_rd_u32(buf, &signal.sample_decimate_factor), "signal_def parse sample_decimate_factor");
+            ROD(jls_buf_rd_u32(buf, &signal.entries_per_summary), "signal_def parse entries_per_summary");
+            ROD(jls_buf_rd_u32(buf, &signal.summary_decimate_factor), "signal_def parse summary_decimate_factor");
+            ROD(jls_buf_rd_u32(buf, &signal.annotation_decimate_factor), "signal_def parse annotation_decimate_factor");
+            ROD(jls_buf_rd_u32(buf, &signal.utc_decimate_factor), "signal_def parse utc_decimate_factor");
+            ROD(jls_buf_rd_skip(buf, 92), "signal_def parse reserved");
+            ROD(jls_buf_rd_str(buf, (const char **) &signal.name), "signal_def parse name");
+            ROD(jls_buf_rd_str(buf, (const char **) &signal.units), "signal_def parse units");
             if ((signal.signal_id != 0) && (signal.signal_id < JLS_SIGNAL_COUNT)) {
                 ROD(jls_core_signal_def_validate(&signal), "signal_def invalid");  // reader skips it too
                 struct jls_signal_def_s aligned = signal;
