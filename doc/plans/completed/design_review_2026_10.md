@@ -1,8 +1,9 @@
 # JLS Design Review (2026-10)
 
 Status: COMPLETE (2026-10-10).  All findings fixed (X1 won't fix, see
-Stage 6) on branch `fix/design_review`.  Follow-up: compile and test the
-Windows backend changes (R10, R11, I3) on a Windows build.  Full review of the
+Stage 6) on branch `fix/design_review`.  The Windows backend changes (R10,
+R11, I3) compiled and passed the C and pyjls suites in GitHub CI on
+windows-latest and windows-11-arm (2026-10-13).  Full review of the
 C library and pyjls after the 0.19.0 argument-validation pass (branch
 `fix/closed_handle`).  Every finding below is fixed with a regression
 test that fails without its fix, except R10/R11 (Windows, not compiled
