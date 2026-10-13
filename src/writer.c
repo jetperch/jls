@@ -171,8 +171,12 @@ int32_t jls_wr_open(struct jls_wr_s ** instance, const char * path) {
     }
 
     rc = jls_wr_user_data(self, 0, JLS_STORAGE_TYPE_INVALID, NULL, 0);
-    rc = first_error(rc, rc ? 0 : jls_wr_source_def(self, &SOURCE_0));
-    rc = first_error(rc, rc ? 0 : jls_wr_signal_def(self, &SIGNAL_0));
+    if (!rc) {
+        rc = jls_wr_source_def(self, &SOURCE_0);
+    }
+    if (!rc) {
+        rc = jls_wr_signal_def(self, &SIGNAL_0);
+    }
     if (rc) {
         wr_finalize(self, rc);
         return rc;
