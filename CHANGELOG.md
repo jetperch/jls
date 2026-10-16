@@ -4,6 +4,13 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.19.1
+
+2026 Oct 16
+
+* Added Python 3.15 build.
+
+
 ## 0.19.0
 
 2026 Oct 13
