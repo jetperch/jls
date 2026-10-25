@@ -1,4 +1,4 @@
-.. _c_api:
+.. _jls_c_api:
 
 C API
 =====

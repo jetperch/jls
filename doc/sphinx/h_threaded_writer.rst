@@ -4,4 +4,5 @@ JLS Threaded Writer
 ===================
 
 .. doxygengroup:: jls_threaded_writer
+    :project: jls
     :members:

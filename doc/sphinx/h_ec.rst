@@ -4,4 +4,5 @@ Error Codes
 ===========
 
 .. doxygengroup:: jls_ec
+    :project: jls
     :members:

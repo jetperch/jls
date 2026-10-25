@@ -1,4 +1,4 @@
-.. _py_api:
+.. _jls_py_api:
 
 Python API
 ==========

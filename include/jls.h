@@ -33,7 +33,7 @@
 #include "jls/version.h"
 
 /**
- * @defgroup jls_format File format
+ * @addtogroup jls_format
  *
  * @brief JLS file format.
  *

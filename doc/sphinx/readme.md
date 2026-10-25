@@ -1,4 +1,4 @@
-(readme)=
+(jls_readme)=
 
 ```{include} ../../README.md
 :relative-docs: ./

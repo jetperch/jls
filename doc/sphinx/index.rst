@@ -1,5 +1,9 @@
 .. Joulescope File Format
 
+===============
+JLS File Format
+===============
+
 
 
 Table of Contents

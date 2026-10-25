@@ -1083,6 +1083,7 @@ cdef class Reader:
         :param increment: The number of samples represented per return value.
         :param length: The number of return values to generate.
         :return: The 2-D array[summary][stat] of np.float64.
+
             * Each summary entry represents the statistics computed
               approximately over increment samples starting
               from start_sample_id + <index> * increment.
@@ -1276,6 +1277,7 @@ cdef class Reader:
 
         :param signal_id: The signal id.
         :param index: The index for the time map which is one of:
+
             - None: return all time maps in the instance.
             - int index: Return only this index.
             - (int start_index, int end_index): Return this range.

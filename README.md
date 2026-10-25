@@ -279,4 +279,4 @@ the INDEX chunks at the same level.
 ## License
 
 This project is Copyright © 2017-2023 Jetperch LLC and licensed under the
-permissive [Apache 2.0 License](./LICENSE).
+permissive [Apache 2.0 License](https://github.com/jetperch/jls/blob/main/LICENSE).

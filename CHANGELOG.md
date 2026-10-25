@@ -4,6 +4,13 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.19.2
+
+2026 Oct 25 [in progress]
+
+* Updated documentation for doc.joulescope.com deployment.
+
+
 ## 0.19.1
 
 2026 Oct 16
