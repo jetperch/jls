@@ -6,9 +6,16 @@ This file contains the list of changes made to the JLS project.
 
 ## 0.19.2
 
-2026 Oct 25 [in progress]
+2026 Oct 26
 
+* Fixed jls_now() on POSIX, which added the JLS epoch offset instead of
+  subtracting it.  The `jls` tool printed log timestamps about 96 years
+  in the future.
 * Updated documentation for doc.joulescope.com deployment.
+* Added the File Recovery documentation page for the copy and repair tools.
+* Added the `python -m pyjls repair` command.
+* Made at least one `--add` waveform required in example/generate.py,
+  which failed with TypeError when omitted.
 
 
 ## 0.19.1

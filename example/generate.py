@@ -43,9 +43,10 @@ def parser():
     p.add_argument('--sample_id_offset', type=int, default=0, help='The starting sample_id offset.')
     p.add_argument('--add',
                    action='append',
-                   help='The waveform definition to add, which is one of:'
-                        'sine,{amplitude},{frequency} '
-                        'ramp'
+                   required=True,
+                   help='The waveform definition to add, which is one of: '
+                        'sine,{amplitude},{frequency} or '
+                        'ramp.  Repeat to sum multiple waveforms.'
                    )
     return p
 

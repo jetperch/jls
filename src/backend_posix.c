@@ -337,7 +337,7 @@ int64_t jls_now(void) {
     if (clock_gettime(CLOCK_REALTIME, &ts)) {
         JLS_LOGE("clock_gettime error");
     }
-    t = ((int64_t) ts.tv_sec + JLS_TIME_EPOCH_UNIX_OFFSET_SECONDS) * JLS_TIME_SECOND;
+    t = ((int64_t) ts.tv_sec - JLS_TIME_EPOCH_UNIX_OFFSET_SECONDS) * JLS_TIME_SECOND;
     t += JLS_COUNTER_TO_TIME(ts.tv_nsec, 1000000000LL);
     return t;
 }

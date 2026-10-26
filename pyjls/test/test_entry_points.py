@@ -21,7 +21,7 @@ import unittest
 import numpy as np
 from pyjls import Writer, DataType, time64
 from pyjls import Reader
-from pyjls.entry_points import csv, extract, plot
+from pyjls.entry_points import copy, csv, extract, plot, repair
 
 
 _FS = 100_000
@@ -115,6 +115,46 @@ class TestPlot(TestCsv):
 
     def test_short_signal(self):
         self._plot('--sample_count', str(_FS * 10))  # fewer samples than points: every sample
+
+
+class TestRecovery(unittest.TestCase):
+    """Copy and repair a file with corrupted sample data."""
+
+    def setUp(self):
+        self._tempdir = tempfile.TemporaryDirectory()
+        self._path = os.path.join(self._tempdir.name, 'damaged.jls')
+        self._data = np.arange(110000, dtype=np.float32)
+        with Writer(self._path) as w:
+            w.source_def(source_id=1, name='name', vendor='vendor', model='model',
+                         version='version', serial_number='serial_number')
+            w.signal_def(3, source_id=1, sample_rate=1000000, name='current', units='A')
+            w.fsr(3, 0, self._data)
+        sz = os.path.getsize(self._path)
+        with open(self._path, 'r+b') as f:
+            f.seek(sz // 2)
+            f.write(b'\x5a' * 64)
+
+    def tearDown(self):
+        self._tempdir.cleanup()
+
+    def _run(self, module, args):
+        p = argparse.ArgumentParser()
+        on_cmd = module.parser_config(p)
+        return on_cmd(p.parse_args(args))
+
+    def test_copy(self):
+        dst = os.path.join(self._tempdir.name, 'dst.jls')
+        self.assertEqual(0, self._run(copy, ['--no-progress', self._path, dst]))
+        with Reader(dst) as r:
+            self.assertEqual(3, r.signals[3].signal_id)
+
+    def test_repair(self):
+        for args in (['--no-progress'], []):
+            with self.subTest(args=args):
+                self.assertEqual(0, self._run(repair, args + [self._path]))
+                with Reader(self._path) as r:
+                    self.assertEqual(len(self._data), r.signals[3].length)
+                    r.fsr(3, 0, len(self._data))  # reads complete without error
 
 
 if __name__ == '__main__':

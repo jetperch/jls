@@ -27,6 +27,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 
 #define SKIP_BASIC 0
@@ -235,6 +236,13 @@ static int32_t on_annotation(void * user_data, const struct jls_annotation_s * a
     expect_value(on_annotation, storage_type, storage_type_);                             \
     expect_value(on_annotation, data_size, data_size_);                                   \
     expect_memory(on_annotation, data, data_, data_size_)
+
+static void test_now(void **state) {
+    (void) state;
+    int64_t unix_s = (int64_t) time(NULL);
+    int64_t now_s = jls_now() / JLS_TIME_SECOND + JLS_TIME_EPOCH_UNIX_OFFSET_SECONDS;
+    assert_true(llabs(now_s - unix_s) <= 2);
+}
 
 static void test_annotation(void **state) {
     (void) state;
@@ -2552,6 +2560,7 @@ static void test_fsr_annotation_real(void **state) {
 int main(void) {
     const struct CMUnitTest tests[] = {
 #if !SKIP_BASIC
+            cmocka_unit_test(test_now),
             cmocka_unit_test(test_source),
             cmocka_unit_test(test_source_with_null_and_empty_str),
             cmocka_unit_test(test_wr_source_duplicate),

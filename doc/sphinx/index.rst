@@ -13,6 +13,7 @@ Table of Contents
     :maxdepth: 2
 
     readme.md
+    recovery.md
     c_api
     py_api
     changelog.md
