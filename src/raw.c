@@ -96,6 +96,12 @@ int64_t jls_raw_rd_payload_total(void) {
     return raw_rd_payload_total;
 }
 
+static int64_t raw_flush_total = 0;
+
+int64_t jls_raw_flush_total(void) {
+    return raw_flush_total;
+}
+
 static int32_t limit_consume(int64_t * limit, int64_t * total, int64_t count) {
     *total += count;
     if (*limit < 0) {
@@ -542,6 +548,7 @@ int64_t jls_raw_chunk_tell(struct jls_raw_s * self) {
 }
 
 int32_t jls_raw_flush(struct jls_raw_s * self) {
+    ++raw_flush_total;
     return jls_bk_fflush(&self->backend);
 }
 

@@ -4,6 +4,20 @@
 This file contains the list of changes made to the JLS project.
 
 
+## 0.19.3
+
+2026 Nov 19
+
+* Fixed periodic write stalls on macOS.  The summary and index chunk
+  header updates write far behind the file end, after which macOS no
+  longer writes the file's cached data to disk as it arrives.  The
+  system's 30 s flush then blocked writes for about 0.4 s at 48 MB/s,
+  which could overflow the threaded writer's buffer and drop samples.
+  On macOS, the threaded writer now syncs the file about once per second
+  while data flows.
+* Added jls_raw_flush_total() test accounting.
+
+
 ## 0.19.2
 
 2026 Oct 26

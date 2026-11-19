@@ -25,6 +25,7 @@
 #include "jls/time.h"
 #include "jls/ec.h"
 #include "jls/backend.h"
+#include "jls/raw.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -401,6 +402,34 @@ static void test_close_ring_full(void **state) {
 }
 #endif
 
+#if !defined(_WIN32)
+// macOS only: the writer syncs about once per second while data flows.
+static void test_periodic_sync(void **state) {
+    (void) state;
+    struct jls_twr_s * wr = NULL;
+    float data[WINDOW_SIZE];
+    memset(data, 0, sizeof(data));
+    assert_int_equal(0, jls_twr_open(&wr, filename));
+    assert_int_equal(0, jls_twr_source_def(wr, &SOURCE_3));
+    assert_int_equal(0, jls_twr_signal_def(wr, &SIGNAL_5));
+    int64_t flush_start = jls_raw_flush_total();
+    int64_t sample_id = 0;
+    for (int i = 0; i < 25; ++i) {  // 2.5 s of data
+        assert_int_equal(0, jls_twr_fsr_f32(wr, 5, sample_id, data, WINDOW_SIZE));
+        sample_id += WINDOW_SIZE;
+        usleep(100000);
+    }
+    int64_t syncs = jls_raw_flush_total() - flush_start;
+    assert_int_equal(0, jls_twr_close(wr));
+#if defined(__APPLE__)
+    assert_in_range(syncs, 1, 3);
+#else
+    assert_int_equal(0, syncs);
+#endif
+    remove(filename);
+}
+#endif
+
 int main(void) {
     const struct CMUnitTest tests[] = {
             cmocka_unit_test(test_data),
@@ -411,6 +440,7 @@ int main(void) {
             cmocka_unit_test(test_def_error_latch),
 #if !defined(_WIN32)
             cmocka_unit_test(test_close_ring_full),
+            cmocka_unit_test(test_periodic_sync),
 #endif
     };
 

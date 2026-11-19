@@ -30,6 +30,19 @@
 #define MRB_BUFFER_SIZE (64 * 1024 * 1024)
 #define SIGNAL_TYPE_UNDEFINED (0xff)
 
+/*
+ * macOS stops writing a file's cached data to disk as it arrives once a
+ * write lands far behind the file end, as the summary and index chunk
+ * header updates do.  The data then waits for the system's 30 s flush,
+ * which blocks writes for about 0.4 s at 48 MB/s and overflows the ring.
+ * Syncing every second while data flows keeps each flush small.
+ */
+#if defined(__APPLE__)
+#define SYNC_INTERVAL_MS (1000)
+#else
+#define SYNC_INTERVAL_MS (0)  // disabled
+#endif
+
 
 struct jls_twr_s {
     struct jls_bkt_s * bk;  // REQUIRED first entry
@@ -155,6 +168,10 @@ int32_t jls_twr_run(struct jls_twr_s * self) {
     struct jls_time_counter_s counter_end;
     struct jls_time_counter_s counter_prev = counter_start;
     uint64_t duration_ms;
+#if SYNC_INTERVAL_MS
+    struct jls_time_counter_s sync_prev = counter_start;
+    bool sync_pending = false;  // data written since the last sync
+#endif
 
     JLS_LOGI("run start");
     if (NULL == self->bk) {
@@ -257,6 +274,28 @@ int32_t jls_twr_run(struct jls_twr_s * self) {
                          (int) rc, jls_error_code_name(rc));
                 error_latch(self, wr_error);
             }
+
+#if SYNC_INTERVAL_MS
+            if (MSG_FLUSH == hdr.msg_type) {
+                sync_pending = false;
+                sync_prev = counter_end;
+            } else if ((MSG_CLOSE != hdr.msg_type) && !error) {
+                sync_pending = true;
+            }
+            if (sync_pending && !quit
+                    && ((1000 * (counter_end.value - sync_prev.value)) / counter_end.frequency) >= SYNC_INTERVAL_MS) {
+                sync_pending = false;
+                sync_prev = counter_end;
+                process_lock(self);
+                rc = jls_wr_flush(self->wr);  // returns the writer's latched error
+                wr_error = rc ? jls_wr_error(self->wr) : 0;
+                jls_bkt_process_unlock(self->bk);
+                if (rc) {
+                    JLS_LOGW("periodic sync returned %d:%s", (int) rc, jls_error_code_name(rc));
+                    error_latch(self, wr_error);
+                }
+            }
+#endif
         }
     }
     JLS_LOGI("run done");

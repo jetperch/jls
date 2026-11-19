@@ -193,6 +193,15 @@ JLS_API int64_t jls_raw_rd_header_total(void);
 JLS_API int64_t jls_raw_rd_payload_total(void);
 
 /**
+ * @brief The total jls_raw_flush() calls in this process.
+ *
+ * @return The monotonic count of flushes.
+ *
+ * Test and diagnostic accounting, shared by all instances.
+ */
+JLS_API int64_t jls_raw_flush_total(void);
+
+/**
  * @brief Seek to a chunk.
  *
  * @param self The JLS raw instance.
